@@ -13,7 +13,7 @@
 # MARKDOWN ********************
 
 # # Utility Functions
-# This notebook contains function declarations for the NB_SETUP_FMD
+# This notebook contains function declarations for the NB_SETUP_FMD framework. These functions are used to deploy workspaces, items, and manage connections in the Fabric environment. The functions handle tasks such as creating workspaces, assigning roles, replacing IDs in files, and managing domain assignments.
 
 # CELL ********************
 
@@ -154,9 +154,6 @@ def assign_fabric_domain(domain_name, workspace_name):
     except Exception as e:
         print(f"❌ Failed to assign domain: {e}")
 
-    
-    
-
 def assign_domain_description(domain_name):
     """
     Assigns a standard description to an Domain.
@@ -238,6 +235,22 @@ def ensure_workspace_exists(workspace, workspace_name):
         else:
             raise RuntimeError(f"Workspace '{workspace_name}' could not be created or found.")
 
+def set_fabric_runtime(workspace_name, spark_version="2.0"):
+    """
+    Sets the Spark Runtime version on a Workspace.
+    """
+    if not spark_version:
+        spark_version = "2.0"
+
+    try:
+        run_fab_command(
+            f"set /{workspace_name}.Workspace -q sparkSettings.environment.runtimeVersion -i {spark_version}",
+            capture_output=True,
+            silently_continue=True,
+        )
+        print(f"✅ Spark runtime version {spark_version} applied to {workspace_name}")
+    except Exception as e:
+        print(f"❌ Failed to set Spark runtime version {spark_version} for {workspace_name}: {e}")
 
 # -------------------------------
 # Item Utilities
@@ -548,6 +561,8 @@ def deploy_workspaces(domain_name,workspace, workspace_name, environment_name, o
     create_workspace_identity(workspace_name)
 
     assign_workspace_identity_role(workspace_name)  #required to support Workspace identity in Fabric Pipelines connectionb
+
+    set_fabric_runtime(workspace_name, spark_version)
 
     if create_domains:
         assign_fabric_domain(domain_name, workspace_name) 
