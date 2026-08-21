@@ -5,7 +5,7 @@
 # META {
 # META   "kernel_info": {
 # META     "name": "jupyter",
-# META     "jupyter_kernel_name": "python3.11"
+# META     "jupyter_kernel_name": "python3.12"
 # META   },
 # META   "dependencies": {}
 # META }
@@ -468,6 +468,20 @@ def assign_workspace_identity_role(workspace_name):
     except Exception as e:
         print(f"❌ Failed to assign managed identity: {e}")
 
+def assign_workspace_environment(workspace_name, environment_name):
+    """
+    Assigns Environment to workspace
+    """
+    try:
+        run_fab_command(
+            f"set {workspace_name}.workspace -q sparkSettings.environment.name -i {environment_name} -f",
+            capture_output=True,
+            silently_continue=False,
+        )
+        print(f"✅ Environment assigned to workspace '{workspace_name}'")
+    except Exception as e:
+        print(f"❌ Environment assignment failed: {e}")
+
 def assign_identity_role_to_different_workspace(source_workspace_identity,workspace_name ):
     """
     Assigns role to _workspace identity in the workspace.
@@ -651,7 +665,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
         assign_item_to_folder(workspace_name=workspace_name, item_id=new_id, folder_name='VariableLibraries')
         mapping_type='VariableLibrary'
     
-    elif "Environment" in name:   #Not working yet, import is giving error back
+    elif "Environment" in name:   
         try:
             print(f"Creating or updating Environment: {name}")
             result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
