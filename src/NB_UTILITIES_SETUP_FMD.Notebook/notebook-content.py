@@ -538,7 +538,7 @@ def assign_item_to_folder(workspace_name, item_id, folder_name):
         targetFolderId = get_workspace_folder_id(workspace_name, folder_name)
     payload = json.dumps({'targetFolderId': targetFolderId})
     try:
-        run_fab_command(f"api -X post workspaces/{workspace_id}/items/{item_id}/move -i {payload}", capture_output=True, silently_continue=False)
+        run_fab_command(f"api -X post workspaces/{workspace_id}/items/{item_id}/move -i {payload}", capture_output=True, silently_continue=True)
         print(f"✅ Folder {folder_name} assigned to item in '{workspace_name}'")
     except Exception as e:
         print(f"❌ Failed to assign folder: {e}")
