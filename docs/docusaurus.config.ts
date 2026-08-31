@@ -5,9 +5,9 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'My Site',
-  tagline: 'Dinosaurs are cool',
-  favicon: 'img/favicon.ico',
+  title: 'FMD Framework',
+  tagline: 'A Microsoft Fabric Framework for Metadata-Driven Data Pipelines',
+  favicon: 'img/brand/fmd-logo.png',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -15,15 +15,13 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://your-docusaurus-site.example.com',
+  url: 'https://erwindekreuk.com',
   // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/',
+  baseUrl: '/fmd-framework/',
 
   // GitHub pages deployment config.
-  // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'facebook', // Usually your GitHub org/user name.
-  projectName: 'docusaurus', // Usually your repo name.
+  organizationName: 'edkreuk', // Usually your GitHub org/user name.
+  projectName: 'FMD_FRAMEWORK', // Usually your repo name.
 
   onBrokenLinks: 'throw',
 
@@ -41,10 +39,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+          editUrl: 'https://github.com/edkreuk/FMD_FRAMEWORK/tree/main/docs/',
         },
         blog: {
           showReadingTime: true,
@@ -52,10 +47,7 @@ const config: Config = {
             type: ['rss', 'atom'],
             xslt: true,
           },
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+          editUrl: 'https://github.com/edkreuk/FMD_FRAMEWORK/tree/main/docs/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -70,26 +62,32 @@ const config: Config = {
 
   themeConfig: {
     // Replace with your project's social card
-    image: 'img/docusaurus-social-card.jpg',
+    image: 'img/brand/fmd-cover-portal.png',
     colorMode: {
+      defaultMode: 'dark',
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'My Site',
+      title: 'FMD Framework',
       logo: {
-        alt: 'My Site Logo',
-        src: 'img/logo.svg',
+        alt: 'FMD Framework Logo',
+        src: 'img/brand/fmd-logo.svg',
       },
       items: [
         {
           type: 'docSidebar',
           sidebarId: 'tutorialSidebar',
           position: 'left',
-          label: 'Tutorial',
+          label: 'Docs',
         },
         {to: '/blog', label: 'Blog', position: 'left'},
         {
-          href: 'https://github.com/facebook/docusaurus',
+          href: 'https://github.com/edkreuk/FMD_FRAMEWORK/wiki',
+          label: 'Wiki',
+          position: 'left',
+        },
+        {
+          href: 'https://github.com/edkreuk/FMD_FRAMEWORK',
           label: 'GitHub',
           position: 'right',
         },
@@ -102,8 +100,16 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'Tutorial',
+              label: 'Getting Started',
               to: '/docs/intro',
+            },
+            {
+              label: 'Deployment Guide',
+              href: 'https://github.com/edkreuk/FMD_FRAMEWORK/blob/main/FMD_FRAMEWORK_DEPLOYMENT.md',
+            },
+            {
+              label: 'Business Domain Guide',
+              href: 'https://github.com/edkreuk/FMD_FRAMEWORK/blob/main/FMD_BUSINESS_DOMAIN_DEPLOYMENT.md',
             },
           ],
         },
@@ -111,16 +117,16 @@ const config: Config = {
           title: 'Community',
           items: [
             {
-              label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
+              label: 'Wiki',
+              href: 'https://github.com/edkreuk/FMD_FRAMEWORK/wiki',
             },
             {
-              label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
+              label: 'Issues',
+              href: 'https://github.com/edkreuk/FMD_FRAMEWORK/issues',
             },
             {
-              label: 'X',
-              href: 'https://x.com/docusaurus',
+              label: 'LinkedIn - Erwin de Kreuk',
+              href: 'https://www.linkedin.com/in/erwindekreuk/',
             },
           ],
         },
@@ -133,12 +139,16 @@ const config: Config = {
             },
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/edkreuk/FMD_FRAMEWORK',
+            },
+            {
+              label: 'License (MIT)',
+              href: 'https://github.com/edkreuk/FMD_FRAMEWORK/blob/main/LICENSE',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} FMD Framework — Erwin de Kreuk. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
