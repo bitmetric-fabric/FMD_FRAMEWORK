@@ -330,8 +330,9 @@ Silver is the layer that remembers. `NB_FMD_LOAD_BRONZE_SILVER` reads all of Bro
 
 | Column | Type | Set on incoming rows |
 |---|---|---|
-| `HashedPKColumn` | string | inherited from Bronze, `sha2(concat_ws("||", <keys>), 256)` |
-| `HashedNonKeyColumns` | string | **recomputed in Silver**: `md5(concat_ws("||", <all columns except HashedPKColumn and HashedNonKeyColumns>))` |
+| `HashedPKColumn` | string | inherited from Bronze, `sha2(concat_ws("||", keys), 256)` |
+| `HashedNonKeyColumns` | string | **recomputed in Silver**: `md5(concat_ws("||", all columns except HashedPKColumn and HashedNonKeyColumns))` |
+
 | `IsCurrent` | boolean | `True` |
 | `RecordStartDate` | timestamp | `current_timestamp()` |
 | `RecordModifiedDate` | timestamp | `current_timestamp()` |
