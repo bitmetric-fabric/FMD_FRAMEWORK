@@ -80,10 +80,9 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
-        {to: '/blog', label: 'Blog', position: 'left'},
         {
-          href: 'https://github.com/edkreuk/FMD_FRAMEWORK/wiki',
-          label: 'Wiki',
+          href: 'https://erwindekreuk.com/fmd-framework/',
+          label: 'Blog',
           position: 'left',
         },
         {
@@ -101,7 +100,7 @@ const config: Config = {
           items: [
             {
               label: 'Getting Started',
-              to: '/docs/intro',
+              to: '/docs/index',
             },
             {
               label: 'Deployment Guide',
@@ -116,13 +115,14 @@ const config: Config = {
         {
           title: 'Community',
           items: [
-            {
-              label: 'Wiki',
-              href: 'https://github.com/edkreuk/FMD_FRAMEWORK/wiki',
-            },
+           
             {
               label: 'Issues',
               href: 'https://github.com/edkreuk/FMD_FRAMEWORK/issues',
+            },
+                        {
+              label: 'Discussions',
+              href: 'https://github.com/edkreuk/FMD_FRAMEWORK/discussions',
             },
             {
               label: 'LinkedIn - Erwin de Kreuk',
@@ -135,7 +135,7 @@ const config: Config = {
           items: [
             {
               label: 'Blog',
-              to: '/blog',
+               href: 'https://erwindekreuk.com/fmd-framework/',
             },
             {
               label: 'GitHub',
