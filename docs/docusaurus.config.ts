@@ -15,9 +15,9 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://erwindekreuk.com',
+  url: 'https://fmd-framework-epjf.vercel.app/',
   // Set the /<baseUrl>/ pathname under which your site is served
-  baseUrl: '/fmd-framework/',
+  baseUrl: '/',
 
   // GitHub pages deployment config.
   organizationName: 'edkreuk', // Usually your GitHub org/user name.
