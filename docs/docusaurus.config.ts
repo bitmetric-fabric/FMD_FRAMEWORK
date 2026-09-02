@@ -100,7 +100,7 @@ const config: Config = {
           items: [
             {
               label: 'Getting Started',
-              to: '/docs/index',
+              to: '/docs/intro',
             },
             {
               label: 'Deployment Guide',
