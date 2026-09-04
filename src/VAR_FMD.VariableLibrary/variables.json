@@ -11,8 +11,8 @@
       "name": "lakehouse_schema_enabled",
       "note": "",
       "type": "Boolean",
-      "value": ""
-    }    ,
+      "value": "True"
+    },
     {
       "name": "purview_account_name",
       "note": "",

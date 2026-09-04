@@ -41,7 +41,10 @@ def main() -> None:
 
     workspace = FabricWorkspace(
         workspace_id=WORKSPACE_IDS[environment],
-        environment=environment,
+        # Capitalized to match the Development/Test/Production value set names in the
+        # VariableLibrary items - fabric-cicd matches this case-sensitively to activate
+        # the right value set, else it silently falls back to 'Default value set'.
+        environment=environment.capitalize(),
         repository_directory="src",
         item_type_in_scope=["Notebook", "DataPipeline", "VariableLibrary", "Environment"],
         token_credential=credential,
