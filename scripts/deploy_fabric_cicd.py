@@ -3,7 +3,7 @@
 Ongoing CI/CD for notebooks, pipelines, variable libraries and the environment — separate
 from setup/NB_SETUP_FMD.ipynb, which only does the one-time initial provisioning.
 
-Usage: python deploy_fabric_cicd.py <development|production>
+Usage: python deploy_fabric_cicd.py <development|test|production>
 Requires env vars: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
 """
 
@@ -14,6 +14,7 @@ from fabric_cicd import FabricWorkspace, publish_all_items
 
 WORKSPACE_IDS = {
     "development": "830116ef-d6a0-405e-a2b8-d43a41bddb24",  # INTEGRATION CODE (D)
+    "test": "db4ec291-fca7-415a-a6cd-4f1b34885701",  # INTEGRATION CODE (T)
     "production": "03e1bdd0-b4f4-4ae8-8616-50ad52d8bcdd",  # INTEGRATION CODE (P)
 }
 

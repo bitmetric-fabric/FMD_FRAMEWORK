@@ -20,7 +20,7 @@ on:
         required: true
         default: development
         type: choice
-        options: [development, production]
+        options: [development, test, production]
 
 jobs:
   deploy:
