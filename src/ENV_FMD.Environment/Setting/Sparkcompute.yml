@@ -1,8 +1,12 @@
 enable_native_execution_engine: true
-driver_cores: 8
-driver_memory: 56g
-executor_cores: 8
-executor_memory: 56g
+# ponytail: sized for the Dev/Test capacity's pool limit (16 cores / 112g) - worst case
+# here is driver(4,28g) + 2 executors(4,28g) = 12 cores / 84g, with headroom. Was
+# 8/56g each with max_executors 2 (24 cores / 168g claimed), which exceeded the pool.
+# If Prod has a bigger capacity, its pool limit may allow raising this back up.
+driver_cores: 4
+driver_memory: 28g
+executor_cores: 4
+executor_memory: 28g
 dynamic_executor_allocation:
   enabled: true
   min_executors: 1
