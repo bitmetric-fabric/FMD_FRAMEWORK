@@ -27,6 +27,15 @@ WORKSPACE_IDS = {
 # business_domain/ deploys to FINANCE/SALES/HR CODE workspaces separately, not here.
 BUSINESS_DOMAIN_EXCLUDE_REGEX = r"business_domain"
 
+# Two pipelines that fail to publish, for reasons unrelated to this CI/CD setup - excluded
+# so a real regression doesn't get lost in permanent noise. Revisit once fixed upstream:
+#  - PL_FMD_LDZ_COPY_FROM_ADF: needs CON_FMD_ADF_PIPELINES, which was never set up in
+#    this tenant (optional per the deployment docs - only needed if you use ADF).
+#  - PL_TOOLING_POST_ASQL_TO_FMD: its connection is a runtime pipeline parameter
+#    (@pipeline().parameters.ConnectionGuid) rather than a fixed GUID, which Fabric's
+#    definition validation rejects with a generic error. Needs its own investigation.
+BROKEN_PIPELINES_EXCLUDE_REGEX = r"^(PL_FMD_LDZ_COPY_FROM_ADF|PL_TOOLING_POST_ASQL_TO_FMD)$"
+
 
 def main() -> None:
     if len(sys.argv) != 2 or sys.argv[1] not in WORKSPACE_IDS:
@@ -50,7 +59,11 @@ def main() -> None:
         token_credential=credential,
     )
 
-    publish_all_items(workspace, folder_path_exclude_regex=BUSINESS_DOMAIN_EXCLUDE_REGEX)
+    publish_all_items(
+        workspace,
+        folder_path_exclude_regex=BUSINESS_DOMAIN_EXCLUDE_REGEX,
+        item_name_exclude_regex=BROKEN_PIPELINES_EXCLUDE_REGEX,
+    )
     # ponytail: no unpublish_all_orphan_items() yet — first pilot run, don't auto-delete
     # items on the target workspace. Add once a few deploys have gone through and you
     # trust the exclude regex isn't also catching something it shouldn't.
