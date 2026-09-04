@@ -10,7 +10,13 @@ Requires env vars: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
 import sys
 
 from azure.identity import ClientSecretCredential
-from fabric_cicd import FabricWorkspace, publish_all_items
+from fabric_cicd import FabricWorkspace, append_feature_flag, publish_all_items
+
+# folder_path_exclude_regex (used below to keep business_domain/ out of this deploy)
+# is experimental and needs both flags. Microsoft's docs warn selective deployment
+# can miss dependencies; acceptable here since it's one self-contained subfolder.
+append_feature_flag("enable_experimental_features")
+append_feature_flag("enable_exclude_folder")
 
 WORKSPACE_IDS = {
     "development": "830116ef-d6a0-405e-a2b8-d43a41bddb24",  # INTEGRATION CODE (D)
