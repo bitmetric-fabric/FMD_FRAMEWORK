@@ -1,6 +1,7 @@
 
-    CREATE PROCEDURE [execution].[sp_GetBronzelayerEntity] 
-    (    @WorkspaceId UNIQUEIDENTIFIER  
+    CREATE PROCEDURE [execution].[sp_GetBronzelayerEntity]
+    (    @WorkspaceId UNIQUEIDENTIFIER
+        ,@LoadGroup VARCHAR(50) = ''
     )
 	WITH EXECUTE AS CALLER
 AS
@@ -26,7 +27,9 @@ BEGIN
 		',"DataSourceNamespace" : ' , '"' ,  LOWER(convert(NVARCHAR(20), [DataSourceNamespace])) , '"' ,
                 '}}'),', ') WITHIN GROUP (ORDER BY [EntityId])
         ,']') AS NotebookParams
-         FROM (SELECT TOP 100 PERCENT * FROM [execution].[vw_LoadToBronzeLayer] WHERE SourceWorkspaceId = @WorkspaceId
+         FROM (SELECT TOP 100 PERCENT * FROM [execution].[vw_LoadToBronzeLayer]
+               WHERE SourceWorkspaceId = @WorkspaceId
+                 AND (@LoadGroup = '' OR LoadGroup = @LoadGroup)
          ORDER BY [SourceFileName] ASC) AS [vw_LoadToBronzeLayer]
                
 END

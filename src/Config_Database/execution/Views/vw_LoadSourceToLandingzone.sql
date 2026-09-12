@@ -8,6 +8,7 @@
     DS.[Name] AS [DataSourceName],
     DS.[Namespace] AS [DataSourceNamespace],
     DS.[Type] AS [DataSourceType],
+    DS.[LoadGroup] AS [LoadGroup],
     C.[Type] AS [ConnectionType],
     C.[ConnectionGuid] AS [ConnectionGuid],
     [SourceSchema],

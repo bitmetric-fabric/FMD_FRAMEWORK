@@ -8,6 +8,10 @@
             "Data_WorkspaceGuid": {
               "value": "@pipeline().parameters.Data_WorkspaceGuid",
               "type": "Expression"
+            },
+            "LoadGroup": {
+              "value": "@pipeline().parameters.LoadGroup",
+              "type": "Expression"
             }
           },
           "waitOnCompletion": true,
@@ -41,6 +45,10 @@
           "parameters": {
             "Data_WorkspaceGuid": {
               "value": "@pipeline().parameters.Data_WorkspaceGuid",
+              "type": "Expression"
+            },
+            "LoadGroup": {
+              "value": "@pipeline().parameters.LoadGroup",
               "type": "Expression"
             }
           },
@@ -538,6 +546,10 @@
             "Data_WorkspaceGuid": {
               "value": "@pipeline().parameters.Data_WorkspaceGuid",
               "type": "Expression"
+            },
+            "LoadGroup": {
+              "value": "@pipeline().parameters.LoadGroup",
+              "type": "Expression"
             }
           },
           "waitOnCompletion": true,
@@ -741,6 +753,10 @@
       "Data_WorkspaceGuid": {
         "type": "string",
         "defaultValue": "40e27fdc-775a-4ee2-84d5-48893c92d7cc"
+      },
+      "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
       }
     },
     "libraryVariables": {

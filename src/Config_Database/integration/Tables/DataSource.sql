@@ -5,6 +5,7 @@ CREATE TABLE [integration].[DataSource] (
     [Namespace]    VARCHAR (100)  NOT NULL,
     [Type]         VARCHAR (30)   NULL,
     [Description]  NVARCHAR (200) NULL,
+    [LoadGroup]    VARCHAR (50)   DEFAULT ('') NOT NULL,
     [IsActive]     BIT            DEFAULT ((1)) NOT NULL,
     CONSTRAINT [PK_integration_DataSource] PRIMARY KEY CLUSTERED ([DataSourceId] ASC),
     CONSTRAINT [UC_integration_DataSource] UNIQUE NONCLUSTERED ([ConnectionId] ASC, [Name] ASC, [Type] ASC)
