@@ -35,12 +35,6 @@ jobs:
       - name: Build the SQL project
         run: dotnet build src/Config_Database/SQL_FMD_FRAMEWORK.sqlproj -c Release
 
-      - name: TEMP - upload built dacpac for local recovery
-        uses: actions/upload-artifact@v4
-        with:
-          name: built-dacpac
-          path: src/Config_Database/bin/Release/SQL_FMD_FRAMEWORK.dacpac
-
       - name: Compare the built model against the committed dacpac
         shell: python
         run: |
