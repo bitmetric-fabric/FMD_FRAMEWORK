@@ -73,16 +73,25 @@ regardless of which schedule triggered it.
 
 ### 2. Create one thin wrapper pipeline per schedule
 
-The framework does not ship one of these per business implementation —
-the group names and cadences are yours to define. Each wrapper is a single
-`InvokePipeline` activity calling `PL_FMD_LOAD_ALL` (or, if you only need one
-layer, `PL_FMD_LOAD_LANDINGZONE` / `_BRONZE` / `_SILVER` directly) with
-`LoadGroup` set to a literal:
+The framework ships two ready-to-use examples of this pattern:
+`PL_FMD_SCHEDULE_NIGHTLY` and `PL_FMD_SCHEDULE_INTRADAY`. Each is a single
+`InvokePipeline` activity calling `PL_FMD_LOAD_ALL` with `LoadGroup` hard-coded
+to a literal:
 
 | Wrapper pipeline | Invokes | `LoadGroup` |
 |---|---|---|
 | `PL_FMD_SCHEDULE_NIGHTLY` | `PL_FMD_LOAD_ALL` | `"NIGHTLY"` |
 | `PL_FMD_SCHEDULE_INTRADAY` | `PL_FMD_LOAD_ALL` | `"INTRADAY"` |
+
+Rename or duplicate these for whatever group names and cadences your
+implementation actually needs — `NIGHTLY`/`INTRADAY` are examples, not
+reserved values. A new one is a copy-paste of the folder plus one entry in
+`config/item_deployment.json` placed after `PL_FMD_LOAD_ALL`'s entry (so its
+real object ID is already known when the wrapper's placeholder reference to
+it gets resolved at deploy time) — the same recipe as any other new pipeline
+entering the framework. If you only need one layer filtered rather than the
+full chain, point the wrapper at `PL_FMD_LOAD_LANDINGZONE` / `_BRONZE` /
+`_SILVER` instead.
 
 `Data_WorkspaceGuid` still has to be passed through as usual.
 
