@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "DataPipeline",
+    "displayName": "PL_FMD_LOAD_GOLD_TEMPLATE",
+    "description": "Template Gold-layer load pipeline for a business domain: NB_LOAD_GOLD, then NB_MLV_EXAMPLE. Swap NB_MLV_EXAMPLE for your domain's own MLV notebook(s), and add a PBISemanticModelRefresh activity pointing at your domain's semantic model after deployment. Not part of the core FMD chain: one per business domain, invoked from your orchestration pipeline (see PL_FMD_ORCHESTRATION_TEMPLATE)."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "838bc064-4221-48e3-ae54-0fdb0ce5a703"
+  }
+}

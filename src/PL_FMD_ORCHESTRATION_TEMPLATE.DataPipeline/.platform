@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "DataPipeline",
+    "displayName": "PL_FMD_ORCHESTRATION_TEMPLATE",
+    "description": "Template top-of-day orchestrator: runs PL_FMD_LOAD_ALL (Landingzone/Bronze/Silver), then fans out to one Gold-layer pipeline per business domain. Not part of the core FMD load chain: copy/rename per customer and add one InvokePipeline activity per business domain Gold pipeline (e.g. PL_FMD_LOAD_GOLD_TEMPLATE), each dependsOn this one Succeeded."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "14bb3cb5-26dc-4840-bccc-41556d9a22ec"
+  }
+}

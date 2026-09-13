@@ -719,6 +719,97 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
 # CELL ********************
 
 # -------------------------------
+# Deployment Pipeline Management
+# -------------------------------
+# Native Fabric ALM (Deployment Pipelines), one per workspace-group (CODE/DATA/REPORTING/
+# SEMANTIC), 3 stages Development/Test/Production, each stage assigned to the matching
+# (D)/(T)/(P) workspace. Every domain built by NB_SETUP_FMD/NB_SETUP_BUSINESS_DOMAINS ends
+# up needing this, so it is scripted here instead of clicked together by hand per customer.
+
+def get_deployment_pipeline_id_by_name(name):
+    """
+    Retrieves the deployment pipeline ID by its display name.
+    """
+    response = invoke_fabric_api_request("get", "deploymentPipelines")
+    pipelines = response.json().get("value", [])
+    normalized_name = name.strip().lower()
+    match = next((p for p in pipelines if p['displayName'].strip().lower() == normalized_name), None)
+    return match['id'] if match else None
+
+def ensure_deployment_pipeline(pipeline_name, stage_names=("Development", "Test", "Production")):
+    """
+    Ensures a deployment pipeline exists with the given stages. Does not touch an existing
+    pipeline of this name (there is no API to change stage count after creation), so a
+    manually-adjusted pipeline is left alone on re-run.
+    """
+    pipeline_id = get_deployment_pipeline_id_by_name(pipeline_name)
+    if pipeline_id:
+        print(f" - Deployment pipeline '{pipeline_name}' already exists, skip creation")
+        return pipeline_id
+
+    payload = {
+        "displayName": pipeline_name,
+        "stages": [{"displayName": s, "isPublic": s == stage_names[-1]} for s in stage_names],
+    }
+    try:
+        response = invoke_fabric_request("post", FABRIC_API_BASE_URL + "deploymentPipelines", payload)
+        pipeline_id = response.json()["id"]
+        print(f"✅ Deployment pipeline '{pipeline_name}' created")
+    except Exception as e:
+        print(f"❌ Failed to create deployment pipeline '{pipeline_name}': {e}")
+    return pipeline_id
+
+def assign_deployment_pipeline_stage(pipeline_id, stage_name, workspace_name):
+    """
+    Assigns a workspace to a pipeline stage by stage display name. Skips if the stage
+    already has a workspace (assign fails on an already-assigned stage) or the workspace
+    does not exist yet.
+    """
+    if not pipeline_id:
+        return
+    stages = invoke_fabric_api_request("get", f"deploymentPipelines/{pipeline_id}/stages").json().get("value", [])
+    stage = next((s for s in stages if s['displayName'] == stage_name), None)
+    if not stage:
+        print(f"❌ Stage '{stage_name}' not found in pipeline {pipeline_id}")
+        return
+    if stage.get("workspaceId"):
+        print(f" - Stage '{stage_name}' already assigned, skip")
+        return
+    workspace_id = get_workspace_id_by_name(workspace_name)
+    if not workspace_id:
+        print(f"❌ Workspace '{workspace_name}' not found, skip stage assignment")
+        return
+    try:
+        response = invoke_fabric_request("post", f"{FABRIC_API_BASE_URL}deploymentPipelines/{pipeline_id}/stages/{stage['id']}/assignWorkspace", {"workspaceId": workspace_id})
+        if response.status_code in (200, 201):
+            print(f"✅ '{workspace_name}' assigned to stage '{stage_name}'")
+        else:
+            print(f"❌ Failed to assign '{workspace_name}' to stage '{stage_name}': HTTP {response.status_code}")
+    except Exception as e:
+        print(f"❌ Failed to assign '{workspace_name}' to stage '{stage_name}': {e}")
+
+def deploy_deployment_pipeline(pipeline_name, stage_workspace_names):
+    """
+    Ensures a deployment pipeline exists and its stages are assigned.
+    stage_workspace_names: ordered dict/list of (stage_name, workspace_name), e.g.
+        [("Development", "FINANCE CODE (D)"), ("Test", "FINANCE CODE (T)"), ("Production", "FINANCE CODE (P)")]
+    """
+    stage_names = [s for s, _ in stage_workspace_names]
+    pipeline_id = ensure_deployment_pipeline(pipeline_name, stage_names)
+    for stage_name, workspace_name in stage_workspace_names:
+        assign_deployment_pipeline_stage(pipeline_id, stage_name, workspace_name)
+    return pipeline_id
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "jupyter_python"
+# META }
+
+# CELL ********************
+
+# -------------------------------
 # Connections
 # -------------------------------
 def get_existing_connections_by_id():
