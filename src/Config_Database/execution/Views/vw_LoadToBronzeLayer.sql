@@ -16,8 +16,9 @@
     BLH.[Name] AS [TargetLakehouseName],
     LZH.[Name] AS [SourceLakehouseName],
     LZE.[IsIncremental],
-    BLE.[PrimaryKeys],   
-    DS.[Namespace] AS [DataSourceNamespace]
+    BLE.[PrimaryKeys],
+    DS.[Namespace] AS [DataSourceNamespace],
+    DS.[LoadGroup] AS [LoadGroup]
 FROM [integration].[BronzeLayerEntity] BLE
 INNER JOIN [integration].[LandingzoneEntity] LZE
     ON LZE.[LandingzoneEntityId] = BLE.[LandingzoneEntityId]

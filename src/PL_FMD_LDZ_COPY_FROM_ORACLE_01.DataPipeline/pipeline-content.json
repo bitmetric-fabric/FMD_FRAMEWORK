@@ -1057,7 +1057,7 @@
           "source": {
             "type": "FabricSqlDatabaseSource",
             "sqlReaderQuery": {
-              "value": "SELECT *  FROM [execution].[vw_LoadSourceToLandingzone]  where DataSourceType='ORACLE_01'\nand WorkspaceGuid='@{pipeline().parameters.Data_WorkspaceGuid}'",
+              "value": "SELECT *  FROM [execution].[vw_LoadSourceToLandingzone]  where DataSourceType='ORACLE_01'\nand WorkspaceGuid='@{pipeline().parameters.Data_WorkspaceGuid}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}')",
               "type": "Expression"
             },
             "queryTimeout": "02:00:00",
@@ -1228,6 +1228,10 @@
     ],
     "parameters": {
       "Data_WorkspaceGuid": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "LoadGroup": {
         "type": "string",
         "defaultValue": ""
       }

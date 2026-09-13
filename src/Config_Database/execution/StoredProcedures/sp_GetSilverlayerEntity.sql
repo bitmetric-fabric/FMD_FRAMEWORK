@@ -1,6 +1,7 @@
 
 CREATE   PROCEDURE [execution].[sp_GetSilverlayerEntity]
-(    @WorkspaceId UNIQUEIDENTIFIER  
+(    @WorkspaceId UNIQUEIDENTIFIER
+    ,@LoadGroup VARCHAR(50) = ''
     )
 WITH EXECUTE AS CALLER
 AS
@@ -35,7 +36,9 @@ BEGIN
         ) WITHIN GROUP (ORDER BY EntityId),
         ']'
     ) AS NotebookParams
-    FROM [execution].[vw_LoadToSilverLayer]  WHERE SourceWorkspaceId = @WorkspaceId
+    FROM [execution].[vw_LoadToSilverLayer]
+    WHERE SourceWorkspaceId = @WorkspaceId
+      AND (@LoadGroup = '' OR LoadGroup = @LoadGroup)
 END;
 
 GO

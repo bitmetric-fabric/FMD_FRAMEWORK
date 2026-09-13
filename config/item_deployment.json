@@ -170,6 +170,16 @@
         "type": "DataPipeline"
     },
     {
+        "name": "PL_FMD_SCHEDULE_NIGHTLY.DataPipeline",
+        "id": "03ba9db4-d5b4-49b5-a37d-c389a3e0a5dd",
+        "type": "DataPipeline"
+    },
+    {
+        "name": "PL_FMD_SCHEDULE_INTRADAY.DataPipeline",
+        "id": "6beb329c-f284-41b9-9d1b-bd292059e075",
+        "type": "DataPipeline"
+    },
+    {
         "name": "PL_FMD_ORCHESTRATION_TEMPLATE.DataPipeline",
         "id": "14bb3cb5-26dc-4840-bccc-41556d9a22ec",
         "type": "DataPipeline"
