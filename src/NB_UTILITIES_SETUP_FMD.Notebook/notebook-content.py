@@ -800,6 +800,57 @@ def deploy_deployment_pipeline(pipeline_name, stage_workspace_names):
         assign_deployment_pipeline_stage(pipeline_id, stage_name, workspace_name)
     return pipeline_id
 
+def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_name, activity_name,
+                                    orchestration_pipeline_name="PL_FMD_ORCHESTRATION_TEMPLATE",
+                                    gold_pipeline_name="PL_FMD_LOAD_GOLD_TEMPLATE"):
+    """
+    Adds an InvokePipeline activity to PL_FMD_ORCHESTRATION_TEMPLATE (in orchestration_workspace_name)
+    that calls PL_FMD_LOAD_GOLD_TEMPLATE in gold_workspace_name.
+    Idempotent: skips if an activity with this name is already wired in.
+    """
+    orch_workspace_id = get_workspace_id_by_name(orchestration_workspace_name)
+    orch_pipeline_id = get_item_id(orchestration_workspace_name, f"{orchestration_pipeline_name}.DataPipeline", "id")
+
+    gold_workspace_id = get_workspace_id_by_name(gold_workspace_name)
+    gold_pipeline_id = get_item_id(gold_workspace_name, f"{gold_pipeline_name}.DataPipeline", "id")
+
+    if not (orch_workspace_id and orch_pipeline_id and gold_workspace_id and gold_pipeline_id):
+        print(f" - Could not resolve IDs to wire '{gold_workspace_name}' into orchestration, skip")
+        return
+
+    response = invoke_fabric_api_request("post", f"workspaces/{orch_workspace_id}/items/{orch_pipeline_id}/getDefinition")
+    response.raise_for_status()
+    parts = response.json()["definition"]["parts"]
+    content_part = next(p for p in parts if p["path"] == "pipeline-content.json")
+    content = json.loads(base64.b64decode(content_part["payload"]).decode("utf-8"))
+
+    activities = content["properties"]["activities"]
+    if any(a["name"] == activity_name for a in activities):
+        print(f" - Orchestration already wired for '{gold_workspace_name}', skip")
+        return
+
+    template_activity = activities[0]
+    activities.append({
+        "type": "InvokePipeline",
+        "typeProperties": {
+            "waitOnCompletion": True,
+            "workspaceId": gold_workspace_id,
+            "pipelineId": gold_pipeline_id,
+            "operationType": "InvokeFabricPipeline",
+        },
+        "externalReferences": template_activity["externalReferences"],
+        "policy": template_activity["policy"],
+        "name": activity_name,
+        "dependsOn": [{"activity": template_activity["name"], "dependencyConditions": ["Succeeded"]}],
+    })
+
+    content_part["payload"] = base64.b64encode(json.dumps(content).encode("utf-8")).decode("utf-8")
+    response = invoke_fabric_api_request("post", f"workspaces/{orch_workspace_id}/items/{orch_pipeline_id}/updateDefinition", {"definition": {"parts": parts}})
+    if response.status_code in (200, 201, 202):
+        print(f"✅ Wired '{gold_workspace_name}' Gold pipeline into orchestration template")
+    else:
+        print(f"❌ Failed to wire '{gold_workspace_name}': HTTP {response.status_code} {response.text}")
+
 # METADATA ********************
 
 # META {
