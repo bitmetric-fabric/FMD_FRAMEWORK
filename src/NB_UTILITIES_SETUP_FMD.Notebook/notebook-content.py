@@ -851,6 +851,36 @@ def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_
     else:
         print(f"❌ Failed to wire '{gold_workspace_name}': HTTP {response.status_code} {response.text}")
 
+def set_variable_library_values(workspace_name, library_name, values):
+    """
+    Sets default values on a deployed Variable Library (values.json), e.g. so
+    VAR_GOLD_SHORTCUTS_FMD's workspace/lakehouse IDs don't have to be looked up
+    and pasted in by hand. `values` is {variable_name: new_value}; variables not
+    present in `values` are left untouched.
+    """
+    workspace_id = get_workspace_id_by_name(workspace_name)
+    library_id = get_item_id(workspace_name, f"{library_name}.VariableLibrary", "id")
+    if not (workspace_id and library_id):
+        print(f" - Could not resolve '{library_name}' in '{workspace_name}', skip")
+        return
+
+    response = invoke_fabric_api_request("post", f"workspaces/{workspace_id}/items/{library_id}/getDefinition")
+    response.raise_for_status()
+    parts = response.json()["definition"]["parts"]
+    variables_part = next(p for p in parts if p["path"] == "variables.json")
+    content = json.loads(base64.b64decode(variables_part["payload"]).decode("utf-8"))
+
+    for variable in content["variables"]:
+        if variable["name"] in values:
+            variable["value"] = values[variable["name"]]
+
+    variables_part["payload"] = base64.b64encode(json.dumps(content).encode("utf-8")).decode("utf-8")
+    response = invoke_fabric_api_request("post", f"workspaces/{workspace_id}/items/{library_id}/updateDefinition", {"definition": {"parts": parts}})
+    if response.status_code in (200, 201, 202):
+        print(f"✅ Set {list(values.keys())} on '{library_name}' in '{workspace_name}'")
+    else:
+        print(f"❌ Failed to update '{library_name}' in '{workspace_name}': HTTP {response.status_code} {response.text}")
+
 # METADATA ********************
 
 # META {
