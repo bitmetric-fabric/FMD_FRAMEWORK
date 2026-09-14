@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "FMD_Logging"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "a3a79a34-6951-4b5b-a5a4-75233c80e04c"
+  }
+}

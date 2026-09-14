@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "39a86e356bb53160",
+  "displayName": "Failures",
+  "width": 1920,
+  "height": 1080,
+  "displayOption": "FitToPage"
+}

@@ -1,0 +1,35 @@
+table DimStatus
+
+	column Status
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Status
+		sortByColumn: SortOrder
+		isKey
+
+	column SortOrder
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: SortOrder
+
+	/// Hex color for status-based conditional formatting: green = healthy, red = needs attention, gray = not yet resolved
+	column ColorHex
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ColorHex
+
+	partition DimStatus = m
+		mode: import
+		source =
+			let
+				Source = #table(
+					{"Status", "SortOrder", "ColorHex"},
+					{
+						{"Succeeded", 1, "#107C10"},
+						{"Failed", 2, "#D13438"},
+						{"Running/Unknown", 3, "#8A8886"}
+					}
+				)
+			in
+				Source

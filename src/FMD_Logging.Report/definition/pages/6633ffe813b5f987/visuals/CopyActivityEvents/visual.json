@@ -1,0 +1,116 @@
+{
+  "name": "CopyActivityEvents",
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "queryRef": "CopyActivityExecution.LogType",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CopyActivityExecution"
+                    }
+                  },
+                  "Property": "LogType"
+                }
+              },
+              "nativeQueryRef": "LogType"
+            },
+            {
+              "queryRef": "CopyActivityExecution.LogDateTime",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CopyActivityExecution"
+                    }
+                  },
+                  "Property": "LogDateTime"
+                }
+              },
+              "nativeQueryRef": "LogDateTime"
+            },
+            {
+              "queryRef": "CopyActivityExecution.CopyActivityName",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CopyActivityExecution"
+                    }
+                  },
+                  "Property": "CopyActivityName"
+                }
+              },
+              "nativeQueryRef": "CopyActivityName"
+            },
+            {
+              "queryRef": "CopyActivityExecution.EntityLayer",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CopyActivityExecution"
+                    }
+                  },
+                  "Property": "EntityLayer"
+                }
+              },
+              "nativeQueryRef": "EntityLayer"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Copy Activity Events'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "position": {
+    "x": 24,
+    "y": 780,
+    "width": 1872,
+    "height": 260,
+    "z": 0,
+    "tabOrder": 0
+  },
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json"
+}

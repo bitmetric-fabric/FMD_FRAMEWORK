@@ -1,0 +1,87 @@
+table PipelineExecution
+
+	/// Raw event-grain rows (one row per Start/End/Fail log entry) - kept for the Run Explorer detail page's event timeline, mirroring the tutorial's own monitoring query
+	column WorkspaceGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: WorkspaceGuid
+
+	column PipelineRunGuid
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PipelineRunGuid
+
+	column PipelineParentRunGuid
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PipelineParentRunGuid
+
+	column PipelineGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: PipelineGuid
+
+	column PipelineName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PipelineName
+
+	column PipelineParameters
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: PipelineParameters
+
+	column EntityId
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: EntityId
+
+	column EntityLayer
+		dataType: string
+		summarizeBy: none
+		sourceColumn: EntityLayer
+
+	column TriggerType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TriggerType
+
+	column TriggerGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: TriggerGuid
+
+	column TriggerTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: TriggerTime
+
+	column LogType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: LogType
+
+	column LogDateTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: LogDateTime
+
+	column LogData
+		dataType: string
+		summarizeBy: none
+		sourceColumn: LogData
+
+	partition PipelineExecution = m
+		mode: import
+		source =
+			let
+				Source = Sql.Database(#"Server", #"Database"),
+				logging_PipelineExecution = Source{[Schema="logging", Item="PipelineExecution"]}[Data]
+			in
+				logging_PipelineExecution

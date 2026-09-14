@@ -1,0 +1,81 @@
+table DimDate
+
+	column Date
+		dataType: dateTime
+		formatString: Short Date
+		summarizeBy: none
+		sourceColumn: Date
+		dataCategory: Time
+		isKey
+
+	column Year
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: Year
+
+	column MonthNumber
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: MonthNumber
+
+	column MonthName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: MonthName
+		sortByColumn: MonthNumber
+
+	column YearMonth
+		dataType: string
+		summarizeBy: none
+		sourceColumn: YearMonth
+
+	column Quarter
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Quarter
+
+	column DayOfWeek
+		dataType: string
+		summarizeBy: none
+		sourceColumn: DayOfWeek
+
+	column IsWeekend
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: IsWeekend
+
+	hierarchy 'Calendar Hierarchy'
+
+		level Year
+			column: Year
+
+		level Quarter
+			column: Quarter
+
+		level Month
+			column: MonthName
+
+		level Date
+			column: Date
+
+	partition DimDate = m
+		mode: import
+		source =
+			let
+				// Static calendar year covering the confirmed live data range (2026-03-13 to 2026-09-11) plus buffer; hardcoded rather than dynamically derived from the fact tables to keep this a simple, standalone partition - ponytail: revisit if the report needs to span into 2027
+				StartDate = #date(2026, 1, 1),
+				EndDate = #date(2026, 12, 31),
+				DayCount = Duration.Days(EndDate - StartDate) + 1,
+				DateList = List.Dates(StartDate, DayCount, #duration(1, 0, 0, 0)),
+				#"Converted to table" = Table.FromList(DateList, Splitter.SplitByNothing(), {"Date"}),
+				#"Changed type" = Table.TransformColumnTypes(#"Converted to table", {{"Date", type date}}),
+				#"Added year" = Table.AddColumn(#"Changed type", "Year", each Date.Year([Date]), Int64.Type),
+				#"Added month number" = Table.AddColumn(#"Added year", "MonthNumber", each Date.Month([Date]), Int64.Type),
+				#"Added month name" = Table.AddColumn(#"Added month number", "MonthName", each Date.MonthName([Date]), type text),
+				#"Added year month" = Table.AddColumn(#"Added month name", "YearMonth", each Date.ToText([Date], "yyyy-MM"), type text),
+				#"Added quarter" = Table.AddColumn(#"Added year month", "Quarter", each "Q" & Text.From(Date.QuarterOfYear([Date])), type text),
+				#"Added day of week" = Table.AddColumn(#"Added quarter", "DayOfWeek", each Date.DayOfWeekName([Date]), type text),
+				#"Added is weekend" = Table.AddColumn(#"Added day of week", "IsWeekend", each Date.DayOfWeek([Date], Day.Monday) >= 5, type logical)
+			in
+				#"Added is weekend"

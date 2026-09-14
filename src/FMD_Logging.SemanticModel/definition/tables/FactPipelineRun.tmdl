@@ -1,0 +1,166 @@
+table FactPipelineRun
+
+	/// Number of pipeline runs in the current filter context
+	measure 'Pipeline Run Count' = COUNTROWS(FactPipelineRun)
+		formatString: #,##0
+
+	/// Pipeline runs whose FinalStatus is Failed
+	measure 'Failed Pipeline Runs' = CALCULATE(COUNTROWS(FactPipelineRun), FactPipelineRun[FinalStatus] = "Failed")
+		formatString: #,##0
+
+	/// Share of pipeline runs that succeeded (Running/Unknown runs are excluded from the denominator on purpose - they have not resolved yet)
+	measure 'Pipeline Success Rate %' = ```
+			DIVIDE(
+			    CALCULATE(COUNTROWS(FactPipelineRun), FactPipelineRun[FinalStatus] = "Succeeded"),
+			    CALCULATE(COUNTROWS(FactPipelineRun), FactPipelineRun[FinalStatus] <> "Running/Unknown")
+			)
+			```
+		formatString: 0.0%
+
+	/// Average pipeline run duration, Start to End
+	measure 'Avg Pipeline Duration (sec)' = AVERAGE(FactPipelineRun[DurationSeconds])
+		formatString: #,##0
+
+	/// 90th percentile pipeline run duration - a "slow run" reference line
+	measure 'P90 Pipeline Duration (sec)' = PERCENTILEX.INC(FactPipelineRun, FactPipelineRun[DurationSeconds], 0.9)
+		formatString: #,##0
+
+	/// Most recent pipeline-level log timestamp - freshness/heartbeat signal. Uses PipelineExecution only (not Notebook/Copy) since PL_FMD_LOAD_ALL logs on every scheduled tick regardless of which child steps ran
+	measure 'Last Pipeline Log Time' = MAX(FactPipelineRun[LastLogTime])
+		formatString: General Date
+
+	/// Minutes since the last pipeline log entry - flags the silent-failure scenario (finding 5: a broken connection can leave zero rows written while the pipeline job itself reports Succeeded)
+	measure 'Minutes Since Last Pipeline Log' = DATEDIFF([Last Pipeline Log Time], NOW(), MINUTE)
+		formatString: #,##0
+
+	/// Notebook + copy activity child rows logged under the pipeline runs in the current filter context. Uses USERELATIONSHIP since FactNotebookRun/FactCopyActivityRun -> FactPipelineRun are inactive by default (they would otherwise create an ambiguous relationship path to DimDate/DimStatus alongside each fact table's own direct relationship)
+	measure 'Child Row Count' = ```
+			CALCULATE(
+			    COUNTROWS(FactNotebookRun),
+			    USERELATIONSHIP(FactNotebookRun[PipelineRunGuid], FactPipelineRun[PipelineRunGuid])
+			) +
+			CALCULATE(
+			    COUNTROWS(FactCopyActivityRun),
+			    USERELATIONSHIP(FactCopyActivityRun[PipelineRunGuid], FactPipelineRun[PipelineRunGuid])
+			)
+			```
+		formatString: #,##0
+
+	column PipelineRunGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: PipelineRunGuid
+
+	column WorkspaceGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: WorkspaceGuid
+
+	/// Guid of the parent pipeline run when this run was invoked by another pipeline (e.g. child runs under PL_FMD_LOAD_ALL). No model relationship exists for this column - Analysis Services does not support a relationship from a table to itself, even inactive. Resolve parent-run attributes in DAX via LOOKUPVALUE(FactPipelineRun[PipelineRunGuid], FactPipelineRun[PipelineRunGuid], [PipelineParentRunGuid]) instead of USERELATIONSHIP
+	column PipelineParentRunGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: PipelineParentRunGuid
+
+	column PipelineGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: PipelineGuid
+
+	column PipelineName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PipelineName
+
+	column EntityId
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: EntityId
+
+	/// Bronze / Silver / Landingzone / Control (Control = orchestrator-level rows such as PL_FMD_LOAD_ALL; not documented in the source repo, inferred live)
+	column EntityLayer
+		dataType: string
+		summarizeBy: none
+		sourceColumn: EntityLayer
+
+	/// Normalized in SQL: raw value "1" (unexplained numeric trigger code seen on PL_FMD_LOAD_ALL scheduled runs) is mapped to "Scheduled"; revisit if other raw codes appear
+	column TriggerType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TriggerType
+
+	column TriggerGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: TriggerGuid
+
+	column StartTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: StartTime
+
+	column EndTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: EndTime
+
+	column LastLogTime
+		dataType: dateTime
+		isHidden
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: LastLogTime
+
+	column HasFailed
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: HasFailed
+
+	/// Top-level Message from a Failed/Error LogData payload, falling back to the nested Error.message, falling back to the bare Action - handles both the simple {"Action":"Failed"} and richer error shapes seen live
+	column ErrorMessage
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ErrorMessage
+
+	/// Failed / Succeeded / Running-or-Unknown - the last bucket also covers the silent-failure scenario where no End/Fail row was ever written
+	column FinalStatus
+		dataType: string
+		summarizeBy: none
+		sourceColumn: FinalStatus
+
+	column DurationSeconds
+		dataType: int64
+		summarizeBy: none
+		formatString: #,##0
+		sourceColumn: DurationSeconds
+
+	/// Resolved via EntityLayer -> LandingzoneEntity/BronzeLayerEntity/SilverLayerEntity lookup in SQL; null for Control-layer rows (no entity) and can be mislabeled for the small set of runs affected by the SP_FAIL_LDZ_AUDIT_PIPELINE layer-mislabel bug documented in the plan
+	column EntityName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: EntityName
+
+	/// Calendar-day of StartTime, used only for the relationship to DimDate
+	column StartDate = DATE(YEAR([StartTime]), MONTH([StartTime]), DAY([StartTime]))
+		dataType: dateTime
+		isHidden
+		formatString: General Date
+		summarizeBy: none
+
+	partition FactPipelineRun = m
+		mode: import
+		source =
+			let
+				Source = Sql.Database(#"Server", #"Database"),
+				// Pushes the Start/End/Fail grouping, LogType normalization and JSON parsing down to SQL (tested directly against the live database) instead of doing it row-by-row in M
+				Query = Value.NativeQuery(Source, "WITH agg AS (#(lf)  SELECT#(lf)    PipelineRunGuid,#(lf)    MAX(WorkspaceGuid) as WorkspaceGuid,#(lf)    MAX(PipelineParentRunGuid) as PipelineParentRunGuid,#(lf)    MAX(PipelineGuid) as PipelineGuid,#(lf)    MAX(PipelineName) as PipelineName,#(lf)    MAX(EntityId) as EntityId,#(lf)    MAX(EntityLayer) as EntityLayer,#(lf)    MAX(CASE WHEN TriggerType = '1' THEN 'Scheduled' WHEN TriggerType = 'Manual' THEN 'Manual' ELSE TriggerType END) as TriggerType,#(lf)    MAX(TriggerGuid) as TriggerGuid,#(lf)    MIN(CASE WHEN LogType = 'StartPipeline' THEN LogDateTime END) as StartTime,#(lf)    MAX(CASE WHEN LogType = 'EndPipeline' THEN LogDateTime END) as EndTime,#(lf)    MAX(LogDateTime) as LastLogTime,#(lf)    MAX(CASE WHEN LogType IN ('FailedPipeline','FailPipeline') THEN 1 ELSE 0 END) as HasFailed,#(lf)    MAX(CASE WHEN LogType IN ('FailedPipeline','FailPipeline') AND ISJSON(LogData) = 1#(lf)          THEN COALESCE(JSON_VALUE(LogData,'$.Message'), JSON_VALUE(LogData,'$.Error.message'), JSON_VALUE(LogData,'$.Action')) END) as ErrorMessage#(lf)  FROM logging.PipelineExecution#(lf)  GROUP BY PipelineRunGuid#(lf))#(lf)SELECT a.PipelineRunGuid, a.WorkspaceGuid, a.PipelineParentRunGuid, a.PipelineGuid, a.PipelineName, a.EntityId, a.EntityLayer, a.TriggerType, a.TriggerGuid,#(lf)  a.StartTime, a.EndTime, a.LastLogTime, a.HasFailed, a.ErrorMessage,#(lf)  CASE WHEN a.HasFailed = 1 THEN 'Failed' WHEN a.EndTime IS NOT NULL THEN 'Succeeded' ELSE 'Running/Unknown' END as FinalStatus,#(lf)  DATEDIFF(SECOND, a.StartTime, a.EndTime) as DurationSeconds,#(lf)  CASE#(lf)    WHEN a.EntityLayer = 'Landingzone' THEN ldz.SourceSchema + '.' + ldz.SourceName#(lf)    WHEN a.EntityLayer = 'Bronze' THEN brz.[Schema] + '.' + brz.Name#(lf)    WHEN a.EntityLayer = 'Silver' THEN slv.[Schema] + '.' + slv.Name#(lf)    ELSE NULL#(lf)  END as EntityName#(lf)FROM agg a#(lf)LEFT JOIN integration.LandingzoneEntity ldz ON a.EntityLayer='Landingzone' AND ldz.LandingzoneEntityId = a.EntityId#(lf)LEFT JOIN integration.BronzeLayerEntity brz ON a.EntityLayer='Bronze' AND brz.BronzeLayerEntityId = a.EntityId#(lf)LEFT JOIN integration.SilverLayerEntity slv ON a.EntityLayer='Silver' AND slv.SilverLayerEntityId = a.EntityId", null, [EnableFolding=false])
+			in
+				Query

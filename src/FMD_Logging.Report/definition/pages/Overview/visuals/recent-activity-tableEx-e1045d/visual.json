@@ -1,0 +1,130 @@
+{
+  "name": "recent-activity-tableEx-e1045d",
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "queryRef": "FactPipelineRun.PipelineName",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactPipelineRun"
+                    }
+                  },
+                  "Property": "PipelineName"
+                }
+              },
+              "nativeQueryRef": "PipelineName"
+            },
+            {
+              "queryRef": "FactPipelineRun.EntityLayer",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactPipelineRun"
+                    }
+                  },
+                  "Property": "EntityLayer"
+                }
+              },
+              "nativeQueryRef": "EntityLayer"
+            },
+            {
+              "queryRef": "FactPipelineRun.StartTime",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactPipelineRun"
+                    }
+                  },
+                  "Property": "StartTime"
+                }
+              },
+              "nativeQueryRef": "StartTime"
+            },
+            {
+              "queryRef": "FactPipelineRun.FinalStatus",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactPipelineRun"
+                    }
+                  },
+                  "Property": "FinalStatus"
+                }
+              },
+              "nativeQueryRef": "FinalStatus"
+            },
+            {
+              "queryRef": "FactPipelineRun.DurationSeconds",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactPipelineRun"
+                    }
+                  },
+                  "Property": "DurationSeconds"
+                }
+              },
+              "nativeQueryRef": "DurationSeconds"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Recent Activity'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "position": {
+    "x": 24,
+    "y": 640,
+    "width": 1872,
+    "height": 380,
+    "z": 0,
+    "tabOrder": 0
+  },
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json"
+}

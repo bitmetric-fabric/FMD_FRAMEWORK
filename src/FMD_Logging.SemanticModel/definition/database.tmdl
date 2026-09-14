@@ -1,0 +1,4 @@
+database FMD_Logging
+
+	compatibilityLevel: 1702
+	compatibilityMode: powerBI

@@ -1,0 +1,116 @@
+{
+  "name": "NotebookEvents",
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "queryRef": "NotebookExecution.LogType",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "NotebookExecution"
+                    }
+                  },
+                  "Property": "LogType"
+                }
+              },
+              "nativeQueryRef": "LogType"
+            },
+            {
+              "queryRef": "NotebookExecution.LogDateTime",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "NotebookExecution"
+                    }
+                  },
+                  "Property": "LogDateTime"
+                }
+              },
+              "nativeQueryRef": "LogDateTime"
+            },
+            {
+              "queryRef": "NotebookExecution.NotebookName",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "NotebookExecution"
+                    }
+                  },
+                  "Property": "NotebookName"
+                }
+              },
+              "nativeQueryRef": "NotebookName"
+            },
+            {
+              "queryRef": "NotebookExecution.EntityLayer",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "NotebookExecution"
+                    }
+                  },
+                  "Property": "EntityLayer"
+                }
+              },
+              "nativeQueryRef": "EntityLayer"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Notebook Events'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "position": {
+    "x": 24,
+    "y": 520,
+    "width": 1872,
+    "height": 240,
+    "z": 0,
+    "tabOrder": 0
+  },
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json"
+}

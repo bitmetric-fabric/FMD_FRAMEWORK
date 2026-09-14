@@ -1,0 +1,151 @@
+table FactNotebookRun
+
+	/// Number of notebook executions in the current filter context (grain: one row per pipeline run + notebook + entity, collapsing any Start/End retries into a single row)
+	measure 'Notebook Run Count' = COUNTROWS(FactNotebookRun)
+		formatString: #,##0
+
+	/// Notebook executions whose FinalStatus is Failed. Notebook failures have no dedicated LogType - detected from LogData.Action = "Error" on the End event (see column ErrorMessage)
+	measure 'Failed Notebook Runs' = CALCULATE(COUNTROWS(FactNotebookRun), FactNotebookRun[FinalStatus] = "Failed")
+		formatString: #,##0
+
+	measure 'Notebook Success Rate %' = ```
+			DIVIDE(
+			    CALCULATE(COUNTROWS(FactNotebookRun), FactNotebookRun[FinalStatus] = "Succeeded"),
+			    CALCULATE(COUNTROWS(FactNotebookRun), FactNotebookRun[FinalStatus] <> "Running/Unknown")
+			)
+			```
+		formatString: 0.0%
+
+	measure 'Avg Notebook Duration (sec)' = AVERAGE(FactNotebookRun[DurationSeconds])
+		formatString: #,##0
+
+	column PipelineRunGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: PipelineRunGuid
+
+	column NotebookGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: NotebookGuid
+
+	column EntityId
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: EntityId
+
+	column WorkspaceGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: WorkspaceGuid
+
+	column PipelineParentRunGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: PipelineParentRunGuid
+
+	column NotebookName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: NotebookName
+
+	column EntityLayer
+		dataType: string
+		summarizeBy: none
+		sourceColumn: EntityLayer
+
+	column TriggerType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TriggerType
+
+	column TriggerGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: TriggerGuid
+
+	column StartTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: StartTime
+
+	column EndTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: EndTime
+
+	column LastLogTime
+		dataType: dateTime
+		isHidden
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: LastLogTime
+
+	column HasFailed
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: HasFailed
+
+	/// Only populated when LogData.Action = "Error" on the End event; untested against real data as of this build (zero notebook failures have occurred in this environment's history) but the extraction logic matches the source code's error-logging path
+	column ErrorMessage
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ErrorMessage
+
+	/// Per-entity copy target, present only on notebook runs that copy data (e.g. NB_FMD_LOAD_LANDING_BRONZE); null for other notebooks
+	column TargetSchema
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TargetSchema
+
+	column TargetName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TargetName
+
+	/// Raw "H:MM:SS.ffffff" runtime string reported inside LogData.CopyOutput - kept as text since it is not consistently zero-padded; use DurationSeconds for numeric analysis
+	column CopyOutputTotalRuntime
+		dataType: string
+		summarizeBy: none
+		sourceColumn: CopyOutputTotalRuntime
+
+	column FinalStatus
+		dataType: string
+		summarizeBy: none
+		sourceColumn: FinalStatus
+
+	column DurationSeconds
+		dataType: int64
+		summarizeBy: none
+		formatString: #,##0
+		sourceColumn: DurationSeconds
+
+	column EntityName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: EntityName
+
+	/// Calendar-day of StartTime, used only for the relationship to DimDate
+	column StartDate = DATE(YEAR([StartTime]), MONTH([StartTime]), DAY([StartTime]))
+		dataType: dateTime
+		isHidden
+		formatString: General Date
+		summarizeBy: none
+
+	partition FactNotebookRun = m
+		mode: import
+		source =
+			let
+				Source = Sql.Database(#"Server", #"Database"),
+				// Grain is PipelineRunGuid + NotebookGuid + EntityId, not PipelineRunGuid alone - a single pipeline run can call the same notebook for many entities (confirmed live: up to 10 distinct EntityId per run). Retries (extra Start rows before the final End) are collapsed via MIN/MAX rather than matched pair-by-pair
+				Query = Value.NativeQuery(Source, "WITH agg AS (#(lf)  SELECT#(lf)    PipelineRunGuid, NotebookGuid, EntityId,#(lf)    MAX(WorkspaceGuid) as WorkspaceGuid,#(lf)    MAX(PipelineParentRunGuid) as PipelineParentRunGuid,#(lf)    MAX(NotebookName) as NotebookName,#(lf)    MAX(EntityLayer) as EntityLayer,#(lf)    MAX(CASE WHEN TriggerType = '1' THEN 'Scheduled' WHEN TriggerType = 'Manual' THEN 'Manual' ELSE TriggerType END) as TriggerType,#(lf)    MAX(TriggerGuid) as TriggerGuid,#(lf)    MIN(CASE WHEN LogType = 'StartNotebookActivity' THEN LogDateTime END) as StartTime,#(lf)    MAX(CASE WHEN LogType = 'EndNotebookActivity' THEN LogDateTime END) as EndTime,#(lf)    MAX(LogDateTime) as LastLogTime,#(lf)    MAX(CASE WHEN LogType = 'EndNotebookActivity' AND ISJSON(LogData) = 1 AND JSON_VALUE(LogData,'$.Action') = 'Error' THEN 1 ELSE 0 END) as HasFailed,#(lf)    MAX(CASE WHEN LogType = 'EndNotebookActivity' AND ISJSON(LogData) = 1 AND JSON_VALUE(LogData,'$.Action') = 'Error'#(lf)          THEN COALESCE(JSON_VALUE(LogData,'$.Message'), JSON_VALUE(LogData,'$.ErrorMessage')) END) as ErrorMessage,#(lf)    MAX(CASE WHEN ISJSON(LogData) = 1 THEN JSON_VALUE(LogData,'$.CopyOutput.TargetSchema') END) as TargetSchema,#(lf)    MAX(CASE WHEN ISJSON(LogData) = 1 THEN JSON_VALUE(LogData,'$.CopyOutput.TargetName') END) as TargetName,#(lf)    MAX(CASE WHEN ISJSON(LogData) = 1 THEN JSON_VALUE(LogData,'$.CopyOutput.""Total Runtime""') END) as CopyOutputTotalRuntime#(lf)  FROM logging.NotebookExecution#(lf)  GROUP BY PipelineRunGuid, NotebookGuid, EntityId#(lf))#(lf)SELECT a.PipelineRunGuid, a.NotebookGuid, a.EntityId, a.WorkspaceGuid, a.PipelineParentRunGuid, a.NotebookName, a.EntityLayer, a.TriggerType, a.TriggerGuid,#(lf)  a.StartTime, a.EndTime, a.LastLogTime, a.HasFailed, a.ErrorMessage, a.TargetSchema, a.TargetName, a.CopyOutputTotalRuntime,#(lf)  CASE WHEN a.HasFailed = 1 THEN 'Failed' WHEN a.EndTime IS NOT NULL THEN 'Succeeded' ELSE 'Running/Unknown' END as FinalStatus,#(lf)  DATEDIFF(SECOND, a.StartTime, a.EndTime) as DurationSeconds,#(lf)  CASE#(lf)    WHEN a.EntityLayer = 'Landingzone' THEN ldz.SourceSchema + '.' + ldz.SourceName#(lf)    WHEN a.EntityLayer = 'Bronze' THEN brz.[Schema] + '.' + brz.Name#(lf)    WHEN a.EntityLayer = 'Silver' THEN slv.[Schema] + '.' + slv.Name#(lf)    ELSE NULL#(lf)  END as EntityName#(lf)FROM agg a#(lf)LEFT JOIN integration.LandingzoneEntity ldz ON a.EntityLayer='Landingzone' AND ldz.LandingzoneEntityId = a.EntityId#(lf)LEFT JOIN integration.BronzeLayerEntity brz ON a.EntityLayer='Bronze' AND brz.BronzeLayerEntityId = a.EntityId#(lf)LEFT JOIN integration.SilverLayerEntity slv ON a.EntityLayer='Silver' AND slv.SilverLayerEntityId = a.EntityId", null, [EnableFolding=false])
+			in
+				Query

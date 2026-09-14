@@ -1,0 +1,45 @@
+relationship FactPipelineRun_DimDate
+	fromColumn: FactPipelineRun.StartDate
+	toColumn: DimDate.Date
+
+relationship FactNotebookRun_DimDate
+	fromColumn: FactNotebookRun.StartDate
+	toColumn: DimDate.Date
+
+relationship FactCopyActivityRun_DimDate
+	fromColumn: FactCopyActivityRun.StartDate
+	toColumn: DimDate.Date
+
+relationship FactPipelineRun_DimStatus
+	fromColumn: FactPipelineRun.FinalStatus
+	toColumn: DimStatus.Status
+
+relationship FactNotebookRun_DimStatus
+	fromColumn: FactNotebookRun.FinalStatus
+	toColumn: DimStatus.Status
+
+relationship FactCopyActivityRun_DimStatus
+	fromColumn: FactCopyActivityRun.FinalStatus
+	toColumn: DimStatus.Status
+
+relationship FactNotebookRun_FactPipelineRun
+	isActive: false
+	fromColumn: FactNotebookRun.PipelineRunGuid
+	toColumn: FactPipelineRun.PipelineRunGuid
+
+relationship FactCopyActivityRun_FactPipelineRun
+	isActive: false
+	fromColumn: FactCopyActivityRun.PipelineRunGuid
+	toColumn: FactPipelineRun.PipelineRunGuid
+
+relationship PipelineExecution_FactPipelineRun
+	fromColumn: PipelineExecution.PipelineRunGuid
+	toColumn: FactPipelineRun.PipelineRunGuid
+
+relationship NotebookExecution_FactPipelineRun
+	fromColumn: NotebookExecution.PipelineRunGuid
+	toColumn: FactPipelineRun.PipelineRunGuid
+
+relationship CopyActivityExecution_FactPipelineRun
+	fromColumn: CopyActivityExecution.PipelineRunGuid
+	toColumn: FactPipelineRun.PipelineRunGuid

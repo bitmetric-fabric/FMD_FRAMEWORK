@@ -1,0 +1,173 @@
+{
+  "name": "copy-activity-failures-tableEx-69c178",
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "queryRef": "FactCopyActivityRun.CopyActivityName",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyActivityRun"
+                    }
+                  },
+                  "Property": "CopyActivityName"
+                }
+              },
+              "nativeQueryRef": "CopyActivityName"
+            },
+            {
+              "queryRef": "FactCopyActivityRun.EntityLayer",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyActivityRun"
+                    }
+                  },
+                  "Property": "EntityLayer"
+                }
+              },
+              "nativeQueryRef": "EntityLayer"
+            },
+            {
+              "queryRef": "FactCopyActivityRun.EntityName",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyActivityRun"
+                    }
+                  },
+                  "Property": "EntityName"
+                }
+              },
+              "nativeQueryRef": "EntityName"
+            },
+            {
+              "queryRef": "FactCopyActivityRun.StartTime",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyActivityRun"
+                    }
+                  },
+                  "Property": "StartTime"
+                }
+              },
+              "nativeQueryRef": "StartTime"
+            },
+            {
+              "queryRef": "FactCopyActivityRun.ErrorCode",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyActivityRun"
+                    }
+                  },
+                  "Property": "ErrorCode"
+                }
+              },
+              "nativeQueryRef": "ErrorCode"
+            },
+            {
+              "queryRef": "FactCopyActivityRun.ErrorMessage",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyActivityRun"
+                    }
+                  },
+                  "Property": "ErrorMessage"
+                }
+              },
+              "nativeQueryRef": "ErrorMessage"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#D13438'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Copy Activity Failures'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "position": {
+    "x": 24,
+    "y": 760,
+    "width": 1872,
+    "height": 280,
+    "z": 0,
+    "tabOrder": 0
+  },
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json"
+}

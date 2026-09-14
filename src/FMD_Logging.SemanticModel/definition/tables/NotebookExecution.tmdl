@@ -1,0 +1,87 @@
+table NotebookExecution
+
+	/// Raw event-grain rows - kept for the Run Explorer detail page's event timeline
+	column WorkspaceGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: WorkspaceGuid
+
+	column PipelineRunGuid
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PipelineRunGuid
+
+	column PipelineParentRunGuid
+		dataType: string
+		summarizeBy: none
+		sourceColumn: PipelineParentRunGuid
+
+	column NotebookGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: NotebookGuid
+
+	column NotebookName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: NotebookName
+
+	column NotebookParameters
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: NotebookParameters
+
+	column EntityId
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: EntityId
+
+	column EntityLayer
+		dataType: string
+		summarizeBy: none
+		sourceColumn: EntityLayer
+
+	column TriggerType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TriggerType
+
+	column TriggerGuid
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: TriggerGuid
+
+	column TriggerTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: TriggerTime
+
+	column LogType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: LogType
+
+	column LogDateTime
+		dataType: dateTime
+		summarizeBy: none
+		formatString: General Date
+		sourceColumn: LogDateTime
+
+	column LogData
+		dataType: string
+		summarizeBy: none
+		sourceColumn: LogData
+
+	partition NotebookExecution = m
+		mode: import
+		source =
+			let
+				Source = Sql.Database(#"Server", #"Database"),
+				logging_NotebookExecution = Source{[Schema="logging", Item="NotebookExecution"]}[Data]
+			in
+				logging_NotebookExecution

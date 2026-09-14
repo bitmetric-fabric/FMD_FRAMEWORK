@@ -1,0 +1,130 @@
+{
+  "name": "PipelineEvents",
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "queryRef": "PipelineExecution.LogType",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "PipelineExecution"
+                    }
+                  },
+                  "Property": "LogType"
+                }
+              },
+              "nativeQueryRef": "LogType"
+            },
+            {
+              "queryRef": "PipelineExecution.LogDateTime",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "PipelineExecution"
+                    }
+                  },
+                  "Property": "LogDateTime"
+                }
+              },
+              "nativeQueryRef": "LogDateTime"
+            },
+            {
+              "queryRef": "PipelineExecution.PipelineName",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "PipelineExecution"
+                    }
+                  },
+                  "Property": "PipelineName"
+                }
+              },
+              "nativeQueryRef": "PipelineName"
+            },
+            {
+              "queryRef": "PipelineExecution.TriggerType",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "PipelineExecution"
+                    }
+                  },
+                  "Property": "TriggerType"
+                }
+              },
+              "nativeQueryRef": "TriggerType"
+            },
+            {
+              "queryRef": "PipelineExecution.EntityLayer",
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "PipelineExecution"
+                    }
+                  },
+                  "Property": "EntityLayer"
+                }
+              },
+              "nativeQueryRef": "EntityLayer"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "drillFilterOtherVisuals": true,
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Pipeline Events'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "position": {
+    "x": 24,
+    "y": 260,
+    "width": 1872,
+    "height": 240,
+    "z": 0,
+    "tabOrder": 0
+  },
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json"
+}
