@@ -116,7 +116,7 @@ readable.
 |---|---|
 | `repository` | Owner, name and branch of your fork. Must match the three values in the bootstrap notebook. |
 | `naming` | `domain_name` (the shared ingestion domain), `framework_post_fix`, and the list of business domains. |
-| `environments` | One entry per environment: `name`, `short` (D/T/A/P) and `capacity`. The order is the stage order of the deployment pipelines, and it decides which value sets are deployed. |
+| `environments` | One entry per environment: `name`, `short` (D/T/A/P), `capacity`, and optionally `capacity_business_domain` for the business-domain workspaces. The order is the stage order of the deployment pipelines, and it decides which value sets are deployed. |
 | `config_workspace` | Capacity for the CONFIG workspace, which exists once per customer rather than once per environment. |
 | `spark` | Runtime version and Spark sizing, written into the Environment item at deploy time. One `ENV_FMD.Environment` is deployed into the CONFIG workspace and shared by every environment, so this sizing applies everywhere. |
 | `framework` | `lakehouse_schema_enabled`. |

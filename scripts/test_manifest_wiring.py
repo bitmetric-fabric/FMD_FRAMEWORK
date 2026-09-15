@@ -155,6 +155,19 @@ check(
     ],
 )
 
+# D3: zodra capacity_business_domain wel is ingevuld, moet hij die pakken.
+# In place muteren, want require() sluit over de globals van zijn eigen cel.
+bd_sources, _ = cells_of(REPO / "setup" / "NB_SETUP_BUSINESS_DOMAINS.ipynb")
+bd_environments_cell = bd_sources["60ded5a6-4998-4f43-a7aa-5a9c26dad6a1"]
+for env in bd["manifest"]["environments"]:
+    env["capacity_business_domain"] = f"GOLD-{env['short']}"
+exec(compile(bd_environments_cell, "bd-env", "exec"), bd)
+check(
+    "BD capaciteit volgt capacity_business_domain",
+    [e["workspaces"]["data"]["capacity_name"] for e in bd["business_domain_deployment"]],
+    ["GOLD-D", "GOLD-T", "GOLD-P"],
+)
+
 print("\n=== vergelijking met de defaults van voor PR 3 ===")
 failed = 0
 for label, ok, got, want in expected:

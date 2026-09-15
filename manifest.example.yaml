@@ -15,7 +15,7 @@
 repository:
   owner: bitmetric-fabric
   name: FMD_FRAMEWORK
-  branch: dev
+  branch: main
 
 # --- Naamgeving --------------------------------------------------------------
 naming:
@@ -30,19 +30,28 @@ naming:
 # Vier value sets worden altijd meegeleverd; hier bepaal je welke actief zijn
 # (triage V4). Een klant met DTAP zet Acceptance erbij, een klant met DTP niet.
 # De volgorde bepaalt de stage-volgorde van de Deployment Pipeline.
+#
+# capacity        : capaciteit voor de gedeelde ingestielaag (INTEGRATION).
+# capacity_business_domain : optioneel. Capaciteit voor de workspaces van de
+#   business domains in deze omgeving. Weggelaten betekent: dezelfde als
+#   `capacity`. Vul hem in als Gold op een eigen capaciteit moet draaien.
 environments:
   - name: Development
     short: D
     capacity: '<your capacity name>'
+    # capacity_business_domain: '<your capacity name>'
   - name: Test
     short: T
     capacity: '<your capacity name>'
+    # capacity_business_domain: '<your capacity name>'
   # - name: Acceptance
   #   short: A
   #   capacity: '<your capacity name>'
+  #   # capacity_business_domain: '<your capacity name>'
   - name: Production
     short: P
     capacity: '<your capacity name>'
+    # capacity_business_domain: '<your capacity name>'
 
 # --- Configuratie-workspace --------------------------------------------------
 # TOEGEVOEGD t.o.v. het aangeleverde voorbeeld (triage D2). De CONFIG-workspace
@@ -83,6 +92,8 @@ framework:
 security:
   admin_group_id: '00000000-0000-0000-0000-000000000000'
   contributor_group_id: '00000000-0000-0000-0000-000000000000'
+  # Gereserveerd: het framework kent nog geen viewer-rol, dus deze waarde wordt
+  # op dit moment nergens toegepast. Bewust bewaard voor later.
   viewer_group_id: '00000000-0000-0000-0000-000000000000'
   # TOEGEVOEGD (triage D5). De rollijsten in de setup-notebooks kennen naast
   # Groups ook een ServicePrincipal met contributor-rechten; zonder dit veld zou

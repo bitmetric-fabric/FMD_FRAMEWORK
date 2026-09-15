@@ -100,7 +100,7 @@ The keys this notebook needs on top of the integration ones:
 |---|---|
 | `naming.business_domains` | The business domains to create, for example `[FINANCE, SALES]`. Each gets a CODE, DATA, REPORTING and SEMANTIC workspace per environment. |
 | `naming.domain_name` | Used to find the integration domain's CONFIG workspace and metadata database, so they are not configured separately here. |
-| `environments[].capacity` | The capacity each business-domain workspace lands on, per environment. |
+| `environments[].capacity_business_domain` | Optional. The capacity the business-domain workspaces land on, per environment. Left out, they share `environments[].capacity` with the integration layer. |
 | `security` | Object IDs of the Entra groups that get access to the business-domain workspaces. |
 
 See `manifest.example.yaml` for the full structure, and
@@ -109,8 +109,8 @@ for how to fill in and commit the manifest.
 
 > [!NOTE]
 > Business-domain workspaces share `environments[].capacity` with the integration
-> workspaces. If a customer needs them on a separate capacity, that is a manifest
-> change, not a notebook change.
+> workspaces unless you set `capacity_business_domain` on that environment. Either
+> way it is a manifest change, not a notebook change.
 
 ### 4. Run the deployment
 
