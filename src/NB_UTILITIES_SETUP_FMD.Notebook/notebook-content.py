@@ -584,6 +584,75 @@ def deploy_workspaces(domain_name,workspace, workspace_name, environment_name, o
     tasks.append({"task_name": f"Create or Update workspace {workspace_name}","task_duration": int(time() - start),"status": "success" })
 
 # -------------------------------
+# Manifest applied at deploy time
+# -------------------------------
+# Spark sizing and the active value sets differ per environment, while src/ holds
+# one copy of each item. Both are therefore applied to the extracted tmp folder
+# just before import, from the manifest that the setup notebook already loaded.
+
+def apply_spark_settings(folder_path, environment_name):
+    """
+    Rewrites Setting/Sparkcompute.yml from manifest spark.default, with
+    spark.overrides.<environment> on top. Line-based on purpose: keys that the
+    manifest does not mention (enable_native_execution_engine,
+    dynamic_executor_allocation, ...) are left exactly as they are, comments and
+    line endings included.
+    """
+    settings = dict(require('spark.default'))
+    for override_name, override in (optional('spark.overrides') or {}).items():
+        if override_name.lower() == str(environment_name).lower():
+            settings.update(override or {})
+    settings['runtime_version'] = require('spark.runtime_version')
+
+    path = f"{folder_path}/Setting/Sparkcompute.yml"
+    if not os.path.exists(path):
+        print(f" - No Sparkcompute.yml in {folder_path}, skip spark settings")
+        return
+
+    with open(path, "r", encoding="utf-8", newline="") as file:
+        lines = file.readlines()
+
+    unseen = dict(settings)
+    for index, line in enumerate(lines):
+        key = line.split(":", 1)[0].strip()
+        if key in unseen and not line.startswith((" ", "\t", "#")):
+            newline = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+            lines[index] = f"{key}: {unseen.pop(key)}{newline}"
+    for key, value in unseen.items():
+        if lines and not lines[-1].endswith(("\n", "\r\n")):
+            lines[-1] += "\n"
+        lines.append(f"{key}: {value}\n")
+
+    with open(path, "w", encoding="utf-8", newline="") as file:
+        file.writelines(lines)
+    print(f" - Spark settings applied for '{environment_name}': {settings}")
+
+
+def apply_value_sets(folder_path):
+    """
+    Narrows a Variable Library to the value sets the manifest declares active.
+    src/ ships all four (Development/Test/Acceptance/Production); a customer on
+    DTP should not get an empty Acceptance set deployed alongside.
+    """
+    active = [environment['name'] for environment in require('environments')]
+
+    settings_path = f"{folder_path}/settings.json"
+    if os.path.exists(settings_path):
+        with open(settings_path, "r", encoding="utf-8") as file:
+            settings = json.load(file)
+        settings["valueSetsOrder"] = active
+        with open(settings_path, "w", encoding="utf-8") as file:
+            json.dump(settings, file, indent=2)
+
+    value_sets_path = f"{folder_path}/valueSets"
+    if os.path.isdir(value_sets_path):
+        for file_name in os.listdir(value_sets_path):
+            if file_name.endswith(".json") and file_name[:-len(".json")] not in active:
+                os.remove(os.path.join(value_sets_path, file_name))
+    print(f" - Value sets limited to {active}")
+
+
+# -------------------------------
 # Item deployment
 # -------------------------------
 def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lakehouse_schema_enabled, it=None):
@@ -654,6 +723,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
         if VariableLibraryExists != "* true" or overwrite_variable_library:
                 try:
                     print(f"Creating or updating VariableLibrary: {name}")
+                    apply_value_sets(tmp_path)
                     result = update_variable_library(tmp_path, it.get("variables"))
                     result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
                     print(f"✅ {name} Created/Imported'")
@@ -665,9 +735,10 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
         assign_item_to_folder(workspace_name=workspace_name, item_id=new_id, folder_name='VariableLibraries')
         mapping_type='VariableLibrary'
     
-    elif "Environment" in name:   
+    elif "Environment" in name:
         try:
             print(f"Creating or updating Environment: {name}")
+            apply_spark_settings(tmp_path, environment_name)
             result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
             print(f"✅ {name} Created/Imported'")
         except Exception as e:

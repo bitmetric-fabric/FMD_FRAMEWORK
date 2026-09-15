@@ -3,6 +3,7 @@
   "valueSetsOrder": [
     "Development",
     "Test",
+    "Acceptance",
     "Production"
   ]
 }

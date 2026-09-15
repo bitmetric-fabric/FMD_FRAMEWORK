@@ -30,3 +30,11 @@ Thumbs.db
 
 # OMC (oh-my-claudecode)
 .omc/
+
+# FMD klant-manifest
+# Het ingevulde manifest hoort niet in dit template-repo: het bevat de namen,
+# capaciteiten en Entra-groep-ID's van een specifieke klant.
+# LET OP: in een KLANT-fork moet manifest.yaml juist wel gecommit worden - de
+# setup-notebooks halen hem daar via raw.githubusercontent.com op. Haal deze
+# regel daar dus weg. manifest.example.yaml blijft altijd in git.
+manifest.yaml

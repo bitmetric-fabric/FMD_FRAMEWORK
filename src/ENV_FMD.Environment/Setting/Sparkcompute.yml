@@ -1,8 +1,8 @@
 enable_native_execution_engine: true
-# ponytail: sized for the Dev/Test capacity's pool limit (16 cores / 112g) - worst case
-# here is driver(4,28g) + 2 executors(4,28g) = 12 cores / 84g, with headroom. Was
-# 8/56g each with max_executors 2 (24 cores / 168g claimed), which exceeded the pool.
-# If Prod has a bigger capacity, its pool limit may allow raising this back up.
+# Conservative default that starts on any capacity; raise it on a bigger one.
+# Worst case here is driver(4,28g) + 2 executors(4,28g) = 12 cores / 84g.
+# Do not edit these four values here: the setup notebook overwrites them from
+# manifest.yaml (spark.default, plus spark.overrides.<environment>) at deploy time.
 driver_cores: 4
 driver_memory: 28g
 executor_cores: 4

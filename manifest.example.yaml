@@ -1,0 +1,104 @@
+# FMD klant-manifest
+#
+# Eén bestand per klantimplementatie, ingevuld bij oplevering. Bevat alles wat per
+# klant vaststaat en daarna niet meer verandert (ADR-003).
+#
+# Hoort hier NIET:
+#   - waarden die per omgeving verschillen binnen één klant  → Variable Library
+#   - waarden die tijdens gebruik veranderen                 → integration.* tabellen
+#
+# Kopieer naar manifest.yaml (niet in git bij gevoelige waarden) en vul in.
+# De setup-notebooks lezen dit bestand; niets hiervan hoort nog in een notebookcel.
+
+# --- Herkomst van de framework-code -----------------------------------------
+# Was hardcoded op regel 274/288 van de setup-notebooks (triage V1).
+repository:
+  owner: bitmetric-fabric
+  name: FMD_FRAMEWORK
+  branch: dev
+
+# --- Naamgeving --------------------------------------------------------------
+naming:
+  domain_name: INTEGRATION          # gedeelde ingestielaag
+  framework_post_fix: ''            # achtervoegsel op alle workspace-namen, bv. '_ACME'
+  business_domains:
+    - FINANCE
+    - SALES
+    # - HR
+
+# --- Omgevingen --------------------------------------------------------------
+# Vier value sets worden altijd meegeleverd; hier bepaal je welke actief zijn
+# (triage V4). Een klant met DTAP zet Acceptance erbij, een klant met DTP niet.
+# De volgorde bepaalt de stage-volgorde van de Deployment Pipeline.
+environments:
+  - name: Development
+    short: D
+    capacity: '<your capacity name>'
+  - name: Test
+    short: T
+    capacity: '<your capacity name>'
+  # - name: Acceptance
+  #   short: A
+  #   capacity: '<your capacity name>'
+  - name: Production
+    short: P
+    capacity: '<your capacity name>'
+
+# --- Configuratie-workspace --------------------------------------------------
+# TOEGEVOEGD t.o.v. het aangeleverde voorbeeld (triage D2). De CONFIG-workspace
+# draagt de metadata-database en bestaat één keer per klant, niet één keer per
+# omgeving — hij past daarom niet in environments hierboven. Kwam uit
+# capacity_name_config in NB_SETUP_FMD cel 7.
+config_workspace:
+  capacity: '<your capacity name>'
+
+# --- Spark compute -----------------------------------------------------------
+# Wordt door de setup-notebook naar src/ENV_FMD.Environment/Setting/Sparkcompute.yml
+# geschreven (triage V2). Conservatieve default die op elke capacity start; verhoog
+# bij een grotere capacity. Per omgeving te overschrijven, omdat Dev en Prod vaak
+# op verschillende capaciteiten draaien.
+spark:
+  # TOEGEVOEGD: stond op twee plekken (spark_version in cel 3 van beide setup-
+  # notebooks, runtime_version in Sparkcompute.yml). Nu één bron.
+  runtime_version: '2.0'
+  default:
+    driver_cores: 4
+    driver_memory: 28g
+    executor_cores: 4
+    executor_memory: 28g
+  overrides:
+    # Production:
+    #   driver_cores: 8
+    #   driver_memory: 56g
+    #   executor_cores: 8
+    #   executor_memory: 56g
+
+# --- Framework-instellingen --------------------------------------------------
+framework:
+  # Schema-enabled lakehouses. Upstream had hier een lege string bij type Boolean —
+  # dat is geen geldige waarde (triage V3). true is de default; false is een
+  # legitieme klantkeuze, maar kies bij oplevering en verander daarna niet meer.
+  lakehouse_schema_enabled: true
+
+# --- Beveiliging -------------------------------------------------------------
+# Object-ID's van Entra-groepen die toegang krijgen tot de workspaces.
+# Laat op nullen staan tot ze bekend zijn; de setup-notebook slaat ze dan over.
+security:
+  admin_group_id: '00000000-0000-0000-0000-000000000000'
+  contributor_group_id: '00000000-0000-0000-0000-000000000000'
+  viewer_group_id: '00000000-0000-0000-0000-000000000000'
+  # TOEGEVOEGD (triage D5). De rollijsten in de setup-notebooks kennen naast
+  # Groups ook een ServicePrincipal met contributor-rechten; zonder dit veld zou
+  # die toegang bij het omzetten naar het manifest wegvallen. Laat op nullen
+  # staan als je geen SP gebruikt.
+  service_principal_id: '00000000-0000-0000-0000-000000000000'
+
+# --- Key Vault ---------------------------------------------------------------
+# TOEGEVOEGD. Kwam uit NB_SETUP_FMD cel 9. Dit zijn de NAMEN van de secrets,
+# niet de secrets zelf; de waarden worden tijdens de run uit Key Vault gehaald.
+key_vault:
+  name: '<your key vault name>'
+  secrets:
+    sql_sp_tenant_id: tenantid
+    sql_sp_client_id: sp-fmd-fabric-pipelines-app-id
+    sql_sp_secret: sp-fmd-fabric-pipelines-secret
