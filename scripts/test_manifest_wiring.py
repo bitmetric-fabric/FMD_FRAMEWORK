@@ -194,7 +194,6 @@ MANIFEST = {
         "runtime_version": "2.0",
         "default": {"driver_cores": 4, "driver_memory": "28g",
                     "executor_cores": 4, "executor_memory": "28g"},
-        "overrides": {"Production": {"driver_cores": 8, "driver_memory": "56g"}},
     },
     "environments": [{"name": "Development"}, {"name": "Test"}, {"name": "Production"}],
 }
@@ -226,12 +225,12 @@ def check(label, condition, detail=""):
 print("=== apply_spark_settings ===")
 original = (REPO / "src/ENV_FMD.Environment/Setting/Sparkcompute.yml").read_bytes()
 
-for environment, expected_driver in (("development", "4"), ("production", "8")):
+for environment, expected_driver in (("config", "4"),):
     tmp = Path(tempfile.mkdtemp())
     (tmp / "Setting").mkdir()
     (tmp / "Setting/Sparkcompute.yml").write_bytes(original)
 
-    scope["apply_spark_settings"](str(tmp), environment)
+    scope["apply_spark_settings"](str(tmp))
     result = (tmp / "Setting/Sparkcompute.yml").read_bytes().decode("utf-8")
 
     check(f"[{environment}] driver_cores = {expected_driver}",
@@ -249,19 +248,22 @@ for environment, expected_driver in (("development", "4"), ("production", "8")):
                           "executor_memory", "runtime_version")))
     shutil.rmtree(tmp, ignore_errors=True)
 
-# production moet de default overschrijven, development niet
+# alles wat het manifest niet noemt blijft staan, byte voor byte
 tmp = Path(tempfile.mkdtemp())
 (tmp / "Setting").mkdir()
 (tmp / "Setting/Sparkcompute.yml").write_bytes(original)
-scope["apply_spark_settings"](str(tmp), "production")
-prod = (tmp / "Setting/Sparkcompute.yml").read_text(encoding="utf-8")
-check("[production] override raakt alleen genoemde sleutels",
-      "driver_memory: 56g" in prod and "executor_cores: 4" in prod, prod)
+scope["apply_spark_settings"](str(tmp))
+after_bytes = (tmp / "Setting/Sparkcompute.yml").read_bytes()
+untouched = [line for line in original.decode("utf-8").splitlines()
+             if not line.split(":", 1)[0].strip() in
+             ("driver_cores", "driver_memory", "executor_cores", "executor_memory", "runtime_version")]
+check("regels buiten het manifest ongewijzigd",
+      all(line in after_bytes.decode("utf-8") for line in untouched))
 shutil.rmtree(tmp, ignore_errors=True)
 
 # ontbrekend bestand mag niet crashen
 tmp = Path(tempfile.mkdtemp())
-scope["apply_spark_settings"](str(tmp), "development")
+scope["apply_spark_settings"](str(tmp))
 check("ontbrekende Sparkcompute.yml wordt overgeslagen", True)
 shutil.rmtree(tmp, ignore_errors=True)
 

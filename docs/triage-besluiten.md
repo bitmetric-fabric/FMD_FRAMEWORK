@@ -6,7 +6,7 @@ de grote zijn doorgezet naar ADR-006 en ADR-009.
 | # | Onderwerp | Besluit | Waar |
 |---|---|---|---|
 | V1 | `repo_owner` | Naar manifest | PR 3 |
-| V2 | Sparkcompute | Naar manifest, met override per omgeving | PR 3 |
+| V2 | Sparkcompute | Naar manifest (override per omgeving teruggedraaid, zie hieronder) | PR 3 |
 | V3 | `lakehouse_schema_enabled` | Bug fixen, default `true`, naar manifest | PR 3 |
 | V4 | Stages | Vier valueSets meeleveren, manifest bepaalt actieve | PR 3 |
 | V5 | MLV-refresh lakehouse-ID | Lezen uit Variable Library | los |
@@ -18,9 +18,18 @@ de grote zijn doorgezet naar ADR-006 en ADR-009.
 
 **V2 — Sparkcompute.** De comment in `Sparkcompute.yml` verwees naar de pool-limiet
 van onze eigen Dev/Test-capacity. Dat is een omgevingswaarde in een template. De
-waarden gaan naar het manifest, met een override per omgeving omdat Dev en Prod bij
-een klant zelden op dezelfde capacity draaien. Herschrijf de comment naar
-"conservatieve default, verhoog bij grotere capacity".
+waarden gaan naar het manifest, en de comment is herschreven naar "conservatieve
+default, verhoog bij grotere capacity".
+
+> **Bijgesteld tijdens PR 3.** De override per omgeving is er niet gekomen. Bij het
+> bedraden bleek `ENV_FMD.Environment` één keer gedeployed te worden, in de
+> CONFIG-workspace, gedeeld door Dev/Test/Prod — één item, één `Sparkcompute.yml`.
+> Een waarde per omgeving is daar niet in uit te drukken; de eerste implementatie
+> paste stilzwijgend de laatste omgeving uit het manifest toe. `spark.overrides` is
+> daarom uit het manifest gehaald. Wil je sizing per omgeving, dan moet ENV_FMD
+> eerst per omgeving gedeployed worden (los ticket, raakt ook de bestaande
+> mismatch: elke CODE-workspace krijgt `sparkSettings.environment.name = ENV_FMD`
+> terwijl het item alleen in CONFIG bestaat).
 
 **V3 — `lakehouse_schema_enabled`.** Upstream had `"value": ""` bij type `Boolean`.
 Dat is geen geldige waarde en dus een echte bug — los van de vraag wat de default

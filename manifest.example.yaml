@@ -55,8 +55,11 @@ config_workspace:
 # --- Spark compute -----------------------------------------------------------
 # Wordt door de setup-notebook naar src/ENV_FMD.Environment/Setting/Sparkcompute.yml
 # geschreven (triage V2). Conservatieve default die op elke capacity start; verhoog
-# bij een grotere capacity. Per omgeving te overschrijven, omdat Dev en Prod vaak
-# op verschillende capaciteiten draaien.
+# bij een grotere capacity.
+#
+# Bewust geen override per omgeving: ENV_FMD.Environment wordt één keer gedeployed,
+# in de CONFIG-workspace, en door Dev/Test/Prod gedeeld. Een waarde per omgeving is
+# in die vorm niet uit te drukken. Zolang dat zo is, geldt deze sizing overal.
 spark:
   # TOEGEVOEGD: stond op twee plekken (spark_version in cel 3 van beide setup-
   # notebooks, runtime_version in Sparkcompute.yml). Nu één bron.
@@ -66,12 +69,6 @@ spark:
     driver_memory: 28g
     executor_cores: 4
     executor_memory: 28g
-  overrides:
-    # Production:
-    #   driver_cores: 8
-    #   driver_memory: 56g
-    #   executor_cores: 8
-    #   executor_memory: 56g
 
 # --- Framework-instellingen --------------------------------------------------
 framework:

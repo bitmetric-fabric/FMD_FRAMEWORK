@@ -590,18 +590,18 @@ def deploy_workspaces(domain_name,workspace, workspace_name, environment_name, o
 # one copy of each item. Both are therefore applied to the extracted tmp folder
 # just before import, from the manifest that the setup notebook already loaded.
 
-def apply_spark_settings(folder_path, environment_name):
+def apply_spark_settings(folder_path):
     """
-    Rewrites Setting/Sparkcompute.yml from manifest spark.default, with
-    spark.overrides.<environment> on top. Line-based on purpose: keys that the
-    manifest does not mention (enable_native_execution_engine,
+    Rewrites Setting/Sparkcompute.yml from manifest spark.default. Line-based on
+    purpose: keys that the manifest does not mention (enable_native_execution_engine,
     dynamic_executor_allocation, ...) are left exactly as they are, comments and
     line endings included.
+
+    No per-environment variant: ENV_FMD.Environment is deployed once, into the
+    CONFIG workspace, and shared by every environment. Sizing per environment
+    needs an Environment item per environment first.
     """
     settings = dict(require('spark.default'))
-    for override_name, override in (optional('spark.overrides') or {}).items():
-        if override_name.lower() == str(environment_name).lower():
-            settings.update(override or {})
     settings['runtime_version'] = require('spark.runtime_version')
 
     path = f"{folder_path}/Setting/Sparkcompute.yml"
@@ -625,7 +625,7 @@ def apply_spark_settings(folder_path, environment_name):
 
     with open(path, "w", encoding="utf-8", newline="") as file:
         file.writelines(lines)
-    print(f" - Spark settings applied for '{environment_name}': {settings}")
+    print(f" - Spark settings applied: {settings}")
 
 
 def apply_value_sets(folder_path):
@@ -738,7 +738,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
     elif "Environment" in name:
         try:
             print(f"Creating or updating Environment: {name}")
-            apply_spark_settings(tmp_path, environment_name)
+            apply_spark_settings(tmp_path)
             result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
             print(f"✅ {name} Created/Imported'")
         except Exception as e:
