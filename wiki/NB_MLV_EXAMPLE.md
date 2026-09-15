@@ -4,7 +4,7 @@
 
 `NB_MLV_EXAMPLE` is a **SparkSQL template notebook** for creating [Materialized Lake Views (MLVs)](https://learn.microsoft.com/en-us/fabric/data-engineering/lakehouse-materialized-view) on top of Gold layer lakehouse tables. It acts as a starting point — copy and adapt it for each business domain that needs MLVs.
 
-> For a working example with real SQL, see the demo implementation notebook `NB_MLV_DEMO_GOLD` in the same business domain folder.
+> For a working example with real SQL, see the demo implementation notebook `NB_MLV_DEMO_GOLD` in `examples/`.
 
 ---
 
@@ -80,7 +80,7 @@ Once the notebook completes:
 
 ## Demo Example
 
-The notebook `NB_MLV_DEMO_GOLD` in the same folder shows a complete implementation with the following MLVs built on the demo dataset:
+The notebook `NB_MLV_DEMO_GOLD` in `examples/` shows a complete implementation with the following MLVs built on the demo dataset:
 
 | MLV name | Description |
 |---|---|
