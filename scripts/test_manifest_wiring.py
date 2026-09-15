@@ -85,6 +85,7 @@ bd, e2 = run(
     [
         "bd-manifest-bootstrap",
         "afbf0bf0-89ce-4eb9-bdc3-8efd8444ea4c",
+        "2086f732-b219-4101-9eab-92c95044c075",
         "c6095d96-c13d-49fd-b388-7347598d2032",
         "c5e6f777-a65a-491b-ba14-0ce8b19c04ff",
         "99ab87f1-553e-426f-9c42-1f2232cd5e8f",
@@ -142,6 +143,8 @@ check("FMD domain_contributor_role principals", fmd["domain_contributor_role"]["
 check("FMD connection_role principals", fmd["connection_role"]["principals"], [])
 
 check("BD business_domain_names", bd["business_domain_names"], ["FINANCE", "SALES"])
+check("BD SourceSchema uit manifest", bd["SourceSchema"], "")
+check("BD Shortcut_TargetSchema uit manifest", bd["Shortcut_TargetSchema"], "")
 check("BD configuration_database_workspace", bd["configuration_database_workspace"], "INTEGRATION CONFIG")
 check("BD configuration_database_name", bd["configuration_database_name"], "SQL_INTEGRATION_FRAMEWORK")
 check(
@@ -304,6 +307,69 @@ scope["apply_value_sets"](str(tmp))
 after = sorted(p.stem for p in (tmp / "valueSets").glob("*.json"))
 check("DTAP behoudt Acceptance", after == ["Acceptance", "Development", "Production", "Test"], after)
 shutil.rmtree(tmp.parent, ignore_errors=True)
+
+
+# --- D6: VAR_GOLD_SHORTCUTS_FMD kan weer gedeployed worden ----------------
+print("\n=== update_variable_library / VAR_GOLD_SHORTCUTS_FMD ===")
+
+declared = next(
+    item for item in json.loads(
+        (REPO / "config/item_deployment_code_business_domain.json").read_text(encoding="utf-8"))
+    if item["name"].startswith("VAR_GOLD_SHORTCUTS")
+)["variables"]
+
+uvl_start = utilities_source.index("def update_variable_library(")
+uvl_end = utilities_source.index("def copy_to_tmp(")
+uvl_source = utilities_source[uvl_start:uvl_end]
+
+
+def run_update(parameters):
+    """Draait update_variable_library op een kopie van de echte library."""
+    library = Path(tempfile.mkdtemp()) / "lib"
+    shutil.copytree(REPO / "src/business_domain/VAR_GOLD_SHORTCUTS_FMD.VariableLibrary", library)
+    uvl_scope = {"json": json, "variable_parameters": parameters}
+    exec(compile(uvl_source, "uvl", "exec"), uvl_scope)
+    uvl_scope["update_variable_library"](str(library), declared)
+    written = json.loads((library / "variables.json").read_text(encoding="utf-8"))
+    shutil.rmtree(library.parent, ignore_errors=True)
+    return written
+
+
+# zoals NB_UTILITIES variable_parameters aanmaakt, voordat de herstelcel draait
+base_parameters = {
+    "key_vault_uri_name": "val_key_vault_uri_name",
+    "lakehouse_schema_enabled": True,
+    "purview_account_name": "val_purview_account_name",
+}
+
+try:
+    run_update(dict(base_parameters))
+    check("zonder de herstelcel faalt het deployen", False, "er ging niets mis")
+except KeyError as exc:
+    check("zonder de herstelcel faalt het deployen, met bruikbare melding",
+          "SourceWorkspaceId" in str(exc) and "variable_parameters" in str(exc), str(exc))
+
+restored = dict(base_parameters)
+restore_scope = dict(bd)
+restore_scope["variable_parameters"] = restored
+exec(compile(bd_sources["bd-variable-parameters"], "vp", "exec"), restore_scope)
+
+check("herstelcel vult precies de zes gedeclareerde bronnen",
+      sorted(k for k in restored if k not in base_parameters),
+      sorted(v["source"] for v in declared))
+
+written = run_update(restored)
+check("library houdt zes variabelen",
+      [v["name"] for v in written["variables"]],
+      [v["name"] for v in declared])
+check("schema komt uit het manifest",
+      [v["value"] for v in written["variables"] if v["name"] == "SourceSchema"],
+      [bd["manifest"]["shortcuts"]["source_schema"]])
+check("ID's blijven leeg tot de auto-fill ze invult",
+      [v["value"] for v in written["variables"]
+       if v["name"] in ("SourceWorkspaceId", "SourceLakehouseId",
+                        "Shortcut_TargetWorkspaceId", "Shortcut_TargetLakehouseId")],
+      ["", "", "", ""])
 
 print(f"\nresultaat: {len(failures)} fout(en)")
 sys.exit(1 if (failures or NOTEBOOK_FAILURES) else 0)

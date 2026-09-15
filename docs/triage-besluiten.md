@@ -10,7 +10,7 @@ de grote zijn doorgezet naar ADR-006 en ADR-009.
 | V3 | `lakehouse_schema_enabled` | Bug fixen, default `true`, naar manifest | PR 3 |
 | V4 | Stages | Vier valueSets meeleveren, manifest bepaalt actieve | PR 3 |
 | V5 | MLV-refresh lakehouse-ID | Lezen uit Variable Library | los |
-| V6 | Celvolgorde auto-fill | Verifiëren, geen besluit | los |
+| V6 | Celvolgorde auto-fill | Geverifieerd; onderliggende bug gefixt | PR 3 |
 | V7 | GUID-guard | Bouwen | ADR-009, PR 2 |
 | V8 | Demo-notebooks | Naar `examples/`, PR naar upstream | PR 1 |
 
@@ -46,11 +46,22 @@ Het notebook leest die variabele voortaan via `notebookutils.variableLibrary`. D
 waarde van een voorbeeld zit in het patroon dat het laat zien; een handmatige
 placeholder leert de verkeerde gewoonte aan.
 
-**V6 — celvolgorde.** Openstaand risico, geen besluit. De auto-fill-cel schrijft
-waarden ná deployment via de API; draait daarna nog een cel met
-`overwrite_variable_library=True`, dan worden ze bij een her-run leeggemaakt.
-Verifiëren met één setup-run op een schone workspace voordat we dit als werkend
-beschouwen.
+**V6 — celvolgorde.** Geverifieerd, en de celvolgorde bleek in orde: cel 42
+deployt alleen de Variable Libraries, cel 44 vult ze, cel 45 deployt de rest.
+Geen latere cel her-deployt de library.
+
+Het probleem zat een laag dieper. `VAR_GOLD_SHORTCUTS_FMD` declareert zes
+variabelen in `config/item_deployment_code_business_domain.json`, en
+`update_variable_library` zoekt elke bron op in `variable_parameters`. De cel die
+die zes bronnen vulde was verwijderd, dus het deployen van die library faalde met
+een `KeyError` die `deploy_item` opving en als een rood kruisje afdrukte — de
+library werd nooit aangemaakt, en de auto-fill vond daarna niets om te vullen.
+
+Gefixt in PR 3: de twee schemanamen komen nu uit `manifest.shortcuts`, de vier
+ID's krijgen een lege waarde en worden ná deployment door de auto-fill-cel
+ingevuld. `update_variable_library` meldt voortaan wélke bron ontbreekt in plaats
+van een kale `KeyError`. Een echte setup-run op een schone workspace blijft
+wenselijk, maar de fout was statisch reproduceerbaar en is dat nu niet meer.
 
 ## Wat teruggaat naar upstream
 

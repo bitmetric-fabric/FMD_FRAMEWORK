@@ -79,6 +79,14 @@ spark:
     executor_cores: 4
     executor_memory: 28g
 
+# --- Shortcuts (Gold -> Silver) ----------------------------------------------
+# NB_CREATE_SHORTCUTS legt shortcuts van de Gold-lakehouse naar de Silver-lakehouse.
+# De workspace- en lakehouse-ID's worden na deployment opgezocht en ingevuld; alleen
+# de schemanamen zijn een keuze. Leeg laten als je lakehouses zonder schema's gebruikt.
+shortcuts:
+  source_schema: ''   # schema in de Gold-lakehouse
+  target_schema: ''   # schema in de Silver-lakehouse
+
 # --- Framework-instellingen --------------------------------------------------
 framework:
   # Schema-enabled lakehouses. Upstream had hier een lege string bij type Boolean —

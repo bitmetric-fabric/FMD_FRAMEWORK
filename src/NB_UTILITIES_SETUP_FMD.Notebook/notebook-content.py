@@ -275,8 +275,20 @@ def update_variable_library(folder_path, it_variables):
     variable_file = f"{folder_path}/variables.json"  
     variables_table = []
     for it_variable in it_variables:
-        if it_variable["type"] == "variable":
-            new_variable = variable_parameters[it_variable["source"]]
+        if it_variable["type"] != "variable":
+            raise ValueError(
+                f"Unsupported variable type '{it_variable['type']}' for "
+                f"'{it_variable.get('name')}' in the deployment config."
+            )
+        source = it_variable["source"]
+        if source not in variable_parameters:
+            raise KeyError(
+                f"variable_parameters has no '{source}', needed for variable "
+                f"'{it_variable.get('name')}'. Every source declared in "
+                f"config/item_deployment*.json must be set before the Variable "
+                f"Libraries are deployed."
+            )
+        new_variable = variable_parameters[source]
         variables_table.append(
             {
                 "name": it_variable.get("name"),
