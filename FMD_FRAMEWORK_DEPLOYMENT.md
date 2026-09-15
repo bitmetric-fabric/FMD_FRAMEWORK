@@ -49,9 +49,13 @@ Select the switch for the type of admin APIs you want to enable:
 
 ### 1. Download deployment assets
 
-Download the deployment notebook from the setup folder to your local machine:
+Download a single file from the `setup` folder to your local machine:
 
-- `NB_SETUP_FMD.ipynb` – Automates artifact creation for FMD_FRAMEWORK in Fabric, based on your configuration.
+- `NB_BOOTSTRAP_FMD.ipynb` – fetches the setup notebooks from your fork and places them in the workspace.
+
+This is the only file you import by hand. `NB_SETUP_FMD.ipynb` and
+`NB_SETUP_BUSINESS_DOMAINS.ipynb` are placed by the bootstrap notebook, with the
+location of your fork already filled in.
 
 ### 2. Create required connections
 
@@ -81,8 +85,8 @@ If you use Azure Data Factory Pipelines, create this additional connection:
 ### 3. Create a configuration workspace
 
 - Create a new workspace (for example, `FMD_FRAMEWORK_CONFIGURATION`).
-- Import the deployment notebook into the workspace (ensure you are in the Fabric Experience):
-  - `NB_SETUP_FMD.ipynb`
+- Import the bootstrap notebook into the workspace (ensure you are in the Fabric Experience):
+  - `NB_BOOTSTRAP_FMD.ipynb`
   > [!NOTE]
 > Make sure you set Set Spark session timeout to at least 1 hour in the workspace settings/Data Engineering/Jobs .
 
@@ -90,172 +94,64 @@ If you use Azure Data Factory Pipelines, create this additional connection:
 
 ### 4. Configure deployment settings
 
-Open `NB_SETUP_FMD.ipynb` and navigate to the configuration cell. Update the following parameters as needed.
+All per-customer configuration lives in **`manifest.yaml`** in the root of your
+fork. Nothing is configured by editing notebook cells any more: the setup
+notebooks read the manifest and fail with a readable message when a required key
+is missing.
 
-#### Key configuration parameters
+#### 4a. Fill in the manifest
 
-**Framework settings**
-
-> [!NOTE]
-> Fabric Administrator Role is required to create a domain. Otherwise, disable domain creation in the next step.
-
-
-**Framework settings**  
-
-```python
-assign_icons = True                       # Set to True to assign default icons to workspaces; set to False if you have already assigned custom icons
-load_demo_data = True                     # Set to True if you want to load the demo data, otherwise set to False
-lakehouse_schema_enabled = True           # Set to True if you want to use the lakehouse schema, otherwise set to False
-
-driver = '{ODBC Driver 18 for SQL Server}'# Change this if you use a different driver
-overwrite_variable_library = True         # By default the Library is overwritten, change this to "False" if you have custom changes
-```
-**Keyvault settings**  
-For future use.
-```python
-key_vault_uri_name='val_key_vault_uri_name'
-key_vault_tenant_id='val_key_vault_tenant_id'
-key_vault_client_id='val_key_vault_client_id'
-key_vault_client_secret='val_key_vault_client_secret'
-```
-
-**Capacity settings**  
-  Specify the unique name for the capacity:
-
-  ```python
-  capacity_name_dvlm = 'Name of your capacity'
-  reassign_capacity= True                 # Set to False if you don't want to reassign the capacity to an existing workspace in case you set the capacity manually
-               
-  ```
-
-**Domain settings**
-
-Define the name for the Main Domain, and you can add 1 or more business domains.
-
-
-```python
-framework_post_fix= ''                              # post fix to be added at the end of workspace for example INTEGRATION CODE(D) FMD
-if framework_post_fix != '':
-   framework_post_fix= ' '+ framework_post_fix      #If empty leave as is else add a space before for better visibility
-
-##Domains
-create_domains=  True                               # If you do not have a Fabric Admin role, you need to set this option to False. For domain creation the Fabric Admin role is needed
-domain_name='INTEGRATION'                           # Main Domain for Integration for example INTEGRATION CODE(D) 
-
-domain_contributor_role = {"type": "Contributors","principals": [{"id": "00000000-0000-0000-0000-000000000000","type": "Group"}  ]}  # Which group(Object ID) can add or remove workspaces to this domain
-
-##Connections
-connection_fabric_datapipelines_name='CON_FMD_FABRIC_PIPELINES'
-connection_fabric_notebooks_name='CON_FMD_FABRIC_NOTEBOOKS'
-connection_fabric_database_name='CON_FMD_FABRIC_SQL'
-connection_fabric_adf_name='CON_FMD_ADF_PIPELINES'
-connection_role =  {"role": "owner","principals": [{"id": "00000000-0000-0000-0000-000000000000","type": "Group"}  ]}  # Which group(Object ID) can add or remove workspaces to this domain
-```
-You need to create workspace roles for the different workspaces:
-
-> [!NOTE]
-> The id of the User, Group or Service Principal is the Object ID in Microsoft Entra ID. For a Service Principal, you can find the Object ID in the Azure Portal under 'Enterprise applications'. Don't use the Object ID of the App Registration.'
-
-> [!NOTE]
-> If you are deploying on your own and have no groups or service principals to add, set them to an empty list, as the comment in the cell already suggests. The deployer already owns the workspaces it creates, so nothing is lost:
-> ```python
-> workspace_roles_code = []
-> workspace_roles_data = []
-> ```
-> Leaving an id in place that does not resolve in your tenant makes workspace creation fail.
+Copy `manifest.example.yaml` to `manifest.yaml`, fill it in, and commit it to
+your fork. The setup notebooks fetch it over HTTPS from
+`raw.githubusercontent.com`, so it must be committed and the repository must be
+readable.
 
 > [!IMPORTANT]
-> **`workspace_roles_configuration` does not exist.** `NB_SETUP_FMD.ipynb` defines only `workspace_roles_code` and `workspace_roles_data`, and the cell that creates the configuration workspace assigns `workspace_roles_data` to it. Setting `workspace_roles_configuration`, as the example below still shows, has no effect on anything.
+> This template repository lists `manifest.yaml` in `.gitignore`, so the template
+> never carries a specific customer's values. In **your** fork, remove that line —
+> the deployment depends on the file being in git. `manifest.example.yaml` stays
+> in git in both.
 
-workspace_roles_code
-workspace_roles_data
-workspace_roles_configuration
+| Section | What it holds |
+|---|---|
+| `repository` | Owner, name and branch of your fork. Must match the three values in the bootstrap notebook. |
+| `naming` | `domain_name` (the shared ingestion domain), `framework_post_fix`, and the list of business domains. |
+| `environments` | One entry per environment: `name`, `short` (D/T/A/P), `capacity`, and optionally `capacity_business_domain` for the business-domain workspaces. The order is the stage order of the deployment pipelines, and it decides which value sets are deployed. |
+| `config_workspace` | Capacity for the CONFIG workspace, which exists once per customer rather than once per environment. |
+| `spark` | Runtime version and Spark sizing, written into the Environment item at deploy time. One `ENV_FMD.Environment` is deployed into the CONFIG workspace and shared by every environment, so this sizing applies everywhere. |
+| `framework` | `lakehouse_schema_enabled`. |
+| `security` | Object IDs of the Entra groups, and optionally a service principal. |
+| `key_vault` | Key Vault name, and the **names** of the secrets holding the service principal credentials. |
 
-Check the examples below
+> [!NOTE]
+> The id of a User, Group or Service Principal is the Object ID in Microsoft Entra ID.
+> For a Service Principal, find the Object ID in the Azure Portal under 'Enterprise
+> applications' — not the Object ID of the App Registration.
+
+> [!NOTE]
+> If you are deploying on your own and have no groups or service principal to add,
+> leave the IDs in `security` on all zeros. Those entries are skipped, and the
+> deployer already owns the workspaces it creates, so nothing is lost. An ID that
+> does not resolve in your tenant makes the role assignment fail silently.
+
+#### 4b. Point the bootstrap at your fork
+
+Open `NB_BOOTSTRAP_FMD.ipynb` and set:
+
 ```python
-
-# Replace placeholder IDs with real Object IDs from Microsoft Entra ID.
-# Use "Group", "User" or "ServicePrincipal" for "type" as appropriate.
-
-workspace_roles_code = [
-    {
-        "principal": {"id": "00000000-0000-0000-0000-000000000000", "type": "Group"},
-        "role": "Member"
-    },
-    {
-        "principal": {"id": "00000000-0000-0000-0000-000000000000", "type": "ServicePrincipal"},
-        "role": "Contributor"
-    }
-]
-
-workspace_roles_data = [
-    {
-        "principal": {"id": "00000000-0000-0000-0000-000000000000", "type": "Group"},
-        "role": "Member"
-    },
-    {
-        "principal": {"id": "00000000-0000-0000-0000-000000000000", "type": "Group"},
-        "role": "Admin"
-    }
-]
-
-workspace_roles_configuration = [
-    {
-        "principal": {"id": "00000000-0000-0000-0000-000000000000", "type": "Group"},
-        "role": "Contributor"
-    }
-]
+repo_owner    = "your-org"           # GitHub organisation or user
+repo_name     = "FMD_FRAMEWORK"      # Repository name
+branch        = "main"               # Branch to deploy from
+folder_prefix = ""                   # Only if src/ and config/ live in a subfolder
 ```
 
-**Workspace configuration**  
-```python
-##### DO NOT CHANGE UNLESS SPECIFIED OTHERWISE, FE ADDING NEW ENVIRONMENTS ####
-# Define settings for each environment (add more environments as needed)
-environments = [
-    {
-        'environment_name': 'development',                                     # Name of target environment
-        'workspaces': {
-            'data': {
-                'name': domain_name + ' DATA (D)' + framework_post_fix,       # Name of target data workspace for development
-                'roles': workspace_roles_data,                                # Roles to assign to the workspace
-                'capacity_name': capacity_name_dvlm                           # Name of target data workspace capacity for development
-            },
-            'code': {
-                'name': domain_name + ' CODE (D)' + framework_post_fix,       # Name of target code workspace for development
-                'roles': workspace_roles_code,                                # Roles to assign to the workspace
-                'capacity_name': capacity_name_dvlm                           # Name of target code workspace capacity for development
-            },
-        }
-    },
-    {
-        'environment_name': 'production',                                      # Name of target environment
-        'workspaces': {
-            'data': {
-                'name': domain_name + ' DATA (P)' + framework_post_fix,       # Name of target data workspace for production
-                'roles': workspace_roles_data,                                # Roles to assign to the workspace
-                'capacity_name': capacity_name_prod                           # Name of target data workspace capacity for production
-            },
-            'code': {
-                'name': domain_name + ' CODE (P)' + framework_post_fix,       # Name of target code workspace for production
-                'roles': workspace_roles_code,                                # Roles to assign to the workspace
-                'capacity_name': capacity_name_prod                           # Name of target code workspace capacity for production
-            },
-        }
-    }
-]
-```
-**Repo Configuration**
+These must match `repository:` in the manifest. The setup notebooks verify this
+and stop with an error when the two disagree, because otherwise `src/` and
+`config/` would come from a different repository than the manifest describes.
 
-Location of the FMD Framework repository. Unless you have a forked version, do not change these settings. If you want to use another branch, you can change the branch name to your own branch.
-  ```python
-#FMD Framework code
-##### DO NOT CHANGE UNLESS SPECIFIED OTHERWISE ####
-repo_owner = "edkreuk"              # Owner of the repository
-repo_name = "FMD_FRAMEWORK"         # Name of the repository
-branch = "main"                     #"main" is default                    
-folder_prefix = ""
-###################################################
-```
+Run the bootstrap notebook. It creates or updates `NB_SETUP_FMD` and
+`NB_SETUP_BUSINESS_DOMAINS` in the workspace, with these values stamped into
+their bootstrap cell.
 
 ### 5. Run the deployment
 
