@@ -509,7 +509,7 @@
     "parameters": {
       "ConnectionGuid": {
         "type": "string",
-        "defaultValue": "cf673e6a-13f6-4ebb-9cbb-4ba4ab390818"
+        "defaultValue": "00000000-0000-0000-0000-000000000001"
       },
       "Data_WorkspaceGuid": {
         "type": "string",
