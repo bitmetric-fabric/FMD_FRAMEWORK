@@ -9,6 +9,7 @@
         ,@Namespace VARCHAR(100)
         ,@Type VARCHAR(30)
         ,@Description NVARCHAR(200)
+        ,@LoadGroup VARCHAR(50) = ''
         ,@IsActive BIT = 1
     )
     WITH EXECUTE AS CALLER
@@ -33,6 +34,7 @@ BEGIN
             ,[ConnectionId]
             ,[Type]
             ,[Description]
+            ,[LoadGroup]
             ,[IsActive])
         OUTPUT INSERTED.[DataSourceId] INTO @OutputTable
         VALUES (@Name
@@ -40,6 +42,7 @@ BEGIN
             ,@InternalConnectionId
             ,@Type
             ,@Description
+            ,@LoadGroup
             ,@IsActive);
     END
     ELSE
@@ -50,6 +53,7 @@ BEGIN
             ,[Namespace] = @Namespace
             ,[Type] = @Type
             ,[Description] = @Description
+            ,[LoadGroup] = @LoadGroup
             ,[IsActive] = @IsActive
         OUTPUT INSERTED.[DataSourceId] INTO @OutputTable
         WHERE [DataSourceId] = @DataSourceId;

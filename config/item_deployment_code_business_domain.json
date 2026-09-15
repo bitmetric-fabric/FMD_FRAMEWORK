@@ -25,6 +25,11 @@
         "type": "Notebook"
     },
     {
+        "name": "PL_FMD_LOAD_GOLD_TEMPLATE.DataPipeline",
+        "id": "838bc064-4221-48e3-ae54-0fdb0ce5a703",
+        "type": "DataPipeline"
+    },
+    {
         "name": "VAR_GOLD_CODE_FMD.VariableLibrary",
         "id": "622086c9-2b9b-b2ca-4963-13b0a688d8bb",
         "type": "VariableLibrary",

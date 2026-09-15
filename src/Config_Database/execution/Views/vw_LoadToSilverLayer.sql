@@ -25,7 +25,8 @@
     , CHAR(10), '' )     -- remove LF
   , CHAR(9),  '' )       -- (optional) remove TABs
   AS CleansingRules,
-    DS.[Namespace] AS [DataSourceNamespace]
+    DS.[Namespace] AS [DataSourceNamespace],
+    DS.[LoadGroup] AS [LoadGroup]
 FROM [integration].[SilverLayerEntity] SLE
 INNER JOIN [integration].[BronzeLayerEntity] BLE
     ON SLE.BronzeLayerEntityId = BLE.BronzeLayerEntityId

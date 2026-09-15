@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "DataPipeline",
+    "displayName": "PL_FMD_SCHEDULE_NIGHTLY",
+    "description": "Schedule wrapper: invokes PL_FMD_LOAD_ALL with a fixed LoadGroup. Attach this pipeline's own Fabric schedule to run this group's sources on their own cadence. See wiki/LoadGroup_Scheduling.md."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "03ba9db4-d5b4-49b5-a37d-c389a3e0a5dd"
+  }
+}

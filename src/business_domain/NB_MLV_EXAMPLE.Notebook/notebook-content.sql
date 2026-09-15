@@ -24,13 +24,43 @@
 
 -- CELL ********************
 
--- Welcome to your new notebook 
--- Type here in the cell editor to add code! 
+-- Welcome to your new notebook
+-- Type here in the cell editor to add code!
 -- CREATE MATERIALIZED LAKE VIEW <mlv_name> AS select_statement
 
 -- METADATA ********************
 
 -- META {
 -- META   "language": "sparksql",
+-- META   "language_group": "synapse_pyspark"
+-- META }
+
+-- MARKDOWN ********************
+
+-- ## Refresh the materialized lake views
+-- Creating/replacing an MLV above does not refresh it. Run this cell after the CREATE statements
+-- (or schedule it after them in a pipeline) so the views actually recompute. Fill in your Gold
+-- lakehouse id below.
+
+-- CELL ********************
+
+%%pyspark
+import requests
+
+workspace_id = notebookutils.runtime.context.get('currentWorkspaceId')
+lakehouse_id = "<your Gold lakehouse id>"
+
+token = notebookutils.credentials.getToken("https://api.fabric.microsoft.com")
+headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses/{lakehouse_id}/jobs/RefreshMaterializedLakeViews/instances"
+response = requests.post(url, headers=headers)
+print(response.status_code)
+print(response.headers.get("Location"))
+
+-- METADATA ********************
+
+-- META {
+-- META   "language": "python",
 -- META   "language_group": "synapse_pyspark"
 -- META }

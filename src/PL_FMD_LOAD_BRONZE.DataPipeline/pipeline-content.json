@@ -241,6 +241,13 @@
                   "type": "Expression"
                 },
                 "type": "Guid"
+              },
+              "LoadGroup": {
+                "value": {
+                  "value": "@pipeline().parameters.LoadGroup",
+                  "type": "Expression"
+                },
+                "type": "String"
               }
             },
             "partitionOption": "None",
@@ -513,6 +520,10 @@
     "parameters": {
       "Data_WorkspaceGuid": {
         "type": "string"
+      },
+      "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
       }
     },
     "libraryVariables": {
