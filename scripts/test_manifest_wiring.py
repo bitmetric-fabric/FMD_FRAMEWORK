@@ -124,7 +124,7 @@ check(
     [
         ("development", "INTEGRATION DATA (D)", "INTEGRATION CODE (D)", CAP),
         ("test", "INTEGRATION DATA (T)", "INTEGRATION CODE (T)", CAP),
-        ("production", "INTEGRATION DATA (P)", "INTEGRATION CODE (P)", CAP),
+        ("production", "INTEGRATION DATA", "INTEGRATION CODE", CAP),
     ],
 )
 

@@ -116,8 +116,8 @@ The workspace description says it plainly: run the setup notebook again and anyt
 | Workspace | Contents |
 |---|---|
 | `<DOMAIN> CONFIG` | 1 SQL database, 1 SQL endpoint, **1 Environment (`ENV_FMD`)** |
-| `<DOMAIN> CODE (D)` and `(P)` | 8 notebooks, 2 variable libraries, 25 data pipelines each |
-| `<DOMAIN> DATA (D)` and `(P)` | `LH_DATA_LANDINGZONE`, `LH_BRONZE_LAYER`, `LH_SILVER_LAYER` each |
+| `<DOMAIN> CODE (D)` and `<DOMAIN> CODE` | 8 notebooks, 2 variable libraries, 25 data pipelines each |
+| `<DOMAIN> DATA (D)` and `<DOMAIN> DATA` | `LH_DATA_LANDINGZONE`, `LH_BRONZE_LAYER`, `LH_SILVER_LAYER` each |
 
 Note where `ENV_FMD` landed on this run: in **CONFIG**, not in CODE. On the `2026.07` pin this walkthrough uses, that is the only copy, shared by development and production, so re-sizing it for development re-sizes production too. On `main` the setup also deploys an `ENV_FMD` into each CODE workspace and sets it as that workspace's default Spark environment, so the two environments no longer share one ([#278](https://github.com/edkreuk/FMD_FRAMEWORK/pull/278); see [version differences](../03-reference/08-version-differences.md)).
 

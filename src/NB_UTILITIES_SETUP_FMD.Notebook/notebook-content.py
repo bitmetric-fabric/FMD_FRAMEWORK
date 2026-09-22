@@ -875,7 +875,7 @@ def deploy_deployment_pipeline(pipeline_name, stage_workspace_names):
     """
     Ensures a deployment pipeline exists and its stages are assigned.
     stage_workspace_names: ordered dict/list of (stage_name, workspace_name), e.g.
-        [("Development", "FINANCE CODE (D)"), ("Test", "FINANCE CODE (T)"), ("Production", "FINANCE CODE (P)")]
+        [("Development", "FINANCE CODE (D)"), ("Test", "FINANCE CODE (T)"), ("Production", "FINANCE CODE")]
     """
     stage_names = [s for s, _ in stage_workspace_names]
     pipeline_id = ensure_deployment_pipeline(pipeline_name, stage_names)

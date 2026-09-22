@@ -44,9 +44,11 @@ The framework uses **three separate Fabric workspaces**:
 
 | Workspace | Naming convention | Purpose |
 |---|---|---|
-| Code | `<DOMAIN> CODE (D/P)` | Notebooks, pipelines, variable libraries |
-| Data | `<DOMAIN> DATA (D/P)` | Lakehouses (LH_DATA_LANDINGZONE, LH_BRONZE_LAYER, LH_SILVER_LAYER) |
+| Code | `<DOMAIN> CODE (D/T/A)`, `<DOMAIN> CODE` in production | Notebooks, pipelines, variable libraries |
+| Data | `<DOMAIN> DATA (D/T/A)`, `<DOMAIN> DATA` in production | Lakehouses (LH_DATA_LANDINGZONE, LH_BRONZE_LAYER, LH_SILVER_LAYER) |
 | Configuration | `FMD_FRAMEWORK_CONFIGURATION` | SQL_FMD_FRAMEWORK database, deployment notebooks |
+
+Production workspaces carry no environment marker (`ws_suffix()` in the manifest bootstrap cell returns `""` for `short == "P"`); Dev/Test/Acceptance keep the `(D)`/`(T)`/`(A)` suffix.
 
 Business Domains add two more: a Gold/Reporting workspace and a separate Business Domain workspace.
 
