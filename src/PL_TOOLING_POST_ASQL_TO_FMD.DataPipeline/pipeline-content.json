@@ -141,7 +141,7 @@
                     "PrimaryKeys": {
                       "type": "String",
                       "value": {
-                        "value": "@item().PrimaryKeys",
+                        "value": "@item().primaryKeys",
                         "type": "Expression"
                       }
                     },
@@ -152,14 +152,14 @@
                     "SourceName": {
                       "type": "String",
                       "value": {
-                        "value": "@item().SourceName",
+                        "value": "@item().sourceName",
                         "type": "Expression"
                       }
                     },
                     "SourceSchema": {
                       "type": "String",
                       "value": {
-                        "value": "@item().SourceSchema",
+                        "value": "@item().sourceSchema",
                         "type": "Expression"
                       }
                     },
@@ -172,11 +172,17 @@
                     },
                     "TargetName": {
                       "type": "String",
-                      "value": "@item().SourceName"
+                      "value": {
+                        "value": "@item().sourceName",
+                        "type": "Expression"
+                      }
                     },
                     "TargetSchema": {
                       "type": "String",
-                      "value": "@item().SourceSchema"
+                      "value": {
+                        "value": "@item().sourceSchema",
+                        "type": "Expression"
+                      }
                     }
                   },
                   "queryTimeout": "02:00:00",
