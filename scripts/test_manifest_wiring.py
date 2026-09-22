@@ -124,7 +124,7 @@ check(
     [
         ("development", "INTEGRATION DATA (D)", "INTEGRATION CODE (D)", CAP),
         ("test", "INTEGRATION DATA (T)", "INTEGRATION CODE (T)", CAP),
-        ("production", "INTEGRATION DATA (P)", "INTEGRATION CODE (P)", CAP),
+        ("production", "INTEGRATION DATA", "INTEGRATION CODE", CAP),
     ],
 )
 
@@ -169,6 +169,57 @@ check(
     "BD capaciteit volgt capacity_business_domain",
     [e["workspaces"]["data"]["capacity_name"] for e in bd["business_domain_deployment"]],
     ["GOLD-D", "GOLD-T", "GOLD-P"],
+)
+
+# Workspacenamen: Production krijgt geen omgevingsmarker, Dev/Test wel
+# (ws_suffix in de manifest-bootstrap-cel). Cel 330d211a-... roept
+# deploy_workspaces aan; we vervangen die door iets dat alleen de naam
+# vastlegt, zodat we de echte celtekst testen zonder Fabric te benaderen.
+captured_names = []
+ws_names_scope = dict(bd)
+ws_names_scope["deploy_workspaces"] = (
+    lambda business_domain_name, workspace, workspace_name, **kw: captured_names.append(workspace_name)
+)
+ws_names_scope["create_fabric_domain"] = lambda name: None
+ws_names_scope["config"] = {"workspaces": {
+    "workspace_business_domain_code": None,
+    "workspace_business_domain_data": None,
+    "workspace_business_domain_reporting": None,
+}}
+ws_names_scope["mapping_table"] = []
+ws_names_scope["tasks"] = []
+exec(compile(bd_sources["330d211a-1b1e-44b2-b989-93e751d5612c"], "bd-ws-names", "exec"), ws_names_scope)
+check(
+    "BD workspacenamen (CODE/DATA/REPORTING/SEMANTIC per D/T/production)",
+    captured_names,
+    [
+        "FINANCE CODE (D)", "FINANCE DATA (D)", "FINANCE REPORTING (D)", "FINANCE SEMANTIC (D)",
+        "FINANCE CODE (T)", "FINANCE DATA (T)", "FINANCE REPORTING (T)", "FINANCE SEMANTIC (T)",
+        "FINANCE CODE", "FINANCE DATA", "FINANCE REPORTING", "FINANCE SEMANTIC",
+        "SALES CODE (D)", "SALES DATA (D)", "SALES REPORTING (D)", "SALES SEMANTIC (D)",
+        "SALES CODE (T)", "SALES DATA (T)", "SALES REPORTING (T)", "SALES SEMANTIC (T)",
+        "SALES CODE", "SALES DATA", "SALES REPORTING", "SALES SEMANTIC",
+    ],
+)
+
+# Cel e117937f bouwt de deployment-pipeline-stage-namen op met een andere
+# expressievorm (" " + group.upper() + ws_suffix(...)) - apart getest zodat
+# er geen dubbele of ontbrekende spatie sluipt in de production-naam.
+pipeline_names_scope = dict(bd)
+captured_pipelines = []
+pipeline_names_scope["deploy_deployment_pipeline"] = (
+    lambda pipeline_name, stage_workspace_names: captured_pipelines.append(
+        (pipeline_name, stage_workspace_names))
+)
+exec(compile(bd_sources["e117937f"], "bd-pipeline-names", "exec"), pipeline_names_scope)
+check(
+    "BD deployment-pipeline-stagenamen (CODE-groep, FINANCE)",
+    next(names for pname, names in captured_pipelines if pname == "FINANCE CODE"),
+    [
+        ("Development", "FINANCE CODE (D)"),
+        ("Test", "FINANCE CODE (T)"),
+        ("Production", "FINANCE CODE"),
+    ],
 )
 
 print("\n=== vergelijking met de defaults van voor PR 3 ===")

@@ -31,6 +31,11 @@ naming:
 # (triage V4). Een klant met DTAP zet Acceptance erbij, een klant met DTP niet.
 # De volgorde bepaalt de stage-volgorde van de Deployment Pipeline.
 #
+# Workspacenamen krijgen de `short` als achtervoegsel, bv. 'FINANCE DATA (D)' -
+# behalve voor Production: die workspace heet gewoon 'FINANCE DATA', zonder
+# omgevingsmarker (short 'P' is daarop de enige uitzondering, zie ws_suffix()
+# in de manifest-bootstrap-cel).
+#
 # capacity        : capaciteit voor de gedeelde ingestielaag (INTEGRATION).
 # capacity_business_domain : optioneel. Capaciteit voor de workspaces van de
 #   business domains in deze omgeving. Weggelaten betekent: dezelfde als
