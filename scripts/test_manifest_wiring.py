@@ -422,5 +422,186 @@ check("ID's blijven leeg tot de auto-fill ze invult",
                         "Shortcut_TargetWorkspaceId", "Shortcut_TargetLakehouseId")],
       ["", "", "", ""])
 
+# --- waarden per omgeving als value set (promotie-bestendig) -----------------
+# Een default die per omgeving verschilt, overleeft een deployment-pipeline-promotie
+# niet: de deploy overschrijft hem met de waarde van de bronstage (getest 2026-09-25).
+print("\n=== stage_value_overrides ===")
+
+
+def library_parts(folder):
+    return {p.relative_to(folder).as_posix(): json.loads(p.read_text(encoding="utf-8"))
+            for p in folder.rglob("*.json")}
+
+
+def overrides(parts, stage):
+    return parts[f"valueSets/{stage}.json"]["variableOverrides"]
+
+
+source_parts = library_parts(REPO / "src/VAR_CONFIG_FMD.VariableLibrary")
+parts = library_parts(REPO / "src/VAR_CONFIG_FMD.VariableLibrary")
+parts["valueSets/Test.json"]["variableOverrides"] = [{"name": "fmd_fabric_db_name", "value": "ANDERS"}]
+stage_values = {
+    "Development": {"fmd_data_workspace_guid": "dev-ws", "fmd_landingzone_lakehouse_guid": "dev-lh"},
+    "Test": {"fmd_data_workspace_guid": "tst-ws", "fmd_landingzone_lakehouse_guid": "tst-lh"},
+    "Production": {"fmd_data_workspace_guid": "prd-ws", "fmd_landingzone_lakehouse_guid": "dev-lh"},
+}
+scope["stage_value_overrides"](parts, stage_values)
+defaults = {v["name"]: v["value"] for v in parts["variables.json"]["variables"]}
+source_defaults = {v["name"]: v["value"] for v in source_parts["variables.json"]["variables"]}
+
+check("eerste omgeving wordt de default",
+      (defaults["fmd_data_workspace_guid"], defaults["fmd_landingzone_lakehouse_guid"]) == ("dev-ws", "dev-lh"),
+      defaults)
+check("andere variabelen houden hun default",
+      all(defaults[k] == v for k, v in source_defaults.items()
+          if k not in ("fmd_data_workspace_guid", "fmd_landingzone_lakehouse_guid")))
+check("Development krijgt geen overrides", overrides(parts, "Development") == [], overrides(parts, "Development"))
+check("Test krijgt zijn eigen waarden als override",
+      [o for o in overrides(parts, "Test") if o["name"] != "fmd_fabric_db_name"]
+      == [{"name": "fmd_data_workspace_guid", "value": "tst-ws"},
+          {"name": "fmd_landingzone_lakehouse_guid", "value": "tst-lh"}],
+      overrides(parts, "Test"))
+check("bestaande override op een andere variabele blijft staan",
+      {"name": "fmd_fabric_db_name", "value": "ANDERS"} in overrides(parts, "Test"), overrides(parts, "Test"))
+check("geen override die gelijk is aan de default (die zou hem vastpinnen)",
+      overrides(parts, "Production") == [{"name": "fmd_data_workspace_guid", "value": "prd-ws"}],
+      overrides(parts, "Production"))
+
+snapshot = json.dumps(parts, sort_keys=True)
+scope["stage_value_overrides"](parts, stage_values)
+check("opnieuw draaien verandert niets", json.dumps(parts, sort_keys=True) == snapshot)
+
+del parts["valueSets/Test.json"]
+scope["stage_value_overrides"](parts, stage_values)
+check("ontbrekende value set wordt aangemaakt",
+      parts["valueSets/Test.json"]["name"] == "Test" and len(overrides(parts, "Test")) == 2,
+      parts.get("valueSets/Test.json"))
+
+# --- de twee setupcellen roepen het aan met de juiste omgevingen en waarden ---
+print("\n=== setupcellen: waarden per omgeving ===")
+stage_calls = []
+
+
+def record(library, stages, values):
+    stage_calls.append((library, stages, values))
+
+
+gold_scope = dict(bd)
+gold_scope.update({
+    "get_workspace_id_by_name": lambda name: None if name == "SALES DATA" else f"ws:{name}",
+    "get_item_id": lambda workspace, name, prop: f"id:{workspace}/{name}",
+    "set_variable_library_stage_values": record,
+})
+exec(compile(bd_sources["123a5aa6"], "bd-gold-autofill", "exec"), gold_scope)
+finance = next(c for c in stage_calls if c[1][0][1] == "FINANCE CODE (D)")
+sales = next(c for c in stage_calls if c[1][0][1] == "SALES CODE (D)")
+check("VAR_GOLD_SHORTCUTS_FMD: één aanroep per domein", len(stage_calls) == 2, stage_calls)
+check("FINANCE: stages in manifestvolgorde met hun CODE-workspace",
+      finance[1] == [("Development", "FINANCE CODE (D)"), ("Test", "FINANCE CODE (T)"),
+                     ("Production", "FINANCE CODE")],
+      finance[1])
+check("FINANCE Test wijst naar de Test-Gold en de Test-Silver",
+      finance[2]["Test"] == {
+          "SourceWorkspaceId": "ws:FINANCE DATA (T)",
+          "SourceLakehouseId": "id:FINANCE DATA (T)/LH_GOLD_LAYER.Lakehouse",
+          "Shortcut_TargetWorkspaceId": "ws:INTEGRATION DATA (T)",
+          "Shortcut_TargetLakehouseId": "id:INTEGRATION DATA (T)/LH_SILVER_LAYER.Lakehouse"},
+      finance[2]["Test"])
+check("niet op te zoeken omgeving krijgt lege ID's, geen Dev-waarden",
+      sales[2]["Production"]["SourceWorkspaceId"] == "", sales[2]["Production"])
+
+stage_calls.clear()
+fmd_sources, _ = cells_of(REPO / "setup" / "NB_SETUP_FMD.ipynb")
+config_scope = dict(fmd)
+config_scope.update({
+    "item_deployment": [], "variable_parameters": {}, "mapping_table": [], "tasks": [],
+    "deploy_item": lambda *a, **k: None,
+    "get_workspace_id_by_name": lambda name: f"ws:{name}",
+    "get_item_id": lambda workspace, name, prop: f"id:{workspace}/{name}",
+    "set_variable_library_stage_values": record,
+})
+exec(compile(fmd_sources["9dbaf8ad-721a-46c3-8c2c-1ea9a48dc1a3"], "fmd-var-config", "exec"), config_scope)
+check("VAR_CONFIG_FMD: één aanroep", len(stage_calls) == 1 and stage_calls[0][0] == "VAR_CONFIG_FMD", stage_calls)
+check("VAR_CONFIG_FMD: Production wijst naar de Production-DATA-workspace",
+      stage_calls[0][2]["Production"] == {
+          "fmd_data_workspace_guid": "ws:INTEGRATION DATA",
+          "fmd_landingzone_lakehouse_guid": "id:INTEGRATION DATA/LH_DATA_LANDINGZONE.Lakehouse"},
+      stage_calls[0][2]["Production"])
+
+# --- deployment pipelines pas na de items koppelen ----------------------------
+# Fabric koppelt items van twee stages op naam op het moment dat een workspace aan
+# een stage wordt gekoppeld; een item dat daarna ontstaat blijft ongekoppeld en de
+# volgende promotie faalt met TargetArtifactNameConflict (getest 2026-09-25).
+print("\n=== deployment pipelines na de items ===")
+
+
+def cell_position(path, cell_id):
+    return [c.get("id") for c in json.loads(path.read_text(encoding="utf-8"))["cells"]].index(cell_id)
+
+
+fmd_nb = REPO / "setup" / "NB_SETUP_FMD.ipynb"
+bd_nb = REPO / "setup" / "NB_SETUP_BUSINESS_DOMAINS.ipynb"
+fmd_pipelines = cell_position(fmd_nb, "8f569535")
+check("NB_SETUP_FMD: pipelines na lakehouses, database en alle items",
+      all(fmd_pipelines > cell_position(fmd_nb, cid) for cid in (
+          "47059838-9160-4c2f-aacf-44a5def589fa", "ec325609-7c22-4691-b309-d0a67069712d",
+          "1c6e02cb-6e4d-424a-929f-67334128dca1", "9dbaf8ad-721a-46c3-8c2c-1ea9a48dc1a3",
+          "717757ab", "296baf6d-620f-4d13-9bf9-85506b864b41")),
+      fmd_pipelines)
+bd_pipelines = cell_position(bd_nb, "e117937f")
+check("NB_SETUP_BUSINESS_DOMAINS: pipelines na alle items",
+      all(bd_pipelines > cell_position(bd_nb, cid) for cid in ("8d8220fc-6410-4ed7-a8f5-3936da7f5557", "123a5aa6", "c321c689-995e-4943-ad05-db9db2d885f8")), bd_pipelines)
+
+print("\n=== report_unpaired_items ===")
+rui_start = utilities_source.index("def report_unpaired_items(")
+rui_source = utilities_source[rui_start:utilities_source.index("def wire_domain_into_orchestration(", rui_start)]
+
+
+class _Json:
+    def __init__(self, value):
+        self.value = value
+
+    def json(self):
+        return {"value": self.value}
+
+
+def run_report(stage_items):
+    stages = [{"id": "s0", "order": 0, "displayName": "Development", "workspaceId": "w0"},
+              {"id": "s1", "order": 1, "displayName": "Test", "workspaceId": "w1"},
+              {"id": "s2", "order": 2, "displayName": "Production", "workspaceId": None}]
+    printed = []
+    rui_scope = {
+        "invoke_fabric_api_request": lambda method, path, payload=None:
+            _Json(stages if path.endswith("/stages") else stage_items[path.split("/")[3]]),
+        "print": lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    }
+    exec(compile(rui_source, "rui", "exec"), rui_scope)
+    rui_scope["report_unpaired_items"]("p")
+    return printed
+
+
+paired_ok = run_report({
+    "s0": [{"itemId": "a", "itemDisplayName": "PL_X", "itemType": "DataPipeline", "targetItemId": "a2"}],
+    "s1": [{"itemId": "a2", "itemDisplayName": "PL_X", "itemType": "DataPipeline"}],
+})
+check("gekoppelde items: geen melding", paired_ok == [], paired_ok)
+
+conflict = run_report({
+    "s0": [{"itemId": "a", "itemDisplayName": "PL_X", "itemType": "DataPipeline"},
+           {"itemId": "b", "itemDisplayName": "NB_Y", "itemType": "Notebook", "targetItemId": "b2"},
+           {"itemId": "c", "itemDisplayName": "NB_ALLEEN_IN_DEV", "itemType": "Notebook"}],
+    "s1": [{"itemId": "a2", "itemDisplayName": "PL_X", "itemType": "DataPipeline"},
+           {"itemId": "b2", "itemDisplayName": "NB_Y", "itemType": "Notebook"},
+           {"itemId": "e2", "itemDisplayName": "LH_Z", "itemType": "SQLEndpoint"}],
+})
+check("ongekoppelde naamgenoot wordt gemeld, met reparatie en waarschuwing",
+      len(conflict) == 2 and "PL_X (DataPipeline)" in conflict[0] and "Test" in conflict[0]
+      and "deletes its deployment history" in conflict[1],
+      conflict)
+check("gekoppeld item, item zonder naamgenoot en SQLEndpoint worden niet gemeld",
+      "NB_Y" not in conflict[0] and "NB_ALLEEN_IN_DEV" not in conflict[0] and "LH_Z" not in conflict[0],
+      conflict)
+check("stage zonder workspace wordt overgeslagen", "Production" not in " ".join(conflict), conflict)
+
 print(f"\nresultaat: {len(failures)} fout(en)")
 sys.exit(1 if (failures or NOTEBOOK_FAILURES) else 0)

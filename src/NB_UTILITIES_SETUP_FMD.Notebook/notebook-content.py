@@ -664,6 +664,46 @@ def apply_value_sets(folder_path):
     print(f" - Value sets limited to {active}")
 
 
+def stage_value_overrides(parts, stage_values):
+    """
+    Puts per-environment values into a Variable Library definition the way a
+    deployment pipeline can promote it: the first environment's value becomes the
+    default in variables.json, every other environment gets an override in
+    valueSets/<name>.json where its value differs. All environments then carry the
+    same definition, and each workspace picks its own value set.
+
+    A default that differs per environment does not survive promotion: the
+    deployment overwrites it with the source stage's value (tested 2026-09-25).
+
+    `parts` is {path: parsed JSON} and is changed in place; `stage_values` is an
+    ordered {value_set_name: {variable: value}}. Variables and overrides not named
+    in `stage_values` are left as they are.
+    """
+    stages = list(stage_values)
+    managed = {name for values in stage_values.values() for name in values}
+    first = stage_values[stages[0]]
+
+    for variable in parts["variables.json"]["variables"]:
+        if variable["name"] in first:
+            variable["value"] = first[variable["name"]]
+    defaults = {variable["name"]: variable["value"] for variable in parts["variables.json"]["variables"]}
+
+    for stage in stages:
+        value_set = parts.setdefault(f"valueSets/{stage}.json", {
+            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/variableLibrary/definition/valueSet/1.0.0/schema.json",
+            "name": stage,
+            "variableOverrides": [],
+        })
+        kept = [o for o in value_set["variableOverrides"] if o["name"] not in managed]
+        # An override equal to the default would pin it, so only write real differences
+        value_set["variableOverrides"] = kept + [
+            {"name": name, "value": value}
+            for name, value in stage_values[stage].items()
+            if value != defaults.get(name)
+        ]
+    return parts
+
+
 # -------------------------------
 # Item deployment
 # -------------------------------
@@ -881,7 +921,42 @@ def deploy_deployment_pipeline(pipeline_name, stage_workspace_names):
     pipeline_id = ensure_deployment_pipeline(pipeline_name, stage_names)
     for stage_name, workspace_name in stage_workspace_names:
         assign_deployment_pipeline_stage(pipeline_id, stage_name, workspace_name)
+    report_unpaired_items(pipeline_id)
     return pipeline_id
+
+def report_unpaired_items(pipeline_id):
+    """
+    Warns about items that exist under the same name and type in two adjacent stages
+    but are not paired. Fabric pairs items by name when a workspace is assigned to a
+    stage; an item created in that stage afterwards (a new item on a later setup run,
+    or one that was deleted and recreated) stays unpaired, and the next deployment
+    into that stage fails with TargetArtifactNameConflict.
+
+    Only reports. The repair - unassign and re-assign the target stage - deletes that
+    stage's deployment history and deployment rules, so it is left to a person.
+    """
+    if not pipeline_id:
+        return
+    stages = sorted(invoke_fabric_api_request("get", f"deploymentPipelines/{pipeline_id}/stages").json().get("value", []),
+                    key=lambda s: s["order"])
+    for source, target in zip(stages, stages[1:]):
+        if not (source.get("workspaceId") and target.get("workspaceId")):
+            continue
+        source_items = invoke_fabric_api_request("get", f"deploymentPipelines/{pipeline_id}/stages/{source['id']}/items").json().get("value", [])
+        target_items = invoke_fabric_api_request("get", f"deploymentPipelines/{pipeline_id}/stages/{target['id']}/items").json().get("value", [])
+        paired = {i.get("targetItemId") for i in source_items}
+        source_names = {(i["itemDisplayName"], i["itemType"]) for i in source_items}
+        unpaired = sorted(
+            f"{i['itemDisplayName']} ({i['itemType']})" for i in target_items
+            if i["itemType"] != "SQLEndpoint" and i["itemId"] not in paired
+            and (i["itemDisplayName"], i["itemType"]) in source_names
+        )
+        if unpaired:
+            print(f"❌ {len(unpaired)} item(s) in stage '{target['displayName']}' are not paired with "
+                  f"'{source['displayName']}'; the next deployment into '{target['displayName']}' will fail "
+                  f"with TargetArtifactNameConflict: {', '.join(unpaired[:10])}{' ...' if len(unpaired) > 10 else ''}")
+            print(f"   Repair: unassign and re-assign stage '{target['displayName']}'. "
+                  f"This deletes its deployment history and deployment rules.")
 
 def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_name, activity_name,
                                     orchestration_pipeline_name="PL_FMD_ORCHESTRATION_TEMPLATE",
@@ -934,35 +1009,47 @@ def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_
     else:
         print(f"❌ Failed to wire '{gold_workspace_name}': HTTP {response.status_code} {response.text}")
 
-def set_variable_library_values(workspace_name, library_name, values):
+def set_variable_library_stage_values(library_name, stage_workspaces, stage_values):
     """
-    Sets default values on a deployed Variable Library (values.json), e.g. so
-    VAR_GOLD_SHORTCUTS_FMD's workspace/lakehouse IDs don't have to be looked up
-    and pasted in by hand. `values` is {variable_name: new_value}; variables not
-    present in `values` are left untouched.
+    Writes per-environment values into a Variable Library that exists in every
+    environment's workspace (see stage_value_overrides) and activates each
+    workspace's own value set, so a deployment pipeline can promote the library
+    without pointing Test or Production at Development.
+
+    `stage_workspaces` is an ordered [(value_set_name, workspace_name)], the first
+    entry being the environment whose values become the defaults; `stage_values`
+    is {value_set_name: {variable: value}}.
     """
-    workspace_id = get_workspace_id_by_name(workspace_name)
-    library_id = get_item_id(workspace_name, f"{library_name}.VariableLibrary", "id")
-    if not (workspace_id and library_id):
-        print(f" - Could not resolve '{library_name}' in '{workspace_name}', skip")
-        return
+    for stage, workspace_name in stage_workspaces:
+        workspace_id = get_workspace_id_by_name(workspace_name)
+        library_id = get_item_id(workspace_name, f"{library_name}.VariableLibrary", "id")
+        if not (workspace_id and library_id):
+            print(f"❌ Could not resolve '{library_name}' in '{workspace_name}', skip")
+            continue
 
-    response = invoke_fabric_api_request("post", f"workspaces/{workspace_id}/items/{library_id}/getDefinition")
-    response.raise_for_status()
-    parts = response.json()["definition"]["parts"]
-    variables_part = next(p for p in parts if p["path"] == "variables.json")
-    content = json.loads(base64.b64decode(variables_part["payload"]).decode("utf-8"))
+        response = invoke_fabric_request("post", f"{FABRIC_API_BASE_URL}workspaces/{workspace_id}/items/{library_id}/getDefinition")
+        response.raise_for_status()
+        parts = {
+            p["path"]: json.loads(base64.b64decode(p["payload"]).decode("utf-8"))
+            for p in response.json()["definition"]["parts"] if p["path"].endswith(".json")
+        }
+        stage_value_overrides(parts, stage_values)
+        payload = {"definition": {"parts": [
+            {"path": path, "payload": base64.b64encode(json.dumps(content).encode("utf-8")).decode("utf-8"),
+             "payloadType": "InlineBase64"}
+            for path, content in parts.items()
+        ]}}
+        response = invoke_fabric_api_request("post", f"workspaces/{workspace_id}/items/{library_id}/updateDefinition", payload)
+        if response.status_code not in (200, 201, 202):
+            print(f"❌ Failed to update '{library_name}' in '{workspace_name}': HTTP {response.status_code} {response.text}")
+            continue
 
-    for variable in content["variables"]:
-        if variable["name"] in values:
-            variable["value"] = values[variable["name"]]
-
-    variables_part["payload"] = base64.b64encode(json.dumps(content).encode("utf-8")).decode("utf-8")
-    response = invoke_fabric_api_request("post", f"workspaces/{workspace_id}/items/{library_id}/updateDefinition", {"definition": {"parts": parts}})
-    if response.status_code in (200, 201, 202):
-        print(f"✅ Set {list(values.keys())} on '{library_name}' in '{workspace_name}'")
-    else:
-        print(f"❌ Failed to update '{library_name}' in '{workspace_name}': HTTP {response.status_code} {response.text}")
+        response = invoke_fabric_api_request("patch", f"workspaces/{workspace_id}/variableLibraries/{library_id}",
+                                             {"properties": {"activeValueSetName": stage}})
+        if response.status_code == 200:
+            print(f"✅ '{library_name}' in '{workspace_name}': value set '{stage}' active")
+        else:
+            print(f"❌ Failed to activate value set '{stage}' on '{library_name}' in '{workspace_name}': HTTP {response.status_code} {response.text}")
 
 # METADATA ********************
 
@@ -1049,7 +1136,7 @@ def create_fabric_sql_connection(connection_name, tenant_id, client_id, client_s
             break
         print(f"   {connection_name}: credential not usable yet, retrying in 15s "
               f"(attempt {attempt + 1} of 4)")
-        time.sleep(15)
+        sleep(15)
 
     print(f"\u274c Failed to create {connection_name}: HTTP {response.status_code} {error_code}")
     if error_code == "DMTS_OAuthTokenRefreshFailedError":
@@ -1160,7 +1247,7 @@ def invoke_fabric_request(method, url, payload=None):
                 operation_state = operation_state_response.json().get("status")
 
                 if operation_state in ["NotStarted", "Running"]:
-                    time.sleep(2)
+                    sleep(2)
                 elif operation_state == "Succeeded":
                     response = invoke_fabric_api_request("get", f"operations/{operation_id}/result")
                     break

@@ -20,6 +20,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [007](007-cicd-in-eigen-github-organisatie.md) | CI/CD gehost in een eigen GitHub-organisatie | Accepted |
 | [008](008-repo-en-mapstructuur.md) | Eén repository per klant, één map per workspace | Accepted |
 | [009](009-guid-guard.md) | CI-guard op niet-gemapte GUID's | Accepted |
+| [010](010-variable-library-waarden-per-omgeving.md) | Waarden per omgeving in value sets, niet in defaults | Accepted |
 
 ## Openstaande triggers
 
