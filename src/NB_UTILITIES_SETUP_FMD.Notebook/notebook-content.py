@@ -921,7 +921,42 @@ def deploy_deployment_pipeline(pipeline_name, stage_workspace_names):
     pipeline_id = ensure_deployment_pipeline(pipeline_name, stage_names)
     for stage_name, workspace_name in stage_workspace_names:
         assign_deployment_pipeline_stage(pipeline_id, stage_name, workspace_name)
+    report_unpaired_items(pipeline_id)
     return pipeline_id
+
+def report_unpaired_items(pipeline_id):
+    """
+    Warns about items that exist under the same name and type in two adjacent stages
+    but are not paired. Fabric pairs items by name when a workspace is assigned to a
+    stage; an item created in that stage afterwards (a new item on a later setup run,
+    or one that was deleted and recreated) stays unpaired, and the next deployment
+    into that stage fails with TargetArtifactNameConflict.
+
+    Only reports. The repair - unassign and re-assign the target stage - deletes that
+    stage's deployment history and deployment rules, so it is left to a person.
+    """
+    if not pipeline_id:
+        return
+    stages = sorted(invoke_fabric_api_request("get", f"deploymentPipelines/{pipeline_id}/stages").json().get("value", []),
+                    key=lambda s: s["order"])
+    for source, target in zip(stages, stages[1:]):
+        if not (source.get("workspaceId") and target.get("workspaceId")):
+            continue
+        source_items = invoke_fabric_api_request("get", f"deploymentPipelines/{pipeline_id}/stages/{source['id']}/items").json().get("value", [])
+        target_items = invoke_fabric_api_request("get", f"deploymentPipelines/{pipeline_id}/stages/{target['id']}/items").json().get("value", [])
+        paired = {i.get("targetItemId") for i in source_items}
+        source_names = {(i["itemDisplayName"], i["itemType"]) for i in source_items}
+        unpaired = sorted(
+            f"{i['itemDisplayName']} ({i['itemType']})" for i in target_items
+            if i["itemType"] != "SQLEndpoint" and i["itemId"] not in paired
+            and (i["itemDisplayName"], i["itemType"]) in source_names
+        )
+        if unpaired:
+            print(f"❌ {len(unpaired)} item(s) in stage '{target['displayName']}' are not paired with "
+                  f"'{source['displayName']}'; the next deployment into '{target['displayName']}' will fail "
+                  f"with TargetArtifactNameConflict: {', '.join(unpaired[:10])}{' ...' if len(unpaired) > 10 else ''}")
+            print(f"   Repair: unassign and re-assign stage '{target['displayName']}'. "
+                  f"This deletes its deployment history and deployment rules.")
 
 def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_name, activity_name,
                                     orchestration_pipeline_name="PL_FMD_ORCHESTRATION_TEMPLATE",

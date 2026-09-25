@@ -528,5 +528,80 @@ check("VAR_CONFIG_FMD: Production wijst naar de Production-DATA-workspace",
           "fmd_landingzone_lakehouse_guid": "id:INTEGRATION DATA/LH_DATA_LANDINGZONE.Lakehouse"},
       stage_calls[0][2]["Production"])
 
+# --- deployment pipelines pas na de items koppelen ----------------------------
+# Fabric koppelt items van twee stages op naam op het moment dat een workspace aan
+# een stage wordt gekoppeld; een item dat daarna ontstaat blijft ongekoppeld en de
+# volgende promotie faalt met TargetArtifactNameConflict (getest 2026-09-25).
+print("\n=== deployment pipelines na de items ===")
+
+
+def cell_position(path, cell_id):
+    return [c.get("id") for c in json.loads(path.read_text(encoding="utf-8"))["cells"]].index(cell_id)
+
+
+fmd_nb = REPO / "setup" / "NB_SETUP_FMD.ipynb"
+bd_nb = REPO / "setup" / "NB_SETUP_BUSINESS_DOMAINS.ipynb"
+fmd_pipelines = cell_position(fmd_nb, "8f569535")
+check("NB_SETUP_FMD: pipelines na lakehouses, database en alle items",
+      all(fmd_pipelines > cell_position(fmd_nb, cid) for cid in (
+          "47059838-9160-4c2f-aacf-44a5def589fa", "ec325609-7c22-4691-b309-d0a67069712d",
+          "1c6e02cb-6e4d-424a-929f-67334128dca1", "9dbaf8ad-721a-46c3-8c2c-1ea9a48dc1a3",
+          "717757ab", "296baf6d-620f-4d13-9bf9-85506b864b41")),
+      fmd_pipelines)
+bd_pipelines = cell_position(bd_nb, "e117937f")
+check("NB_SETUP_BUSINESS_DOMAINS: pipelines na alle items",
+      all(bd_pipelines > cell_position(bd_nb, cid) for cid in ("8d8220fc-6410-4ed7-a8f5-3936da7f5557", "123a5aa6", "c321c689-995e-4943-ad05-db9db2d885f8")), bd_pipelines)
+
+print("\n=== report_unpaired_items ===")
+rui_start = utilities_source.index("def report_unpaired_items(")
+rui_source = utilities_source[rui_start:utilities_source.index("def wire_domain_into_orchestration(", rui_start)]
+
+
+class _Json:
+    def __init__(self, value):
+        self.value = value
+
+    def json(self):
+        return {"value": self.value}
+
+
+def run_report(stage_items):
+    stages = [{"id": "s0", "order": 0, "displayName": "Development", "workspaceId": "w0"},
+              {"id": "s1", "order": 1, "displayName": "Test", "workspaceId": "w1"},
+              {"id": "s2", "order": 2, "displayName": "Production", "workspaceId": None}]
+    printed = []
+    rui_scope = {
+        "invoke_fabric_api_request": lambda method, path, payload=None:
+            _Json(stages if path.endswith("/stages") else stage_items[path.split("/")[3]]),
+        "print": lambda *a, **k: printed.append(" ".join(str(x) for x in a)),
+    }
+    exec(compile(rui_source, "rui", "exec"), rui_scope)
+    rui_scope["report_unpaired_items"]("p")
+    return printed
+
+
+paired_ok = run_report({
+    "s0": [{"itemId": "a", "itemDisplayName": "PL_X", "itemType": "DataPipeline", "targetItemId": "a2"}],
+    "s1": [{"itemId": "a2", "itemDisplayName": "PL_X", "itemType": "DataPipeline"}],
+})
+check("gekoppelde items: geen melding", paired_ok == [], paired_ok)
+
+conflict = run_report({
+    "s0": [{"itemId": "a", "itemDisplayName": "PL_X", "itemType": "DataPipeline"},
+           {"itemId": "b", "itemDisplayName": "NB_Y", "itemType": "Notebook", "targetItemId": "b2"},
+           {"itemId": "c", "itemDisplayName": "NB_ALLEEN_IN_DEV", "itemType": "Notebook"}],
+    "s1": [{"itemId": "a2", "itemDisplayName": "PL_X", "itemType": "DataPipeline"},
+           {"itemId": "b2", "itemDisplayName": "NB_Y", "itemType": "Notebook"},
+           {"itemId": "e2", "itemDisplayName": "LH_Z", "itemType": "SQLEndpoint"}],
+})
+check("ongekoppelde naamgenoot wordt gemeld, met reparatie en waarschuwing",
+      len(conflict) == 2 and "PL_X (DataPipeline)" in conflict[0] and "Test" in conflict[0]
+      and "deletes its deployment history" in conflict[1],
+      conflict)
+check("gekoppeld item, item zonder naamgenoot en SQLEndpoint worden niet gemeld",
+      "NB_Y" not in conflict[0] and "NB_ALLEEN_IN_DEV" not in conflict[0] and "LH_Z" not in conflict[0],
+      conflict)
+check("stage zonder workspace wordt overgeslagen", "Production" not in " ".join(conflict), conflict)
+
 print(f"\nresultaat: {len(failures)} fout(en)")
 sys.exit(1 if (failures or NOTEBOOK_FAILURES) else 0)
