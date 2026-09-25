@@ -31,6 +31,8 @@ BEGIN
         DECLARE @BronzeOutput      TABLE (BronzeLayerEntityId INT);
         DECLARE @SilverOutput      TABLE (SilverLayerEntityId INT);
 
+        -- IsActive only applies to new entities. On an existing entity it is left as is,
+        -- so re-registering a source does not re-activate an entity that was switched off.
         DECLARE @IsActiveLandingzone BIT = 1;
         DECLARE @IsActiveBronze      BIT = 1;
         DECLARE @IsActiveSilver      BIT = 1;
@@ -61,7 +63,6 @@ BEGIN
         WHEN MATCHED THEN
             UPDATE SET
                 DataSourceId        = @DataSourceId,
-                IsActive            = @IsActiveLandingzone,
                 SourceCustomSelect  = @SourceCustomSelect,
                 FileName            = @FileName,
                 FileType            = @FileType,
@@ -102,7 +103,6 @@ BEGIN
         WHEN MATCHED THEN
             UPDATE SET
                 [LandingzoneEntityId] = @FinalLandingzoneId,
-                [IsActive]            = @IsActiveBronze,
                 [Schema]              = @TargetSchema,
                 [Name]                = @TargetName,
                 [FileType]            = @BronzeFileType,
@@ -130,8 +130,7 @@ BEGIN
                 [Schema]               = @TargetSchema,
                 [Name]                 = @TargetName,
                 [FileType]             = @SilverFileType,
-                [LakehouseId]          = @SilverLakehouseId,
-                [IsActive]             = @IsActiveSilver
+                [LakehouseId]          = @SilverLakehouseId
         WHEN NOT MATCHED THEN
             INSERT ([BronzeLayerEntityId], [IsActive], [Schema], [Name], [FileType], [LakehouseId])
             VALUES (@FinalBronzeId, @IsActiveSilver, @TargetSchema, @TargetName, @SilverFileType, @SilverLakehouseId)
