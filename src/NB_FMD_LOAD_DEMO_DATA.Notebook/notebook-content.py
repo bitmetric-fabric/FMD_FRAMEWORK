@@ -31,6 +31,8 @@ lakehouse_schema_enabled = True
 repo_owner = 'edkreuk'
 repo_name = 'FMD_FRAMEWORK'
 branch = 'main'
+github_token_key_vault = ''
+github_token_secret = ''
 
 # METADATA ********************
 
@@ -45,9 +47,15 @@ import pandas as pd
 import requests
 from io import StringIO
 
+github_token = (
+    notebookutils.credentials.getSecret(
+        f'https://{github_token_key_vault}.vault.azure.net/', github_token_secret)
+    if github_token_key_vault and github_token_secret else None)
+headers = {'Authorization': f'Bearer {github_token}'} if github_token else {}
+
 url = (f'https://raw.githubusercontent.com/{repo_owner}/{repo_name}/'
        f'{branch}/demodata/customer.csv')
-response = requests.get(url, timeout=120)
+response = requests.get(url, headers=headers, timeout=120)
 response.raise_for_status()
 
 # dtype=str: the landing zone is raw data. Bronze does the typing, and letting pandas

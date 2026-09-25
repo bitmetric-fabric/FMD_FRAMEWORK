@@ -1366,7 +1366,8 @@ def add_letter_to_base64_png(base64_png, letter, font_size=20, text_color="black
 
 def create_demo_data_table(code_workspace_name, data_workspace_name,
                            lakehouse_schema_enabled, branch,
-                           repo_owner, repo_name, timeout_seconds=1200):
+                           repo_owner, repo_name, timeout_seconds=1200,
+                           github_token_key_vault="", github_token_secret=""):
     """Run NB_FMD_LOAD_DEMO_DATA so the demo entity has a table to point at.
 
     load_demo_data registers [in].[customer] in LandingzoneEntity, BronzeLayerEntity
@@ -1394,6 +1395,8 @@ def create_demo_data_table(code_workspace_name, data_workspace_name,
         "repo_owner":                 {"value": repo_owner, "type": "string"},
         "repo_name":                  {"value": repo_name,  "type": "string"},
         "branch":                     {"value": branch,     "type": "string"},
+        "github_token_key_vault":     {"value": github_token_key_vault, "type": "string"},
+        "github_token_secret":        {"value": github_token_secret,    "type": "string"},
     }}}
 
     print("Creating the demo table [in].[customer] in LH_DATA_LANDINGZONE")

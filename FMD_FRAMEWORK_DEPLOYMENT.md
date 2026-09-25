@@ -143,11 +143,22 @@ repo_owner    = "your-org"           # GitHub organisation or user
 repo_name     = "FMD_FRAMEWORK"      # Repository name
 branch        = "main"               # Branch to deploy from
 folder_prefix = ""                   # Only if src/ and config/ live in a subfolder
+github_token_key_vault = ""          # Key Vault name holding a GitHub PAT; empty = public repo
+github_token_secret    = ""          # Secret name of that PAT in the vault above
 ```
 
 These must match `repository:` in the manifest. The setup notebooks verify this
 and stop with an error when the two disagree, because otherwise `src/` and
 `config/` would come from a different repository than the manifest describes.
+
+> [!NOTE]
+> **Private fork.** `manifest.yaml` itself is fetched before it can be parsed, so
+> the token cannot live in the manifest. Fill in `github_token_key_vault` and
+> `github_token_secret` here instead; the bootstrap notebook stamps them into
+> `NB_SETUP_FMD` and `NB_SETUP_BUSINESS_DOMAINS` alongside `repo_owner` etc., and
+> every GitHub request (the manifest, the `src`/`config` zip, the demo data) is
+> then sent with that token. Leave both empty for a public repo — nothing
+> changes from before.
 
 Run the bootstrap notebook. It creates or updates `NB_SETUP_FMD` and
 `NB_SETUP_BUSINESS_DOMAINS` in the workspace, with these values stamped into
