@@ -20,7 +20,7 @@ repository:
 # --- Naamgeving --------------------------------------------------------------
 naming:
   domain_name: INTEGRATION          # gedeelde ingestielaag
-  framework_post_fix: ''            # achtervoegsel op alle workspace-namen, bv. '_ACME'
+  framework_pre_fix: ''             # voorvoegsel voor alle workspace- en pipelinenamen, bv. 'ACME' geeft 'ACME INTEGRATION CODE (D)'
   business_domains:
     - FINANCE
     - SALES
