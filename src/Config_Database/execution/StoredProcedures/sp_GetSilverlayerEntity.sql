@@ -38,7 +38,8 @@ BEGIN
     ) AS NotebookParams
     FROM [execution].[vw_LoadToSilverLayer]
     WHERE SourceWorkspaceId = @WorkspaceId
-      AND (@LoadGroup = '' OR LoadGroup = @LoadGroup)
+      -- Fabric passes an empty-string pipeline parameter to a procedure as NULL
+      AND (ISNULL(@LoadGroup, '') = '' OR LoadGroup = @LoadGroup)
 END;
 
 GO

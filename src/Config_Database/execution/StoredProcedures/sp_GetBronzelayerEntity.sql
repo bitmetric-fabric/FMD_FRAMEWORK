@@ -29,7 +29,8 @@ BEGIN
         ,']') AS NotebookParams
          FROM (SELECT TOP 100 PERCENT * FROM [execution].[vw_LoadToBronzeLayer]
                WHERE SourceWorkspaceId = @WorkspaceId
-                 AND (@LoadGroup = '' OR LoadGroup = @LoadGroup)
+                 -- Fabric passes an empty-string pipeline parameter to a procedure as NULL
+                 AND (ISNULL(@LoadGroup, '') = '' OR LoadGroup = @LoadGroup)
          ORDER BY [SourceFileName] ASC) AS [vw_LoadToBronzeLayer]
                
 END
