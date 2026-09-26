@@ -16,7 +16,10 @@ CREATE PROCEDURE [integration].[sp_UpsertLandingzoneBronzeSilver]
     @CustomNotebookName VARCHAR(200),
 
     -- Bronze parameters
-    @PrimaryKeys NVARCHAR(200)
+    @PrimaryKeys NVARCHAR(200),
+
+    -- 1 = leave an existing entity untouched on all three layers (bulk registration only adds)
+    @OnlyInsert BIT = 0
 )
 WITH EXECUTE AS CALLER
 AS
@@ -44,6 +47,30 @@ BEGIN
         DECLARE @LakehouseId INT, @BronzeLakehouseId INT, @SilverLakehouseId INT, @LandingzoneLakehouseId INT;
         EXECUTE [integration].[sp_GetLakehouse] @WorkspaceGuid, 'LH_DATA_LANDINGZONE', @LakehouseId OUTPUT;
         SET @LandingzoneLakehouseId = @LakehouseId;
+
+        IF @OnlyInsert = 1
+           AND EXISTS (SELECT 1
+                       FROM [integration].[LandingzoneEntity]
+                       WHERE SourceSchema = @SourceSchema
+                         AND SourceName   = @SourceName
+                         AND DataSourceId = @DataSourceId
+                         AND LakehouseId  = @LandingzoneLakehouseId)
+        BEGIN
+            SELECT
+                LandingzoneEntityId = LZ.LandingzoneEntityId,
+                BronzeLayerEntityId = BR.BronzeLayerEntityId,
+                SilverLayerEntityId = SI.SilverLayerEntityId
+            FROM [integration].[LandingzoneEntity] LZ
+            LEFT JOIN [integration].[BronzeLayerEntity] BR ON BR.LandingzoneEntityId = LZ.LandingzoneEntityId
+            LEFT JOIN [integration].[SilverLayerEntity] SI ON SI.BronzeLayerEntityId = BR.BronzeLayerEntityId
+            WHERE LZ.SourceSchema = @SourceSchema
+              AND LZ.SourceName   = @SourceName
+              AND LZ.DataSourceId = @DataSourceId
+              AND LZ.LakehouseId  = @LandingzoneLakehouseId;
+
+            COMMIT TRANSACTION;
+            RETURN;
+        END
 
         ------------------------------------------------------------
         -- 1. Upsert Landingzone

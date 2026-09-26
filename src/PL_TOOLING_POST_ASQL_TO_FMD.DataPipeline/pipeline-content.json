@@ -138,6 +138,10 @@
                       "type": "String",
                       "value": null
                     },
+                    "OnlyInsert": {
+                      "type": "Boolean",
+                      "value": "True"
+                    },
                     "PrimaryKeys": {
                       "type": "String",
                       "value": {
@@ -406,6 +410,10 @@
                 }
               },
               "IsActive": {
+                "type": "Boolean",
+                "value": "True"
+              },
+              "OnlyInsert": {
                 "type": "Boolean",
                 "value": "True"
               },

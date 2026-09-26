@@ -11,6 +11,8 @@
         ,@Description NVARCHAR(200)
         ,@LoadGroup VARCHAR(50) = ''
         ,@IsActive BIT = 1
+        -- 1 = leave an existing data source untouched (bulk registration only adds)
+        ,@OnlyInsert BIT = 0
     )
     WITH EXECUTE AS CALLER
 AS
@@ -44,6 +46,10 @@ BEGIN
             ,@Description
             ,@LoadGroup
             ,@IsActive);
+    END
+    ELSE IF @OnlyInsert = 1
+    BEGIN
+        INSERT INTO @OutputTable VALUES (@DataSourceId);
     END
     ELSE
     BEGIN
