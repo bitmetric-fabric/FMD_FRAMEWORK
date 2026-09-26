@@ -381,6 +381,9 @@ PrimaryKeys = str(PrimaryKeys)
 PrimaryKeys = re.split('[, ; :]', PrimaryKeys)
 #remove potential whitespaces around Pk columns 
 PrimaryKeys = [column.strip() for column in PrimaryKeys if column != ""]
+# Without PK columns every row hashes to the same value and fails as a duplicate
+if not PrimaryKeys:
+    raise ValueError("No PrimaryKeys registered for this entity: set BronzeLayerEntity.PrimaryKeys.")
 
 key_columns = PrimaryKeys
 print(f": {', '.join(key_columns)}")
