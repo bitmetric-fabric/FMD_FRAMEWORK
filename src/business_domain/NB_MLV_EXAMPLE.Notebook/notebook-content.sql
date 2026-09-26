@@ -39,24 +39,38 @@
 
 -- ## Refresh the materialized lake views
 -- Creating/replacing an MLV above does not refresh it. Run this cell after the CREATE statements
--- (or schedule it after them in a pipeline) so the views actually recompute. Fill in your Gold
--- lakehouse id below.
+-- (or schedule it after them in a pipeline) so the views actually recompute. The Gold lakehouse
+-- of this environment comes from VAR_GOLD_SHORTCUTS_FMD, so nothing needs to be filled in here.
+-- The cell fails when the refresh does not start or does not complete.
 
 -- CELL ********************
 
 %%pyspark
-import requests
+import requests, time
 
-workspace_id = notebookutils.runtime.context.get('currentWorkspaceId')
-lakehouse_id = "<your Gold lakehouse id>"
+# The Gold lakehouse of this environment. It lives in the DATA workspace, not in the CODE
+# workspace this notebook runs in; the setup fills these per value set.
+gold = notebookutils.variableLibrary.getLibrary("VAR_GOLD_SHORTCUTS_FMD")
+workspace_id = gold.SourceWorkspaceId
+lakehouse_id = gold.SourceLakehouseId
 
 token = notebookutils.credentials.getToken("https://api.fabric.microsoft.com")
 headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses/{lakehouse_id}/jobs/RefreshMaterializedLakeViews/instances"
 response = requests.post(url, headers=headers)
-print(response.status_code)
-print(response.headers.get("Location"))
+if response.status_code != 202:
+    raise Exception(f"MLV refresh did not start: {response.status_code} {response.text}")
+
+location = response.headers["Location"]
+while True:
+    time.sleep(15)
+    job = requests.get(location, headers=headers).json()
+    if job.get("status") in ("Completed", "Failed", "Cancelled", "Deduped"):
+        break
+print(f"MLV refresh: {job['status']}")
+if job["status"] in ("Failed", "Cancelled"):
+    raise Exception(f"MLV refresh ended with status {job['status']}: {job.get('failureReason')}")
 
 -- METADATA ********************
 
