@@ -134,6 +134,24 @@ readable.
 > deployer already owns the workspaces it creates, so nothing is lost. An ID that
 > does not resolve in your tenant makes the role assignment fail silently.
 
+> [!IMPORTANT]
+> All zeros is only safe for the **first** FMD installation in a tenant. Connection
+> names are tenant-wide and get no `framework_pre_fix`, so a second installation (a
+> trial next to production, a reinstall) reuses the existing `CON_FMD_*` connections,
+> including their credential. If `CON_FMD_FABRIC_PIPELINES` runs as a service principal
+> that has no role on the new workspaces, every `InvokePipeline` in `PL_FMD_LOAD_ALL`
+> fails with `InsufficientPrivileges` (403), while the setup run itself stays green.
+>
+> Before a second installation, check which identity the existing connections use,
+> and give it a role on the new workspaces:
+> - `security.service_principal_id` gets Contributor on the integration workspaces
+>   (CODE, DATA, CONFIG), but `NB_SETUP_BUSINESS_DOMAINS` does not assign it to the
+>   business-domain workspaces, where `PL_FMD_ORCHESTRATION_TEMPLATE` invokes the Gold
+>   pipelines;
+> - adding the identity to the group in `security.admin_group_id` covers both, because
+>   that group is assigned everywhere;
+> - `contributor_group_id` is not assigned on any CODE workspace, so it does not help.
+
 #### 4b. Point the bootstrap at your fork
 
 Open `NB_BOOTSTRAP_FMD.ipynb` and set:
