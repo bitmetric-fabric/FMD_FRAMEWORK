@@ -391,8 +391,8 @@ else:
             "TargetSchema": TargetSchema,
             "TargetName" : TargetName,
             "EntityId" : SilverLayerEntityId,
-            "StartTime" : start_audit_time,
-            "EndTime" : end_audit_time
+            "StartTime" : str(start_audit_time),  # datetime is not JSON serializable
+            "EndTime" : str(end_audit_time)
 
         }
         }
