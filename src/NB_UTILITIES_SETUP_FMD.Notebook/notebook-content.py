@@ -85,8 +85,10 @@ def run_fab_command(command, capture_output=False, silently_continue=False, raw_
     Executes a Fabric CLI command with optional output capture and error handling.
     """
     result = subprocess.run(["fab", "-c", command], capture_output=capture_output, text=True)
-    if not silently_continue and (result.returncode > 0 or result.stderr):
-        raise Exception(f"Error running fab command. exit_code: '{result.returncode}'; stderr: '{result}'")
+    # fab reports failures through its exit code, with the message on stdout. stderr alone is not a
+    # failure: a successful `fab set` can write a warning there.
+    if not silently_continue and result.returncode != 0:
+        raise Exception(f"Error running fab command. exit_code: '{result.returncode}'; output: '{(result.stdout or '') + (result.stderr or '')}'")
     if capture_output:
         return result if raw_output else result.stdout.strip()
     return None
