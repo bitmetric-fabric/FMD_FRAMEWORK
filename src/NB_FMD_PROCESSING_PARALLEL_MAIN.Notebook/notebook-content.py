@@ -437,7 +437,8 @@ for n, batch in enumerate(batched(ordered_notebooks, first_batch_size, max_concu
             "path": nb["notebook_path"],
             "timeoutPerCellInSeconds": 600,
             "args": nb["params"],
-            "retry": 2,
+            # No retries: the failures here (duplicate PK, missing column) come back on every attempt
+            "retry": 0,
             "retryIntervalInSeconds": 0
         }
 

@@ -213,6 +213,15 @@ audit_params = {
 
 execute_with_outputs(SP_AUDIT_NOTEBOOK, driver, connstring, database, **audit_params, LogData='{"Action":"Start"}', LogType="StartNotebookActivity")
 
+# A data-quality check that stops the notebook logs the reason first, in the same format as the
+# merge step, so the entity shows up in logging.NotebookExecution and not only in Monitor.
+def fail(message):
+    try:
+        execute_with_outputs(SP_AUDIT_NOTEBOOK, driver, connstring, database, **audit_params, LogData=json.dumps({"Action": "Error", "ErrorMessage": message[:500]}), LogType="EndNotebookActivity")
+    except Exception as audit_log_error:
+        print(f"Audit logging failed: {audit_log_error}")  # best-effort audit logging
+    raise ValueError(message)
+
 # METADATA ********************
 
 # META {
@@ -383,14 +392,14 @@ PrimaryKeys = re.split('[, ; :]', PrimaryKeys)
 PrimaryKeys = [column.strip() for column in PrimaryKeys if column != ""]
 # Without PK columns every row hashes to the same value and fails as a duplicate
 if not PrimaryKeys:
-    raise ValueError("No PrimaryKeys registered for this entity: set BronzeLayerEntity.PrimaryKeys.")
+    fail("No PrimaryKeys registered for this entity: set BronzeLayerEntity.PrimaryKeys.")
 
 key_columns = PrimaryKeys
 print(f": {', '.join(key_columns)}")
 # Check if all PK's exist in source
 for pk_column in key_columns:
     if pk_column not in dfDataChanged.columns:
-        raise ValueError(f"PK: {pk_column} doesn't exist in the source.")
+        fail(f"PK: {pk_column} doesn't exist in the source.")
         # Define all the Non-Key columns => HashExcludeColumns
 
 # Order the key columns by PrimaryKeys, not by the source, so that the hash of a row
@@ -418,7 +427,7 @@ dfDataChanged = (dfDataChanged
 
 dup_count = dfDataChanged.groupBy('HashedPKColumn').count().where('count > 1').limit(1).collect()
 if dup_count:
-    raise ValueError(f'Source file contains duplicated rows for PK: {", ".join(key_columns)}')
+    fail(f'Source file contains duplicated rows for PK: {", ".join(key_columns)}')
 
 # METADATA ********************
 
