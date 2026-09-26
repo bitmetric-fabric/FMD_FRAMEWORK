@@ -30,7 +30,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -70,7 +70,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -110,7 +110,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -150,7 +150,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -190,7 +190,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -230,7 +230,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -270,7 +270,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -310,7 +310,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -350,7 +350,7 @@
                               "type": "Expression"
                             },
                             "Data_WorkspaceGuid": {
-                              "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                               "type": "Expression"
                             },
                             "LoadGroup": {
@@ -642,7 +642,7 @@
           "source": {
             "type": "FabricSqlDatabaseSource",
             "sqlReaderQuery": {
-              "value": "SELECT distinct     [ConnectionType] FROM [execution].[vw_LoadSourceToLandingzone] where  WorkspaceGuid='@{pipeline().parameters.Data_WorkspaceGuid}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}')",
+              "value": "SELECT distinct     [ConnectionType] FROM [execution].[vw_LoadSourceToLandingzone] where  WorkspaceGuid='@{if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}')",
               "type": "Expression"
             },
             "partitionOption": "None",
@@ -810,7 +810,7 @@
     "parameters": {
       "Data_WorkspaceGuid": {
         "type": "string",
-        "defaultValue": "40e27fdc-775a-4ee2-84d5-48893c92d7cc"
+        "defaultValue": ""
       },
       "LoadGroup": {
         "type": "string",
@@ -836,6 +836,11 @@
       "VAR_CONFIG_FMD_fmd_config_workspace_guid": {
         "type": "String",
         "variableName": "fmd_config_workspace_guid",
+        "libraryName": "VAR_CONFIG_FMD"
+      },
+      "VAR_CONFIG_FMD_fmd_data_workspace_guid": {
+        "type": "String",
+        "variableName": "fmd_data_workspace_guid",
         "libraryName": "VAR_CONFIG_FMD"
       }
     }
