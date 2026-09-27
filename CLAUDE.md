@@ -18,7 +18,7 @@ Dit bestand bevat alleen wat je niet uit de code haalt.
 ## Verwijzingen tussen items
 - Geen letterlijke workspace- of item-GUID's: gebruik de Variable Libraries (ADR-009, ADR-010). De guid-guard controleert dat; uitzonderingen staan met reden in `config/guid_allowlist.txt`.
 - Een promotie overschrijft de defaults van een library, maar laat de actieve value set staan. Omgevingswaarden horen daarom in de value sets, niet in de defaults.
-- Een Direct Lake-model wordt bij een promotie niet opnieuw gekoppeld. De default lakehouse van een notebook en een Invoke Pipeline naar een gekoppeld item worden dat wel.
+- Een Direct Lake-model wordt bij een promotie niet opnieuw gekoppeld. De default lakehouse van een notebook wordt dat wel. Een Invoke Pipeline naar een item dat in dezelfde deployment pipeline gekoppeld is, werd in de tests ook omgezet; dat is niet als garantie bevestigd.
 
 ## Testen tegen Fabric
 - Configdb: `sqlcmd -S <server> -d <database> --authentication-method ActiveDirectoryAzCli`.
@@ -30,4 +30,4 @@ Dit bestand bevat alleen wat je niet uit de code haalt.
 - Fabric geeft een lege pipelineparameter aan een stored procedure door als `NULL`, niet als `''`. Filter met `ISNULL(@p, '') = ''`.
 - Een pipelineparameter met een default van een specifieke omgeving blijft na promotie naar die omgeving wijzen. Laat de default leeg en val terug op `libraryVariables`.
 - De `fab` CLI meldt fouten met exit code 1 en de melding op stdout. Stderr bevat ook onschuldige waarschuwingen, en `set` met een onbekende property geeft toch exit code 0.
-- Een retry op een notebook-activity maakt fouten onzichtbaar in de logging: laat `retry` op 0.
+- Een retry in `runMultiple` (`NB_FMD_PROCESSING_PARALLEL_MAIN`) verbergt een eerste fout, omdat de tweede poging slaagt. Laat `retry` op 0.
