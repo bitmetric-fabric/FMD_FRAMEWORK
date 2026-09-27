@@ -23,11 +23,11 @@
     [LastLoadValue] = CASE
         WHEN C.[Type] IN ('SQL') THEN
             'SELECT CASE WHEN ' + CONVERT(NVARCHAR(1), CASE WHEN LZE.[IsIncremental] = '' OR ISNULL(LZE.[IsIncrementalColumn], '') = '' THEN 0 ELSE LZE.[IsIncremental] END) + ' = 1 
-            THEN CONVERT(VARCHAR, MAX(' + (
+            THEN CONVERT(VARCHAR(23), MAX(' + (
                 CASE WHEN ISNULL(LZE.[IsIncrementalColumn], '') = '' THEN '1'
                 ELSE LZE.[IsIncrementalColumn]
-            END) + '), 120) 
-            ELSE CONVERT(VARCHAR, GETDATE(), 120) 
+            END) + '), 121) 
+            ELSE CONVERT(VARCHAR(23), GETDATE(), 121) 
             END AS [LastLoadValue] 
             FROM ' + QUOTENAME(ISNULL(
                 CASE WHEN LZE.[SourceSchema] != '' THEN LZE.[SourceSchema]
