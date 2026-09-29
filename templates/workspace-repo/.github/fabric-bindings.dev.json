@@ -1,0 +1,26 @@
+{
+  "_uitleg": "Dev-waarden van de bindingen tussen workspaces. normalize_bindings.py zet ze na elke merge op dev terug. Nieuw model, rapport, lakehouse met shortcuts of library met ID's: hier toevoegen. Laat weg wat deze repo niet heeft.",
+  "semanticModels": {
+    "SM_<DOMEIN>": {
+      "server": "<SQL-endpoint van Gold (D)>.datawarehouse.fabric.microsoft.com",
+      "database": "00000000-0000-0000-0000-000000000000"
+    }
+  },
+  "reports": {
+    "RPT_<DOMEIN>": {
+      "connectionString": "Data Source=\"powerbi://api.powerbi.com/v1.0/myorg/<KLANT> <DOMEIN> SEMANTIC (D)\";initial catalog=SM_<DOMEIN>;integrated security=ClaimsToken;semanticmodelid=00000000-0000-0000-0000-000000000000"
+    }
+  },
+  "lakehouseShortcuts": {
+    "LH_GOLD_LAYER": {
+      "workspaceId": "00000000-0000-0000-0000-000000000000",
+      "itemId": "00000000-0000-0000-0000-000000000000"
+    }
+  },
+  "variableLibraries": {
+    "VAR_GOLD_SHORTCUTS_FMD": {
+      "SourceWorkspaceId": "00000000-0000-0000-0000-000000000000",
+      "SourceLakehouseId": "00000000-0000-0000-0000-000000000000"
+    }
+  }
+}

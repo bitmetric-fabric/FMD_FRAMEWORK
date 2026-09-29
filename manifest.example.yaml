@@ -114,6 +114,27 @@ security:
   # staan als je geen SP gebruikt.
   service_principal_id: '00000000-0000-0000-0000-000000000000'
 
+# --- Developer-workspaces (ADR-011) ----------------------------------------
+# Voor setup/NB_SETUP_DEVELOPER_WORKSPACES. Elke Dev-workspace heeft een eigen
+# repository (ADR-011); een developer-workspace hangt aan een feature-branch daarin.
+#
+# prefix      : deel van de naam, DEV_<NAAM>_<prefix>_<TYPE>, bv. DEV_JAN_ACME_DATA.
+# capacity    : capaciteit voor nieuwe developer-workspaces.
+# git.owner   : GitHub-organisatie van de repo's per workspace.
+# git.connection_id : ID van de Fabric-connectie (GitHub, met PAT) waarmee workspaces
+#               aan git koppelen. De PAT moet bij alle repo's per workspace kunnen.
+# git.base_branch   : de branch waaraan de Dev-workspaces hangen.
+# git.repository    : naam van de repo per workspace. {pre_fix} is naming.framework_pre_fix,
+#               {domain} een business domain of naming.domain_name, {type} DATA/CODE/SEMANTIC/REPORTING.
+developer_workspaces:
+  prefix: '<kort voorvoegsel, bv. ACME>'
+  capacity: '<your capacity name>'
+  git:
+    owner: '<github-organisatie>'
+    connection_id: '00000000-0000-0000-0000-000000000000'
+    base_branch: dev
+    repository: '{pre_fix}_{domain}_{type}'
+
 # --- Key Vault ---------------------------------------------------------------
 # TOEGEVOEGD. Kwam uit NB_SETUP_FMD cel 9. Dit zijn de NAMEN van de secrets,
 # niet de secrets zelf; de waarden worden tijdens de run uit Key Vault gehaald.

@@ -22,6 +22,49 @@
 -- 3. When the notebook run is completed, return to your lakehouse and refresh your materialized lake views graph. 
 
 
+-- MARKDOWN ********************
+
+-- ## Gold van deze omgeving
+-- `%%configure` zet de default lakehouse op de Gold uit `VAR_GOLD_SHORTCUTS_FMD`, zodat de notebook in elke
+-- omgeving (en in een developer-workspace) in de eigen Gold schrijft. Het vangnet stopt de notebook als hij in een
+-- developer-workspace (`DEV_*`) draait terwijl die Gold niet in een `DEV_*`-workspace staat (ADR-011).
+-- Deze twee cellen moeten de eerste codecellen blijven: `%%configure` werkt alleen aan het begin van een sessie.
+
+-- CELL ********************
+
+-- MAGIC %%configure
+-- MAGIC {
+-- MAGIC     "defaultLakehouse": {
+-- MAGIC         "name": "LH_GOLD_LAYER",
+-- MAGIC         "id": {"variableName": "$(/**/VAR_GOLD_SHORTCUTS_FMD/SourceLakehouseId)"},
+-- MAGIC         "workspaceId": {"variableName": "$(/**/VAR_GOLD_SHORTCUTS_FMD/SourceWorkspaceId)"}
+-- MAGIC     }
+-- MAGIC }
+
+-- METADATA ********************
+
+-- META {
+-- META   "language": "python",
+-- META   "language_group": "synapse_pyspark"
+-- META }
+
+-- CELL ********************
+
+-- MAGIC %%pyspark
+-- MAGIC # Vangnet: een developer-workspace (DEV_*) schrijft nooit in een gedeelde Gold (ADR-011).
+-- MAGIC ctx = notebookutils.runtime.context
+-- MAGIC ws, gold_ws = ctx.get("currentWorkspaceName"), ctx.get("defaultLakehouseWorkspaceName")
+-- MAGIC print(f"Workspace {ws}, Gold in {gold_ws}")
+-- MAGIC if str(ws).startswith("DEV_") and not str(gold_ws).startswith("DEV_"):
+-- MAGIC     raise RuntimeError(f"{ws} zou schrijven in de Gold van {gold_ws}: draai eerst bind (NB_SETUP_DEVELOPER_WORKSPACES)")
+
+-- METADATA ********************
+
+-- META {
+-- META   "language": "python",
+-- META   "language_group": "synapse_pyspark"
+-- META }
+
 -- CELL ********************
 
 -- Welcome to your new notebook
