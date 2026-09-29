@@ -1,6 +1,6 @@
 # ADR-008: Eén repository per klant, één map per workspace
 
-Status: Accepted
+Status: Superseded by ADR-011
 Datum: 2026-09-15
 
 ## Context
