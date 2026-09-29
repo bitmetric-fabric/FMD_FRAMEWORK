@@ -21,7 +21,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [008](008-repo-en-mapstructuur.md) | Eén repository per klant, één map per workspace | Superseded by 011 |
 | [009](009-guid-guard.md) | CI-guard op niet-gemapte GUID's | Accepted |
 | [010](010-variable-library-waarden-per-omgeving.md) | Waarden per omgeving in value sets, niet in defaults | Accepted |
-| [011](011-ontwikkelflow-repo-per-workspace.md) | Eén repository per workspace, met generieke developer-workspaces | **Proposed** |
+| [011](011-ontwikkelflow-repo-per-workspace.md) | Eén repository per workspace, met generieke developer-workspaces | Accepted |
 
 ## Openstaande triggers
 

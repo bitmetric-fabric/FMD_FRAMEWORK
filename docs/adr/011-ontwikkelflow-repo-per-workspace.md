@@ -1,6 +1,6 @@
 # ADR-011: Eén repository per workspace, met generieke developer-workspaces
 
-Status: Proposed
+Status: Accepted
 Datum: 2026-09-29
 Vervangt: ADR-008
 
