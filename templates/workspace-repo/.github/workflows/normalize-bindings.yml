@@ -1,0 +1,46 @@
+# Bindingen tussen workspaces (model, rapport, shortcuts, defaults van Variable Libraries) horen op dev op de Dev-waarden.
+# - PR naar dev: alleen melden (--report). De feature-branch blijft ongewijzigd, zodat de developer-workspace
+#   geïsoleerd blijft na een Update from Git. Script en Dev-waarden komen uit dev (base), de inhoud uit de PR (head).
+# - Push naar dev (de merge): terugzetten naar Dev (--fix) en committen, daarna controleren (--check).
+#   Werk de Dev-workspaces pas bij na deze commit.
+# Zie .github/scripts/normalize_bindings.py en ADR-011.
+name: normalize-bindings
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+permissions:
+  contents: write
+jobs:
+  report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          path: pr
+      - name: Bindingen melden
+        run: python base/.github/scripts/normalize_bindings.py --report --root pr
+  fix:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bindingen naar Dev
+        run: python .github/scripts/normalize_bindings.py --fix
+      - name: Commit op dev
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "normalize-bindings"
+            git config user.email "normalize-bindings@users.noreply.github.com"
+            git commit -am "Bindingen tussen workspaces teruggezet naar Dev"
+            git push
+          fi
+      - name: Controle
+        run: python .github/scripts/normalize_bindings.py --check
