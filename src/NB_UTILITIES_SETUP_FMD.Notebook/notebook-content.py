@@ -709,6 +709,10 @@ def stage_value_overrides(parts, stage_values):
 # -------------------------------
 # Item deployment
 # -------------------------------
+# Notebooks the customer fills in. Created once in every stage (so the deployment pipeline pairs them),
+# never overwritten by a re-run of the setup.
+CUSTOMER_OWNED_NOTEBOOKS = {"NB_FMD_CUSTOM_DQ_CLEANSING.Notebook"}
+
 def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lakehouse_schema_enabled, it=None):
     """
     Deploys an item (Notebook, Lakehouse, DataPipeline) into a workspace.
@@ -734,7 +738,13 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
     workspace_id = get_workspace_id_by_name(workspace_name)
     cli_parameter = ''
 
-    if "Notebook" in name:
+    if "Notebook" in name and name in CUSTOMER_OWNED_NOTEBOOKS and run_fab_command(f'exists {workspace_name}.Workspace/{name}', capture_output=True, silently_continue=True) == "* true":
+        # Holds the customer's own code: create it once so every stage has a paired copy, never overwrite it
+        result = f'{name} already exists, skip import and do not overwrite'
+        new_id = get_item_id(workspace_name, name, 'id')
+        mapping_type = 'Notebook'
+
+    elif "Notebook" in name:
         cli_parameter += " --format .py"
         result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f {cli_parameter}",capture_output=True, silently_continue=True)
         assign_item_description(workspace_name, name)  #added to Notebook import to speed up deployment
