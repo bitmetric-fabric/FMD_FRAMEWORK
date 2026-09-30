@@ -16,7 +16,7 @@
 
 # CELL ********************
 
-import struct, pyodbc, os
+import struct, pyodbc, os, time
 from pyspark.sql.functions import col
 from pyspark.sql.types import ByteType, ShortType
 
@@ -136,11 +136,20 @@ def execute_with_outputs(exec_statement, driver, connstring, database, **params)
     token_struct = struct.pack(f'<I{len(token)}s', len(token), token)
 
     # Build connection
-    conn = pyodbc.connect(
-        f"DRIVER={driver};SERVER={connstring};PORT=1433;DATABASE={database};",
-        attrs_before={1256: token_struct},
-        timeout=12
-    )
+    # Under many parallel notebooks the login can time out (HYT00) before any logging happens: retry that only.
+    for attempt in range(1, 4):
+        try:
+            conn = pyodbc.connect(
+                f"DRIVER={driver};SERVER={connstring};PORT=1433;DATABASE={database};",
+                attrs_before={1256: token_struct},
+                timeout=12
+            )
+            break
+        except pyodbc.Error as e:
+            if attempt == 3 or e.args[0] != "HYT00":
+                raise
+            print(f"Login timeout, retry {attempt}/2: {e}")
+            time.sleep(5 * attempt)
     if not exec_statement:
         raise ValueError("proc_name (exec_statement) must not be empty.")
 
