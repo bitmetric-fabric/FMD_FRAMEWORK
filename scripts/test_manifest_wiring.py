@@ -603,5 +603,33 @@ check("gekoppeld item, item zonder naamgenoot en SQLEndpoint worden niet gemeld"
       conflict)
 check("stage zonder workspace wordt overgeslagen", "Production" not in " ".join(conflict), conflict)
 
+# --- deploy_item: klantnotebooks niet overschrijven ------------------------
+print("\n=== deploy_item: klantnotebooks ===")
+d_start = utilities_source.index("CUSTOMER_OWNED_NOTEBOOKS = ")
+d_end = utilities_source.index("# METADATA", d_start)
+
+
+def run_deploy(name, exists):
+    commands, mapping = [], []
+    s = {"time": lambda: 0, "copy_to_tmp": lambda n: "/tmp/x", "get_workspace_id_by_name": lambda w: "ws",
+         "assign_item_description": lambda *a: None, "assign_item_to_folder": lambda **k: None,
+         "get_item_id": lambda *a: "nieuw",
+         "run_fab_command": lambda c, **k: commands.append(c) or ("* true" if exists and c.startswith("exists") else "ok")}
+    exec(compile(utilities_source[d_start:d_end], "deploy_item", "exec"), s)
+    s["deploy_item"]("WS CODE (D)", name, mapping, "development", [], False, {"id": "oud"})
+    return commands, mapping
+
+
+cmds, mapping = run_deploy("NB_FMD_CUSTOM_DQ_CLEANSING.Notebook", exists=True)
+check("bestaand klantnotebook: geen import, wel gemapt",
+      not any(c.startswith("import") for c in cmds) and mapping == [
+          {"Description": "NB_FMD_CUSTOM_DQ_CLEANSING.Notebook", "environment": "development",
+           "ItemType": "Notebook", "old_id": "oud", "new_id": "nieuw"}], (cmds, mapping))
+cmds, _ = run_deploy("NB_FMD_CUSTOM_DQ_CLEANSING.Notebook", exists=False)
+check("nieuw klantnotebook: wordt geïmporteerd", any(c.startswith("import") for c in cmds), cmds)
+cmds, _ = run_deploy("NB_FMD_DQ_CLEANSING.Notebook", exists=True)
+check("frameworknotebook: altijd geïmporteerd, zonder exists-check",
+      bool(cmds) and cmds[0].startswith("import"), cmds)
+
 print(f"\nresultaat: {len(failures)} fout(en)")
 sys.exit(1 if (failures or NOTEBOOK_FAILURES) else 0)
