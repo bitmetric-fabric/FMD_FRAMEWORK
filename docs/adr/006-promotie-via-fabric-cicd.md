@@ -1,6 +1,6 @@
 # ADR-006: Promotiemechanisme Dev → Test → Prod
 
-Status: **Proposed** (was Accepted — herzien 2026-09-15 na de triage)
+Status: Superseded by ADR-012 (was **Proposed**, daarvoor Accepted — herzien 2026-09-15 na de triage)
 Datum: 2026-09-15
 
 ## Context
