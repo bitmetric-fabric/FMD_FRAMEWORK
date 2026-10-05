@@ -1031,37 +1031,66 @@ def set_variable_library_stage_values(library_name, stage_workspaces, stage_valu
     `stage_workspaces` is an ordered [(value_set_name, workspace_name)], the first
     entry being the environment whose values become the defaults; `stage_values`
     is {value_set_name: {variable: value}}.
+
+    Each workspace is read back afterwards and retried up to three times. A
+    workspace that still has the wrong value set active, or other values in
+    effect, fails the setup: otherwise that environment silently loads from, or
+    writes to, another one.
     """
+    failed = []
     for stage, workspace_name in stage_workspaces:
         workspace_id = get_workspace_id_by_name(workspace_name)
         library_id = get_item_id(workspace_name, f"{library_name}.VariableLibrary", "id")
         if not (workspace_id and library_id):
-            print(f"❌ Could not resolve '{library_name}' in '{workspace_name}', skip")
+            print(f"❌ Could not resolve '{library_name}' in '{workspace_name}'")
+            failed.append(workspace_name)
             continue
 
-        response = invoke_fabric_request("post", f"{FABRIC_API_BASE_URL}workspaces/{workspace_id}/items/{library_id}/getDefinition")
-        response.raise_for_status()
-        parts = {
-            p["path"]: json.loads(base64.b64decode(p["payload"]).decode("utf-8"))
-            for p in response.json()["definition"]["parts"] if p["path"].endswith(".json")
-        }
-        stage_value_overrides(parts, stage_values)
-        payload = {"definition": {"parts": [
-            {"path": path, "payload": base64.b64encode(json.dumps(content).encode("utf-8")).decode("utf-8"),
-             "payloadType": "InlineBase64"}
-            for path, content in parts.items()
-        ]}}
-        response = invoke_fabric_api_request("post", f"workspaces/{workspace_id}/items/{library_id}/updateDefinition", payload)
-        if response.status_code not in (200, 201, 202):
-            print(f"❌ Failed to update '{library_name}' in '{workspace_name}': HTTP {response.status_code} {response.text}")
-            continue
-
-        response = invoke_fabric_api_request("patch", f"workspaces/{workspace_id}/variableLibraries/{library_id}",
-                                             {"properties": {"activeValueSetName": stage}})
-        if response.status_code == 200:
-            print(f"✅ '{library_name}' in '{workspace_name}': value set '{stage}' active")
+        for attempt in range(1, 4):
+            parts = _variable_library_parts(workspace_id, library_id)
+            stage_value_overrides(parts, stage_values)
+            payload = {"definition": {"parts": [
+                {"path": path, "payload": base64.b64encode(json.dumps(content).encode("utf-8")).decode("utf-8"),
+                 "payloadType": "InlineBase64"}
+                for path, content in parts.items()
+            ]}}
+            # updateDefinition can answer 202. invoke_fabric_request waits for that operation, so the
+            # activation below does not run while the definition is still being replaced.
+            invoke_fabric_request("post", f"{FABRIC_API_BASE_URL}workspaces/{workspace_id}/items/{library_id}/updateDefinition", payload)
+            invoke_fabric_api_request("patch", f"workspaces/{workspace_id}/variableLibraries/{library_id}",
+                                      {"properties": {"activeValueSetName": stage}})
+            if _variable_library_in_effect(workspace_id, library_id, stage, stage_values[stage]):
+                print(f"✅ '{library_name}' in '{workspace_name}': value set '{stage}' active, values in effect")
+                break
+            print(f"⚠️ '{library_name}' in '{workspace_name}' is not as expected yet (attempt {attempt}/3)")
+            sleep(10 * attempt)
         else:
-            print(f"❌ Failed to activate value set '{stage}' on '{library_name}' in '{workspace_name}': HTTP {response.status_code} {response.text}")
+            failed.append(workspace_name)
+
+    if failed:
+        raise RuntimeError(f"'{library_name}': value sets not applied in {failed}. "
+                           "Those environments would use another environment's values; run the setup again.")
+
+
+def _variable_library_parts(workspace_id, library_id):
+    """The JSON parts of a Variable Library definition, as {path: parsed JSON}."""
+    response = invoke_fabric_request("post", f"{FABRIC_API_BASE_URL}workspaces/{workspace_id}/items/{library_id}/getDefinition")
+    response.raise_for_status()
+    return {
+        p["path"]: json.loads(base64.b64decode(p["payload"]).decode("utf-8"))
+        for p in response.json()["definition"]["parts"] if p["path"].endswith(".json")
+    }
+
+
+def _variable_library_in_effect(workspace_id, library_id, stage, expected):
+    """True when `stage` is the active value set and every value in `expected` is in effect there."""
+    response = invoke_fabric_api_request("get", f"workspaces/{workspace_id}/variableLibraries/{library_id}")
+    if response.status_code != 200 or response.json().get("properties", {}).get("activeValueSetName") != stage:
+        return False
+    parts = _variable_library_parts(workspace_id, library_id)
+    in_effect = {v["name"]: v["value"] for v in parts["variables.json"]["variables"]}
+    in_effect.update({o["name"]: o["value"] for o in parts.get(f"valueSets/{stage}.json", {}).get("variableOverrides", [])})
+    return all(in_effect.get(name) == value for name, value in expected.items())
 
 # METADATA ********************
 
