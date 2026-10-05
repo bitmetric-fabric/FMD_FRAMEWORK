@@ -1189,8 +1189,8 @@ def create_or_get_fmd_connection(connection_name,connection_role, type):
                 print(f"✅ {connection_name} Created")
         except Exception as e:
             print(f"❌ Failed to create connection: {e}")
-        else:
-             print('Connection already exists, skip creation')
+    else:
+        print('Connection already exists, skip creation')
     connection_id=run_fab_command(f"get .connections/{connection_name}.Connection -q id", silently_continue= True, capture_output= True)
     payload_role = json.dumps(connection_role)
     try:

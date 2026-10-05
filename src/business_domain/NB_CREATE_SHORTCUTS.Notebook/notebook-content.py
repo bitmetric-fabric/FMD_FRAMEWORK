@@ -76,6 +76,7 @@ def create_shortcut(path:str, name:str, target:dict, workspace_id:str ,lakehouse
         print("Location:", resp.headers.get("Location", "<none>"))
     else:
         print("Failed:", resp.status_code, resp.text)
+    return resp.status_code in (200, 201)
 
 # METADATA ********************
 
@@ -86,9 +87,15 @@ def create_shortcut(path:str, name:str, target:dict, workspace_id:str ,lakehouse
 
 # CELL ********************
 
+failed = []
 for ShortcutName in ShortcutNames:
     oneLake_target = {    "oneLake": {        "workspaceId": ShortcutSettings.Shortcut_TargetWorkspaceId,        "itemId":      ShortcutSettings.Shortcut_TargetLakehouseId,"path": "Tables/"+ShortcutSettings.Shortcut_TargetSchema+"/"+ShortcutName   }}
-    create_shortcut(path="Tables/"+ShortcutSettings.SourceSchema, name=ShortcutName, target=oneLake_target,workspace_id=ShortcutSettings.SourceWorkspaceId,lakehouse_id=ShortcutSettings.SourceLakehouseId, conflict_policy="CreateOrOverwrite")
+    if not create_shortcut(path="Tables/"+ShortcutSettings.SourceSchema, name=ShortcutName, target=oneLake_target,workspace_id=ShortcutSettings.SourceWorkspaceId,lakehouse_id=ShortcutSettings.SourceLakehouseId, conflict_policy="CreateOrOverwrite"):
+        failed.append(ShortcutName)
+
+# A failed shortcut (for example a table name in ShortcutNames that does not exist in Silver) must fail the run.
+if failed:
+    raise RuntimeError(f"{len(failed)} of {len(ShortcutNames)} shortcuts failed: {failed}")
 
 # METADATA ********************
 
