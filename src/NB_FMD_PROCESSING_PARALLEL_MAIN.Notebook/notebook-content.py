@@ -532,7 +532,10 @@ if fails:
     print(f"\n✗ ERROR: {len(fails)} notebook execution(s) failed:")
     for f in fails:
         print(f"  - {f['TableName']}: {f['exception']}")
-    raise ValueError(f"Failed notebooks: {failed_names}")
+    # The reason travels with the error: a child that fails before its own logging (login timeout, Spark error)
+    # leaves nothing else in logging.PipelineExecution. LogData is VARCHAR(8000), so keep it short.
+    detail = "; ".join(f"{r['TableName']}: {r['exception'][:300]}" for r in fails)
+    raise ValueError(f"Failed notebooks: {failed_names}. {detail}"[:3000])
 
 # METADATA ********************
 
