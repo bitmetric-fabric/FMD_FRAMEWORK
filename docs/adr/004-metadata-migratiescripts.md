@@ -1,6 +1,6 @@
 # ADR-004: Metadata-schema via genummerde migratiescripts
 
-Status: Accepted
+Status: Superseded by ADR-013
 Datum: 2026-09-15
 
 ## Context
