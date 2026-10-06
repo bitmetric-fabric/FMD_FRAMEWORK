@@ -10,6 +10,7 @@ Twee dingen:
      regeleindes die het manifest niet noemt.
 """
 
+import base64
 import json
 import os
 import shutil
@@ -630,6 +631,48 @@ check("nieuw klantnotebook: wordt geïmporteerd", any(c.startswith("import") for
 cmds, _ = run_deploy("NB_FMD_DQ_CLEANSING.Notebook", exists=True)
 check("frameworknotebook: altijd geïmporteerd, zonder exists-check",
       bool(cmds) and cmds[0].startswith("import"), cmds)
+
+# --- aanhaken aan de orchestratie: een mislukking wordt een taak die de setup rood maakt ---
+print("\n=== wire_domain_into_orchestration: status ===")
+w_start = utilities_source.index("def wire_domain_into_orchestration(")
+w_end = utilities_source.index("def set_variable_library_stage_values(", w_start)
+
+
+class _Definition:
+    status_code = 200
+
+    def __init__(self, activities):
+        payload = base64.b64encode(json.dumps({"properties": {"activities": activities}}).encode()).decode()
+        self.body = {"definition": {"parts": [{"path": "pipeline-content.json", "payload": payload}]}}
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self.body
+
+
+def run_wire(ids_found=True, wired=False, update_status=200):
+    template = {"name": "PL_FMD_LOAD_ALL", "externalReferences": {}, "policy": {}}
+    activities = [template] + ([{"name": "PL_FINANCE_LOAD_GOLD"}] if wired else [])
+    update = types.SimpleNamespace(status_code=update_status, text="fout")
+    s = {"json": json, "base64": base64, "print": lambda *a, **k: None,
+         "get_workspace_id_by_name": lambda w: "ws" if ids_found else None,
+         "get_item_id": lambda *a: "id",
+         "invoke_fabric_api_request": lambda method, path, payload=None:
+             _Definition(activities) if path.endswith("getDefinition") else update}
+    exec(compile(utilities_source[w_start:w_end], "wire", "exec"), s)
+    return s["wire_domain_into_orchestration"]("INTEGRATION CODE (D)", "FINANCE CODE (D)", "PL_FINANCE_LOAD_GOLD")
+
+
+check("aangehaakt: success", run_wire() == "success", run_wire())
+check("al aangehaakt: geen fout", run_wire(wired=True) == "already wired", run_wire(wired=True))
+check("ID's niet gevonden: failed", str(run_wire(ids_found=False)).startswith("failed"), run_wire(ids_found=False))
+check("updateDefinition faalt: failed", str(run_wire(update_status=400)).startswith("failed"), run_wire(update_status=400))
+bd_cells = ["".join(c["source"]) for c in json.loads(bd_nb.read_text(encoding="utf-8"))["cells"]]
+check("NB_SETUP_BUSINESS_DOMAINS: aanhaken wordt een taak, en de laatste cel faalt op een mislukte taak",
+      any("status = wire_domain_into_orchestration(" in s and "tasks.append(" in s for s in bd_cells)
+      and "failed_tasks" in bd_cells[-1] and "raise RuntimeError" in bd_cells[-1])
 
 print(f"\nresultaat: {len(failures)} fout(en)")
 sys.exit(1 if (failures or NOTEBOOK_FAILURES) else 0)
