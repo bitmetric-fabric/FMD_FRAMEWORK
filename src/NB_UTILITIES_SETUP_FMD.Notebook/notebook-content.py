@@ -713,6 +713,14 @@ def stage_value_overrides(parts, stage_values):
 # never overwritten by a re-run of the setup.
 CUSTOMER_OWNED_NOTEBOOKS = {"NB_FMD_CUSTOM_DQ_CLEANSING.Notebook"}
 
+def fab_import(command):
+    """Runs a fab import and returns its output as the task status, prefixed with 'failed: ' when fab
+    reports an error (exit code 1, message on stdout). Without the prefix, a failed import looked like
+    a normal status, and the failed-task check at the end of the setup let it pass."""
+    r = run_fab_command(command, capture_output=True, silently_continue=True, raw_output=True)
+    output = ((r.stdout or '') + (r.stderr or '')).strip()
+    return f"failed: {output}" if r.returncode != 0 else output
+
 def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lakehouse_schema_enabled, it=None):
     """
     Deploys an item (Notebook, Lakehouse, DataPipeline) into a workspace.
@@ -746,7 +754,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
 
     elif "Notebook" in name:
         cli_parameter += " --format .py"
-        result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f {cli_parameter}",capture_output=True, silently_continue=True)
+        result = fab_import(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f {cli_parameter}")
         assign_item_description(workspace_name, name)  #added to Notebook import to speed up deployment
         new_id = get_item_id(workspace_name, name, 'id')
         assign_item_to_folder(workspace_name=workspace_name, item_id=new_id, folder_name='Notebooks')
@@ -776,7 +784,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
         print(f"Replacing connections guid in {workspace_name}: {name}")
         connection_list=get_existing_connections_by_id()
         replace_ids_and_mark_inactive(tmp_path, mapping_table, environment_name, connection_list)
-        result = run_fab_command(f"import / {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
+        result = fab_import(f"import / {workspace_name}.Workspace/{name} -i {tmp_path} -f")
         assign_item_description(workspace_name, name)
         new_id = get_item_id(workspace_name, name, 'id')
         assign_item_to_folder(workspace_name=workspace_name, item_id=new_id, folder_name='DataPipelines')
@@ -789,7 +797,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
                     print(f"Creating or updating VariableLibrary: {name}")
                     apply_value_sets(tmp_path)
                     result = update_variable_library(tmp_path, it.get("variables"))
-                    result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
+                    result = fab_import(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f")
                     print(f"✅ {name} Created/Imported'")
                 except Exception as e:
                     print(f"❌ Failed to create VariableLibrary: {e}")
@@ -803,7 +811,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
         try:
             print(f"Creating or updating Environment: {name}")
             apply_spark_settings(tmp_path)
-            result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
+            result = fab_import(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f")
             print(f"✅ {name} Created/Imported'")
         except Exception as e:
             print(f"❌ Failed to create Environment: {e}")
@@ -815,7 +823,9 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
         tmp_path = copy_to_tmp('SQL_FMD_FRAMEWORK.SQLDatabase')  #This is the folder in Github repo
         try:
             print(f"Creating or updating SQLDatabase: {name}")
-            result = run_fab_command(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f",capture_output=True, silently_continue=True)
+            result = fab_import(f"import {workspace_name}.Workspace/{name} -i {tmp_path} -f")
+            if result.startswith("failed: "):
+                raise RuntimeError(result)
             assign_item_description(workspace_name, name)
             print(f"✅ {name} Created/Imported'")
         except Exception as e:
