@@ -977,6 +977,7 @@ def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_
     Adds an InvokePipeline activity to PL_FMD_ORCHESTRATION_TEMPLATE (in orchestration_workspace_name)
     that calls PL_FMD_LOAD_GOLD_TEMPLATE in gold_workspace_name.
     Idempotent: skips if an activity with this name is already wired in.
+    Returns a task status; one starting with "failed" makes the setup end red.
     """
     orch_workspace_id = get_workspace_id_by_name(orchestration_workspace_name)
     orch_pipeline_id = get_item_id(orchestration_workspace_name, f"{orchestration_pipeline_name}.DataPipeline", "id")
@@ -985,8 +986,9 @@ def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_
     gold_pipeline_id = get_item_id(gold_workspace_name, f"{gold_pipeline_name}.DataPipeline", "id")
 
     if not (orch_workspace_id and orch_pipeline_id and gold_workspace_id and gold_pipeline_id):
-        print(f" - Could not resolve IDs to wire '{gold_workspace_name}' into orchestration, skip")
-        return
+        # Without the wiring Gold never runs in this environment, so this is a failure, not a skip
+        print(f"❌ Could not resolve IDs to wire '{gold_workspace_name}' into orchestration")
+        return f"failed: could not resolve IDs (orchestration workspace/pipeline {orch_workspace_id}/{orch_pipeline_id}, gold workspace/pipeline {gold_workspace_id}/{gold_pipeline_id})"
 
     response = invoke_fabric_api_request("post", f"workspaces/{orch_workspace_id}/items/{orch_pipeline_id}/getDefinition")
     response.raise_for_status()
@@ -997,7 +999,7 @@ def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_
     activities = content["properties"]["activities"]
     if any(a["name"] == activity_name for a in activities):
         print(f" - Orchestration already wired for '{gold_workspace_name}', skip")
-        return
+        return "already wired"
 
     template_activity = activities[0]
     activities.append({
@@ -1018,8 +1020,9 @@ def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_
     response = invoke_fabric_api_request("post", f"workspaces/{orch_workspace_id}/items/{orch_pipeline_id}/updateDefinition", {"definition": {"parts": parts}})
     if response.status_code in (200, 201, 202):
         print(f"✅ Wired '{gold_workspace_name}' Gold pipeline into orchestration template")
-    else:
-        print(f"❌ Failed to wire '{gold_workspace_name}': HTTP {response.status_code} {response.text}")
+        return "success"
+    print(f"❌ Failed to wire '{gold_workspace_name}': HTTP {response.status_code} {response.text}")
+    return f"failed: HTTP {response.status_code} {response.text}"
 
 def set_variable_library_stage_values(library_name, stage_workspaces, stage_values):
     """
