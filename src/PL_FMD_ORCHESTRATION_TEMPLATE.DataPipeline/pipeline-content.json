@@ -7,7 +7,13 @@
           "waitOnCompletion": true,
           "workspaceId": "00000000-0000-0000-0000-000000000000",
           "pipelineId": "1b6d7d0d-d04b-4bc2-a6da-7a876216561d",
-          "operationType": "InvokeFabricPipeline"
+          "operationType": "InvokeFabricPipeline",
+          "parameters": {
+            "LoadGroup": {
+              "value": "@pipeline().parameters.LoadGroup",
+              "type": "Expression"
+            }
+          }
         },
         "externalReferences": {
           "connection": "6d8146c6-a438-47df-94e2-540c552eb6d7"
@@ -23,6 +29,13 @@
         "dependsOn": []
       }
     ],
+    "parameters": {
+      "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
+      }
+    },
+    "concurrency": 1,
     "annotations": []
   }
 }
