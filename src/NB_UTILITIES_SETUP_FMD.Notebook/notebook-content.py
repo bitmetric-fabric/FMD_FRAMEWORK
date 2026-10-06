@@ -1173,9 +1173,11 @@ def create_fabric_sql_connection(connection_name, tenant_id, client_id, client_s
         except Exception:
             pass
 
-        if error_code != "DMTS_OAuthTokenRefreshFailedError" or attempt == 3:
+        # Also retry other errors: workspace access granted moments ago (the connection
+        # test needs it) can take a while to reach the connector.
+        if attempt == 3:
             break
-        print(f"   {connection_name}: credential not usable yet, retrying in 15s "
+        print(f"   {connection_name}: HTTP {response.status_code} {error_code}, retrying in 15s "
               f"(attempt {attempt + 1} of 4)")
         sleep(15)
 
@@ -1203,10 +1205,6 @@ def create_or_get_fmd_connection(connection_name,connection_role, type):
                     print("FabricSql needs a service principal to be created automatically. "
                           "Set fabric_sql_sp_tenant_id / _client_id / _secret, or create it manually.")
             elif type =='AzureDataFactory':
-                # ponytail: when no manual connection exists yet, the get below returns an
-                # error/empty string that silently becomes this connection's mapping-table
-                # new_id, corrupting every GUID it replaces. Harden by failing loudly here
-                # once a tenant with real ADF needs this path.
                 print("AzureDataFactory can't created automated yet to CLI limitations, please create manual")
             elif type =='FabricDataPipelines':
                 run_fab_command(f"""create .connections/{connection_name}.Connection 
@@ -1221,6 +1219,16 @@ def create_or_get_fmd_connection(connection_name,connection_role, type):
     else:
         print('Connection already exists, skip creation')
     connection_id=run_fab_command(f"get .connections/{connection_name}.Connection -q id", silently_continue= True, capture_output= True)
+    # Without a valid id, the caller would put fab's error text in the mapping table and
+    # replace the connection GUID in every pipeline with it. Stop here instead.
+    if not re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", connection_id or ""):
+        if type == 'AzureDataFactory':
+            # Optional: no pipeline in src/ references the ADF connection.
+            print(f"   {connection_name} not found; ADF pipelines stay without it.")
+            return None
+        raise RuntimeError(f"Connection {connection_name} is not available, so the setup stops here. "
+                           f"See the output above. For FabricSql: check the service principal secrets in "
+                           f"the Key Vault and that the principal is a member of the workspaces.")
     payload_role = json.dumps(connection_role)
     try:
         run_fab_command(f'api -X post connections/{connection_id}/roleAssignments -i "{payload_role}"',capture_output=True ,silently_continue=True  )
