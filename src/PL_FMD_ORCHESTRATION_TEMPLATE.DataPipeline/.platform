@@ -3,7 +3,7 @@
   "metadata": {
     "type": "DataPipeline",
     "displayName": "PL_FMD_ORCHESTRATION_TEMPLATE",
-    "description": "Template top-of-day orchestrator: runs PL_FMD_LOAD_ALL (Landingzone/Bronze/Silver), then fans out to one Gold-layer pipeline per business domain. Not part of the core FMD load chain: copy/rename per customer and add one InvokePipeline activity per business domain Gold pipeline (e.g. PL_FMD_LOAD_GOLD_TEMPLATE), each dependsOn this one Succeeded."
+    "description": "Top-of-day orchestrator and the pipeline to schedule: runs PL_FMD_LOAD_ALL (Landingzone/Bronze/Silver) with the LoadGroup parameter, then one Gold-layer pipeline per business domain (wired in by NB_SETUP_BUSINESS_DOMAINS), each dependsOn PL_FMD_LOAD_ALL Succeeded. Add one schedule per cadence, each with its own LoadGroup (empty = all sources). concurrency 1: overlapping runs wait. See wiki/LoadGroup_Scheduling.md."
   },
   "config": {
     "version": "2.0",

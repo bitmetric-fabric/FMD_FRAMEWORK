@@ -12,18 +12,18 @@ every two hours — without duplicating any pipeline. Every source keeps a
 
 ## Why this exists
 
-Microsoft Fabric's own schedule trigger cannot carry parameters: every
-scheduled run of an item uses that item's design-time default values, and the
-job-scheduler API's `parameters` field is explicitly **not supported** for
-Data Pipelines ([Job Scheduler REST API](https://learn.microsoft.com/en-us/rest/api/fabric/core/job-scheduler/create-item-schedule)).
-So one pipeline cannot have two schedules that load two different sets of
-sources — the schedule can't tell it which set to use.
+The "which sources" decision lives in the metadata (a column on
+`integration.DataSource`), so a schedule only has to say which group it runs.
 
-`LoadGroup` works around this by moving the "which sources" decision into the
-metadata (a column on `integration.DataSource`) and having each schedule
-target its own thin wrapper pipeline that hard-codes only the group name. The
-schedule still can't carry a parameter — but the wrapper pipeline it points
-to needs exactly one.
+A Fabric pipeline can have up to 20 schedules, and each schedule can pass its
+own parameter values. `PL_FMD_ORCHESTRATION_TEMPLATE` takes a `LoadGroup`
+parameter, so one pipeline carries all schedules: for example a nightly one
+without a group and an intraday one with `LoadGroup = INTRADAY`
+([Run, schedule, or use events to trigger a pipeline](https://learn.microsoft.com/en-us/fabric/data-factory/pipeline-runs)).
+
+An earlier version of this page said schedules could not carry parameters for
+Data Pipelines. That is no longer true: a schedule created with
+`executionData.parameters` passes them to the run (tested 2026-10-06).
 
 ---
 
@@ -40,15 +40,17 @@ Every pipeline in the load chain (`PL_FMD_LOAD_ALL`, `PL_FMD_LOAD_LANDINGZONE`,
 parameter, defaulting to `''`, and passes it down to the next pipeline in the
 chain the same way it already passes `Data_WorkspaceGuid`.
 
-**The empty string is not a group — it means "no filter".** A source with
-`LoadGroup = ''` (the default) is picked up by *every* run regardless of what
-`LoadGroup` the caller passed in, and calling the top-level pipeline with
-`LoadGroup = ''` loads *all* sources exactly as before. This is what keeps
-existing deployments working unchanged: nothing has to be tagged for the
-framework to behave exactly as it did before this feature.
+**An empty `LoadGroup` on the run means "no filter".** Calling the top-level
+pipeline with `LoadGroup = ''` (the default) loads *all* sources, whatever
+their tag. This is what keeps existing deployments working unchanged.
 
-A non-empty `LoadGroup` is an exact match: a run with `LoadGroup = 'NIGHTLY'`
-only picks up sources tagged `NIGHTLY`, never `''` or any other group.
+A non-empty `LoadGroup` on the run is an exact match: a run with
+`LoadGroup = 'NIGHTLY'` only picks up sources tagged `NIGHTLY`. **A source with
+`LoadGroup = ''` is not picked up by such a run.** The filter in every load
+pipeline is `'' = <run LoadGroup> OR LoadGroup = <run LoadGroup>`.
+
+So: give the nightly schedule no group, so it loads everything, and tag only
+the sources that need an extra cadence (for example `INTRADAY`).
 
 ---
 
@@ -68,10 +70,42 @@ EXEC [integration].[sp_UpsertDataSource]
     @LoadGroup = 'NIGHTLY';
 ```
 
-Leave `@LoadGroup` unset (or `''`) for sources that should load on every run,
-regardless of which schedule triggered it.
+Leave `@LoadGroup` unset (or `''`) for sources that only need to load in the
+run without a group (typically the nightly run).
 
-### 2. Create one thin wrapper pipeline per schedule
+### 2. Schedule `PL_FMD_ORCHESTRATION_TEMPLATE`, once per cadence (recommended)
+
+`PL_FMD_ORCHESTRATION_TEMPLATE` runs `PL_FMD_LOAD_ALL` and then the Gold
+pipeline of every business domain (the setup wires those in). It takes a
+`LoadGroup` parameter and passes it to `PL_FMD_LOAD_ALL`.
+
+In the Fabric portal, open the pipeline's **Schedule** and add one schedule
+per cadence, each with its own parameter value:
+
+| Schedule | Cadence (example) | `LoadGroup` |
+|---|---|---|
+| Nightly | daily at 02:00 | *(empty: all sources)* |
+| Intraday | every 2 hours, 08:00–18:00 | `INTRADAY` |
+
+Through the REST API, a schedule takes the parameter as
+`"executionData": {"parameters": {"LoadGroup": "INTRADAY"}}`. The value is
+stored in the item definition (`.schedules`), not in the schedule list that
+`GET …/schedules` returns.
+
+- **Overlap:** the pipeline has `concurrency: 1`. A run that starts while
+  another one is busy waits until it is done, so the nightly and an intraday
+  run never load the same entities at the same time.
+- **Gold runs after every run**, also after an intraday run. On a small
+  capacity, keep that in mind when choosing the intraday cadence.
+- **Promotion:** schedules are part of the item definition, so a
+  Deployment-Pipeline promotion copies them (with their parameters) to the
+  target stage, enabled. *Failure notifications* are **not** copied: add the
+  recipients again in every stage, and check the times.
+
+### 3. Alternative: one thin wrapper pipeline per schedule
+
+These wrappers call `PL_FMD_LOAD_ALL` directly, so they **do not run Gold**,
+and nothing prevents two of them from overlapping. Prefer step 2.
 
 The framework ships two ready-to-use examples of this pattern:
 `PL_FMD_SCHEDULE_NIGHTLY` and `PL_FMD_SCHEDULE_INTRADAY`. Each is a single
@@ -95,13 +129,8 @@ full chain, point the wrapper at `PL_FMD_LOAD_LANDINGZONE` / `_BRONZE` /
 
 `Data_WorkspaceGuid` still has to be passed through as usual.
 
-### 3. Schedule each wrapper independently
-
-In the Fabric portal, open each wrapper pipeline's **Settings → Schedule**
-and configure its own cadence — e.g. `PL_FMD_SCHEDULE_NIGHTLY` daily at
-02:00, `PL_FMD_SCHEDULE_INTRADAY` every 2 hours. Each schedule triggers its
-own wrapper with its own baked-in `LoadGroup`, so the two cadences never
-interfere with each other.
+Schedule each wrapper on its own pipeline. Note that `PL_FMD_SCHEDULE_NIGHTLY`
+passes `NIGHTLY`, so it skips every source with `LoadGroup = ''`.
 
 ---
 
@@ -112,13 +141,13 @@ interfere with each other.
   group's sources — it does not re-touch the nightly sources' Bronze/Silver
   tables. This keeps a frequent schedule cheap and keeps the audit log
   readable per run.
-- **Gold is untouched by this feature.** If a Gold model joins a nightly
-  source with an intraday one, decide separately whether Gold refreshes per
-  group or once after the nightly run — `LoadGroup` only reaches through
-  Landingzone/Bronze/Silver.
-- **Groups can overlap in time.** Two schedules with different groups share
-  the same Spark capacity (`NB_FMD_PROCESSING_PARALLEL_MAIN`); staggering
-  cadences avoids them competing for the same pool.
+- **Gold is not filtered by `LoadGroup`.** Through
+  `PL_FMD_ORCHESTRATION_TEMPLATE`, every run refreshes Gold for all business
+  domains, after `PL_FMD_LOAD_ALL` succeeded.
+- **Overlap.** On `PL_FMD_ORCHESTRATION_TEMPLATE`, `concurrency: 1` queues a
+  second run. With the wrapper pipelines, two groups can run at the same time
+  and share the same Spark capacity (`NB_FMD_PROCESSING_PARALLEL_MAIN`);
+  stagger their cadences.
 - **A source not yet tagged behaves exactly as before.** `LoadGroup = ''` is
   the column default, so upgrading the framework requires no metadata
   migration for existing sources.
