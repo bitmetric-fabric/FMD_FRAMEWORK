@@ -195,7 +195,7 @@ All notebooks live in `src/NB_*.Notebook/` and are saved as `notebook-content.py
 
 | Issue | Workaround |
 |---|---|
-| Fabric Admin role needed for domain creation | Set `create_domains = False` in the setup notebook if the executing identity is not a Fabric Admin. |
+| Fabric Admin role needed for domain creation | Fabric domains are only created when `fabric_domains.create: true` is set in `manifest.yaml` (default `false`). Leave it `false` if the executing identity is not a Fabric Admin, or if the tenant's domain layout is not ours to change. |
 | Workspace Identity vs. Service Principal | Workspace Identity is auto-assigned as Contributor; Service Principals must be manually added. Use Object ID from **Enterprise Applications** in Entra ID, not the App Registration Object ID. |
 | Spark session timeout during long deployments | Set Spark session timeout ≥ 1 hour in Workspace Settings → Data Engineering → Jobs. |
 | ODBC driver version | Default is `{ODBC Driver 18 for SQL Server}`. Change `driver` variable in setup notebook if a different driver is installed. |

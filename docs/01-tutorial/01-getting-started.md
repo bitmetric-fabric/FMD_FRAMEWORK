@@ -33,7 +33,7 @@ Follow the steps and you will arrive on either version.
 | | |
 |---|---|
 | A Fabric capacity | An F-SKU or a Trial. It must be **running, not paused**. The run below used a Trial (FTL64). |
-| Fabric Administrator | Only if you want the setup notebook to create a domain. Without it, set `create_domains = False`. |
+| Fabric Administrator | Only if `fabric_domains.create: true` in `manifest.yaml` (default `false`): then the setup notebooks create the Fabric domains and assign the workspaces. |
 | A SQL database slot | A **Trial capacity is limited to three Fabric SQL databases**. FMD creates one. ([Learn](https://learn.microsoft.com/fabric/database/sql/limitations#database-level-limitations)) |
 | `NB_SETUP_FMD.ipynb` | From the framework's `setup/` folder. |
 

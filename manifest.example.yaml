@@ -26,6 +26,16 @@ naming:
     - SALES
     # - HR
 
+# --- Fabric-domeinen ---------------------------------------------------------
+# Fabric-domeinen (Admin portal -> Domains) zijn tenant-breed. Met create: true
+# maakt NB_SETUP_FMD het domein naming.domain_name aan en NB_SETUP_BUSINESS_DOMAINS
+# een domein per business domain. Daarna hangen ze de workspaces eraan en zetten ze
+# de beschrijving en de contributors, ook van een bestaand domein met die naam.
+# Vraagt de rol Fabric Administrator. Laat op false tenzij de klant dat in de
+# intake kiest: de domeinindeling is een beslissing van de beheerder van de tenant.
+fabric_domains:
+  create: false
+
 # --- Omgevingen --------------------------------------------------------------
 # Vier value sets worden altijd meegeleverd; hier bepaal je welke actief zijn
 # (triage V4). Een klant met DTAP zet Acceptance erbij, een klant met DTP niet.
