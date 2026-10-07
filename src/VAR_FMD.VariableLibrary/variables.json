@@ -18,6 +18,12 @@
       "note": "",
       "type": "String",
       "value": ""
+    },
+    {
+      "name": "snowflake_storage_integration",
+      "note": "Naam van de Snowflake storage integration naar OneLake (ADR-014). Alleen nodig bij Snowflake-bronnen.",
+      "type": "String",
+      "value": "FMD_ONELAKE"
     }
   ]
 }

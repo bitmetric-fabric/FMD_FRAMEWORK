@@ -24,6 +24,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [011](011-ontwikkelflow-repo-per-workspace.md) | Eén repository per workspace, met generieke developer-workspaces | Accepted |
 | [012](012-promotie-via-deployment-pipelines.md) | Promotie via Deployment Pipelines | Accepted |
 | [013](013-configdb-schema-via-dacpac.md) | Schema van de configuratiedatabase via de dacpac | Accepted |
+| [014](014-snowflake-schrijft-landing-zone.md) | Snowflake schrijft de landing zone zelf, via een storage integration | Proposed |
 
 ## Openstaande triggers
 
