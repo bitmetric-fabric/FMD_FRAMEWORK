@@ -40,6 +40,8 @@ import notebookutils
 
 #Shortcut location parameters
 
+# Each entry is a table name (uses SourceSchema / Shortcut_TargetSchema) or a (schema, table) pair.
+# A pair uses that schema in both Gold and Silver, for sources that land in several Silver schemas.
 ShortcutNames=['Sales_BuyingGroups','Sales_CustomerCategories','Sales_InvoiceLines','Sales_Invoices','Sales_Orders','Sales_OrderLines','Sales_vCustomers','Warehouse_PackageTypes','Warehouse_StockItems' ]         #Tablenames of the to be created shortcuts, same name will be used for destination
 
 ShortcutSettings=notebookutils.variableLibrary.getLibrary("VAR_GOLD_SHORTCUTS_FMD")
@@ -88,9 +90,12 @@ def create_shortcut(path:str, name:str, target:dict, workspace_id:str ,lakehouse
 # CELL ********************
 
 failed = []
-for ShortcutName in ShortcutNames:
-    oneLake_target = {    "oneLake": {        "workspaceId": ShortcutSettings.Shortcut_TargetWorkspaceId,        "itemId":      ShortcutSettings.Shortcut_TargetLakehouseId,"path": "Tables/"+ShortcutSettings.Shortcut_TargetSchema+"/"+ShortcutName   }}
-    if not create_shortcut(path="Tables/"+ShortcutSettings.SourceSchema, name=ShortcutName, target=oneLake_target,workspace_id=ShortcutSettings.SourceWorkspaceId,lakehouse_id=ShortcutSettings.SourceLakehouseId, conflict_policy="CreateOrOverwrite"):
+for entry in ShortcutNames:
+    schema, ShortcutName = entry if isinstance(entry, (tuple, list)) else (None, entry)
+    gold_schema = schema or ShortcutSettings.SourceSchema
+    silver_schema = schema or ShortcutSettings.Shortcut_TargetSchema
+    oneLake_target = {    "oneLake": {        "workspaceId": ShortcutSettings.Shortcut_TargetWorkspaceId,        "itemId":      ShortcutSettings.Shortcut_TargetLakehouseId,"path": "Tables/"+silver_schema+"/"+ShortcutName   }}
+    if not create_shortcut(path="Tables/"+gold_schema, name=ShortcutName, target=oneLake_target,workspace_id=ShortcutSettings.SourceWorkspaceId,lakehouse_id=ShortcutSettings.SourceLakehouseId, conflict_policy="CreateOrOverwrite"):
         failed.append(ShortcutName)
 
 # A failed shortcut (for example a table name in ShortcutNames that does not exist in Silver) must fail the run.
