@@ -1,0 +1,27 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "type": "TridentNotebook",
+        "typeProperties": {
+          "notebookId": "ad02ab92-d966-41cb-8fbd-cff6b8badc3d",
+          "workspaceId": "00000000-0000-0000-0000-000000000000",
+          "parameters": {}
+        },
+        "externalReferences": {
+          "connection": "5929775e-aff1-430c-b56e-f855d0bc63b8"
+        },
+        "policy": {
+          "timeout": "0.04:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false
+        },
+        "name": "NB_FMD_MAINTENANCE",
+        "description": "Ruimt verwerkte leveringen in de landing zone op en draait VACUUM op Bronze en Silver (15_opslagbeheer). Eigen schema, los van de loads.",
+        "dependsOn": []
+      }
+    ]
+  }
+}

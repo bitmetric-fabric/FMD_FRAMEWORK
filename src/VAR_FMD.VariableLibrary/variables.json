@@ -24,6 +24,12 @@
       "note": "Naam van de Snowflake storage integration naar OneLake (ADR-014). Alleen nodig bij Snowflake-bronnen.",
       "type": "String",
       "value": "FMD_ONELAKE"
+    },
+    {
+      "name": "landingzone_retention_days",
+      "note": "Bewaartermijn in dagen voor verwerkte leveringen in de landing zone (NB_FMD_MAINTENANCE). Minimaal 1.",
+      "type": "Integer",
+      "value": 30
     }
   ]
 }
