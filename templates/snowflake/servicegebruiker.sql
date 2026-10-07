@@ -7,8 +7,9 @@
 -- Sleutelpaar maken (lokaal; de private sleutel gaat naar Key Vault en de Fabric-connectie, nooit naar git):
 --   openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out fmd_rsa_key.p8 -nocrypt
 --   openssl rsa -in fmd_rsa_key.p8 -pubout -out fmd_rsa_key.pub
--- Zonder wachtwoordzin (-nocrypt): een met OpenSSL 3 versleutelde sleutel (-v2 des3) plus passphrase
--- gaf in de Fabric-connectie "Unable to connect" (trial 2026-10-06). De sleutel staat alleen in Key Vault.
+-- Zonder wachtwoordzin (-nocrypt): Fabric accepteert geen versleutelde sleutel. Getest met -v2 des3 en
+-- -v2 aes-256-cbc, wachtwoordzin via Key Vault en ingetypt: "Unable to connect" (trial 2026-10-07).
+-- De sleutel staat daarom alleen in Key Vault.
 --
 -- - Gebruik het warehouse dat de klant al heeft: dan start er geen extra warehouse, en
 --   AUTO_SUSPEND en de resource monitor van dat warehouse blijven gelden.

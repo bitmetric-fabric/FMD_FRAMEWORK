@@ -100,8 +100,9 @@ Snowflake kan zelf parquet schrijven naar OneLake, als het daar mag schrijven vi
 - **Tijdstempels** komen als `timestamp` met het label UTC; de waarde is de tijd uit
   Snowflake, niet omgerekend. Precisie boven milliseconden is niet getest.
 - **Inlog.** De Fabric-connectie gebruikt een sleutelpaar zonder wachtwoordzin, met de
-  private sleutel in Key Vault. Een met OpenSSL 3 versleutelde sleutel plus wachtwoordzin
-  gaf "Unable to connect" (2026-10-06).
+  private sleutel alleen in Key Vault. Een versleutelde sleutel accepteert Fabric niet:
+  3DES en AES-256-CBC (het formaat van Snowflake), met de wachtwoordzin via Key Vault en
+  ingetypt, gaven "Unable to connect" zonder inlogpoging in Snowflake (2026-10-07).
 - **Watermarkkolom** moet `DATE` of `TIMESTAMP` zijn; een numerieke kolom faalt.
 
 ## Test
