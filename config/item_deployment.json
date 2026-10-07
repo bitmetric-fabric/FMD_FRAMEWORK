@@ -5,6 +5,11 @@
         "type": "Notebook"
     },
     {
+        "name": "NB_FMD_MAINTENANCE.Notebook",
+        "id": "ad02ab92-d966-41cb-8fbd-cff6b8badc3d",
+        "type": "Notebook"
+    },
+    {
         "name": "NB_FMD_LOAD_BRONZE_SILVER.Notebook",
         "id": "556fd16b-ed49-4f7b-83a8-a79252ee54f9",
         "type": "Notebook"
@@ -112,6 +117,11 @@
     {
         "name": "PL_FMD_LDZ_COMMAND_SNOWFLAKE.DataPipeline",
         "id": "74968179-1b65-4b30-b917-91d7d8606a74",
+        "type": "DataPipeline"
+    },
+    {
+        "name": "PL_FMD_MAINTENANCE.DataPipeline",
+        "id": "1c32755b-03db-43e5-b79e-52e81c79c1bc",
         "type": "DataPipeline"
     },
     {
