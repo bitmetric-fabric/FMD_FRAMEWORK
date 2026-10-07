@@ -105,6 +105,16 @@
         "type": "DataPipeline"
     },
     {
+        "name": "PL_FMD_LDZ_COPY_FROM_SNOWFLAKE_01.DataPipeline",
+        "id": "9b337d99-e49e-44d7-a532-ca51ad133543",
+        "type": "DataPipeline"
+    },
+    {
+        "name": "PL_FMD_LDZ_COMMAND_SNOWFLAKE.DataPipeline",
+        "id": "74968179-1b65-4b30-b917-91d7d8606a74",
+        "type": "DataPipeline"
+    },
+    {
         "name": "PL_FMD_LDZ_COMMAND_ADLS.DataPipeline",
         "id": "a5918d08-0395-45ba-9c8c-f53d78b465eb",
         "type": "DataPipeline"

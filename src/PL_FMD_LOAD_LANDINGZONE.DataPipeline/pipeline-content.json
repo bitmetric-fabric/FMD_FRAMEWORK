@@ -377,6 +377,46 @@
                         "dependsOn": []
                       }
                     ]
+                  },
+                  {
+                    "value": "SNOWFLAKE",
+                    "activities": [
+                      {
+                        "type": "InvokePipeline",
+                        "typeProperties": {
+                          "parameters": {
+                            "ConnectionType": {
+                              "value": "@toUpper(item().ConnectionType)",
+                              "type": "Expression"
+                            },
+                            "Data_WorkspaceGuid": {
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
+                              "type": "Expression"
+                            },
+                            "LoadGroup": {
+                              "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            }
+                          },
+                          "waitOnCompletion": true,
+                          "workspaceId": "00000000-0000-0000-0000-000000000000",
+                          "pipelineId": "74968179-1b65-4b30-b917-91d7d8606a74",
+                          "operationType": "InvokeFabricPipeline"
+                        },
+                        "externalReferences": {
+                          "connection": "6d8146c6-a438-47df-94e2-540c552eb6d7"
+                        },
+                        "policy": {
+                          "timeout": "0.12:00:00",
+                          "retry": 0,
+                          "retryIntervalInSeconds": 30,
+                          "secureInput": false,
+                          "secureOutput": false
+                        },
+                        "name": "PL_FMD_LDZ_COMMAND_SNOWFLAKE",
+                        "dependsOn": []
+                      }
+                    ]
                   }
                 ],
                 "defaultActivities": [
