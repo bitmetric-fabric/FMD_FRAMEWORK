@@ -38,6 +38,7 @@
               },
               "description": "Snowflake schrijft de entiteit als parquet in de landing zone (COPY INTO via storage integration, zie ADR-014).",
               "typeProperties": {
+                "connectionVersion": "1.1",
                 "scripts": [
                   {
                     "type": "Query",
@@ -50,7 +51,8 @@
                 "scriptBlockExecutionTimeout": "02:00:00"
               },
               "externalReferences": {
-                "connection": "@item().ConnectionGuid"
+                "connection": "@item().ConnectionGuid",
+                "connectionType": "Snowflake"
               }
             },
             {
