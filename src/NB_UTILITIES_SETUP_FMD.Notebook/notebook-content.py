@@ -710,8 +710,12 @@ def stage_value_overrides(parts, stage_values):
 # Item deployment
 # -------------------------------
 # Notebooks the customer fills in. Created once in every stage (so the deployment pipeline pairs them),
-# never overwritten by a re-run of the setup.
-CUSTOMER_OWNED_NOTEBOOKS = {"NB_FMD_CUSTOM_DQ_CLEANSING.Notebook"}
+# never overwritten by a re-run of the setup. The Gold notebooks of a business domain hold the customer's
+# Gold code, so a re-run (framework fix, schema change) must not reset them to the template in D, T and P.
+# Consequence: a later framework change to one of these templates does not reach an existing installation;
+# apply it by hand in Dev and promote it. The dry-run cells of both setup notebooks repeat this list.
+CUSTOMER_OWNED_NOTEBOOKS = {"NB_FMD_CUSTOM_DQ_CLEANSING.Notebook",
+                            "NB_LOAD_GOLD.Notebook", "NB_MLV_EXAMPLE.Notebook", "NB_CREATE_SHORTCUTS.Notebook"}
 
 def fab_import(command):
     """Runs a fab import and returns its output as the task status, prefixed with 'failed: ' when fab
