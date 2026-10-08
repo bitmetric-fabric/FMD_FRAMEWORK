@@ -406,6 +406,31 @@ restore_scope = dict(bd)
 restore_scope["variable_parameters"] = restored
 exec(compile(bd_sources["bd-variable-parameters"], "vp", "exec"), restore_scope)
 
+# update_variable_library may only set the variables listed in config/item_deployment*.json. Variables
+# that exist only in variables.json (VAR_FMD: snowflake_storage_integration, landingzone_retention_days)
+# must survive a setup run; replacing the whole list dropped them (final check 2026-10-08, E-B1).
+var_fmd_declared = next(
+    item for item in json.loads((REPO / "config/item_deployment.json").read_text(encoding="utf-8"))
+    if item["name"] == "VAR_FMD.VariableLibrary"
+)["variables"]
+var_fmd_src = json.loads((REPO / "src/VAR_FMD.VariableLibrary/variables.json").read_text(encoding="utf-8"))["variables"]
+var_fmd_lib = Path(tempfile.mkdtemp()) / "lib"
+shutil.copytree(REPO / "src/VAR_FMD.VariableLibrary", var_fmd_lib)
+var_fmd_scope = {"json": json, "variable_parameters": dict(base_parameters)}
+exec(compile(uvl_source, "uvl-var-fmd", "exec"), var_fmd_scope)
+var_fmd_scope["update_variable_library"](str(var_fmd_lib), var_fmd_declared)
+var_fmd_out = {v["name"]: v for v in json.loads((var_fmd_lib / "variables.json").read_text(encoding="utf-8"))["variables"]}
+shutil.rmtree(var_fmd_lib.parent, ignore_errors=True)
+check("VAR_FMD: every variable from variables.json survives update_variable_library",
+      sorted(var_fmd_out) == sorted(v["name"] for v in var_fmd_src), sorted(var_fmd_out))
+check("VAR_FMD: listed variables get the value from variable_parameters",
+      all(var_fmd_out[v["name"]]["value"] == base_parameters[v["source"]] for v in var_fmd_declared),
+      {v["name"]: var_fmd_out.get(v["name"], {}).get("value") for v in var_fmd_declared})
+check("VAR_FMD: unlisted variables keep their value from variables.json",
+      all(var_fmd_out[v["name"]]["value"] == v["value"] for v in var_fmd_src
+          if v["name"] not in {d["name"] for d in var_fmd_declared}),
+      [(v["name"], v["value"]) for v in var_fmd_src])
+
 check("herstelcel vult precies de zes gedeclareerde bronnen",
       sorted(k for k in restored if k not in base_parameters),
       sorted(v["source"] for v in declared))
@@ -610,14 +635,24 @@ d_start = utilities_source.index("CUSTOMER_OWNED_NOTEBOOKS = ")
 d_end = utilities_source.index("# METADATA", d_start)
 
 
-def run_deploy(name, exists):
-    commands, mapping = [], []
+def run_deploy(name, exists, import_rc=0):
+    commands, mapping, tasks = [], [], []
+
+    def fab(c, **k):
+        commands.append(c)
+        out = "* true" if exists and c.startswith("exists") else "ok"
+        if k.get("raw_output"):  # fab_import keeps the exit code (#39)
+            failed = c.startswith("import") and import_rc
+            return types.SimpleNamespace(returncode=import_rc if failed else 0,
+                                         stdout="x import: [Error] boom" if failed else out, stderr="")
+        return out
+
     s = {"time": lambda: 0, "copy_to_tmp": lambda n: "/tmp/x", "get_workspace_id_by_name": lambda w: "ws",
          "assign_item_description": lambda *a: None, "assign_item_to_folder": lambda **k: None,
-         "get_item_id": lambda *a: "nieuw",
-         "run_fab_command": lambda c, **k: commands.append(c) or ("* true" if exists and c.startswith("exists") else "ok")}
+         "get_item_id": lambda *a: "nieuw", "run_fab_command": fab}
     exec(compile(utilities_source[d_start:d_end], "deploy_item", "exec"), s)
-    s["deploy_item"]("WS CODE (D)", name, mapping, "development", [], False, {"id": "oud"})
+    s["deploy_item"]("WS CODE (D)", name, mapping, "development", tasks, False, {"id": "oud"})
+    run_deploy.tasks = tasks
     return commands, mapping
 
 
@@ -631,6 +666,15 @@ check("nieuw klantnotebook: wordt geïmporteerd", any(c.startswith("import") for
 cmds, _ = run_deploy("NB_FMD_DQ_CLEANSING.Notebook", exists=True)
 check("frameworknotebook: altijd geïmporteerd, zonder exists-check",
       bool(cmds) and cmds[0].startswith("import"), cmds)
+for gold in ("NB_LOAD_GOLD.Notebook", "NB_MLV_EXAMPLE.Notebook", "NB_CREATE_SHORTCUTS.Notebook"):
+    cmds, _ = run_deploy(gold, exists=True)
+    check(f"existing Gold notebook {gold}: not imported (#47)", not any(c.startswith("import") for c in cmds), cmds)
+run_deploy("NB_FMD_DQ_CLEANSING.Notebook", exists=True, import_rc=1)
+check("failed import: task status starts with 'failed: ' (#39)",
+      str(run_deploy.tasks[-1]["status"]).startswith("failed: "), run_deploy.tasks)
+run_deploy("NB_FMD_DQ_CLEANSING.Notebook", exists=True)
+check("successful import: task status does not start with 'failed'",
+      not str(run_deploy.tasks[-1]["status"]).startswith("failed"), run_deploy.tasks)
 
 # --- aanhaken aan de orchestratie: een mislukking wordt een taak die de setup rood maakt ---
 print("\n=== wire_domain_into_orchestration: status ===")

@@ -302,7 +302,10 @@ def update_variable_library(folder_path, it_variables):
 
     with open(variable_file, "r", encoding="utf-8") as file:
         content = json.load(file)
-    content["variables"] = variables_table
+    # Only the listed variables get a value from the setup. Variables that exist only in variables.json
+    # (e.g. VAR_FMD.snowflake_storage_integration) keep their definition; replacing the whole list dropped them.
+    updates = {v["name"]: v for v in variables_table}
+    content["variables"] = [updates.pop(v["name"], v) for v in content.get("variables", [])] + list(updates.values())
     with open(variable_file, "w", encoding="utf-8") as file:
         json.dump(content, file, indent=4)
 
