@@ -56,8 +56,12 @@ INSERT INTO @Entities ([Source],[SourceSchema],[SourceName],[TargetSchema],[Targ
 DECLARE @WsGuid UNIQUEIDENTIFIER = (SELECT [WorkspaceGuid] FROM [integration].[Workspace] WHERE [Name] = @DataWorkspace);
 IF @WsGuid IS NULL OR NOT EXISTS (SELECT 1 FROM [integration].[Lakehouse] WHERE [WorkspaceGuid] = @WsGuid AND [Name] = 'LH_DATA_LANDINGZONE')
     THROW 50002, 'Workspace or LH_DATA_LANDINGZONE not registered: run the setup for this environment first.', 1;
-IF LEN(@Environment) NOT BETWEEN 1 AND 5 OR @Environment = '*'
+IF @Environment NOT IN ('D', 'T', 'A', 'P')
     THROW 50002, 'Pass the environment short with -v Environment=<D|T|A|P>.', 1;
+-- The environment must match the DATA workspace: suffix (D)/(T)/(A), no suffix in production.
+-- Otherwise e.g. a Test workspace would be registered with the production binding.
+IF @Environment <> CASE WHEN @DataWorkspace LIKE N'% ([DTA])' THEN SUBSTRING(@DataWorkspace, LEN(@DataWorkspace) - 1, 1) ELSE 'P' END
+    THROW 50002, 'Environment does not match the suffix of DataWorkspace: (D)/(T)/(A), or no suffix for P.', 1;
 
 -- The binding that applies in this environment: its own row, otherwise the '*' row.
 DECLARE @Bound TABLE ([Source] NVARCHAR(100), [ConnectionName] NVARCHAR(200), [DataSourceName] NVARCHAR(100), [Namespace] VARCHAR(100),
@@ -71,7 +75,10 @@ WHERE s.[Environment] = @Environment
 DECLARE @Error NVARCHAR(2000);
 SELECT @Error = STRING_AGG(CONVERT(NVARCHAR(MAX), CONCAT([Item], ': ', [Reason])), '; ')
 FROM (
-    SELECT CONCAT(MIN([Environment]), '/', [Source]) AS [Item], N'source bound twice for the same environment' AS [Reason]
+    SELECT CONCAT([Environment], '/', [Source]) AS [Item], N'unknown environment; use *, D, T, A or P' AS [Reason]
+    FROM @Sources WHERE [Environment] NOT IN ('*', 'D', 'T', 'A', 'P')
+    UNION ALL
+    SELECT CONCAT(MIN([Environment]), '/', [Source]), N'source bound twice for the same environment'
     FROM @Sources GROUP BY [Environment], [Source] HAVING COUNT(*) > 1
     UNION ALL
     SELECT [Source], N'Namespace differs between environments; it must be the same, or Silver and Gold get other table names'
