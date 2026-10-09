@@ -29,6 +29,7 @@ BEGIN
                 ',"BronzeLayerEntityId" : ', '"', LOWER(CONVERT(NVARCHAR(36), [BronzeLayerEntityId])), '"',
                 ',"SilverLayerEntityId": ', '"', LOWER(CONVERT(NVARCHAR(36), EntityId)), '"',
                 ',"DataSourceNamespace" : ', '"', LOWER(CONVERT(NVARCHAR(30), [DataSourceNamespace])), '"',
+                ',"IsHistorized" : ', '"', CASE WHEN [IsHistorized] = 1 THEN 'True' ELSE 'False' END, '"',
                 ',"cleansing_rules" : ', '"', REPLACE(REPLACE([CleansingRules], '\', '\\'), '"', '\"'), '"',
                 '}}'
             ),
