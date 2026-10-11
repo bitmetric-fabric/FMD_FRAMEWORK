@@ -93,8 +93,23 @@ FROM (
     SELECT b.[Source], N'connection ' + b.[ConnectionName] + N' not registered'
     FROM @Bound b WHERE NOT EXISTS (SELECT 1 FROM [integration].[Connection] c WHERE c.[Name] = b.[ConnectionName])
     UNION ALL
-    SELECT MIN(b.[Source]), N'data source ' + b.[DataSourceName] + N' has more than one LoadGroup in this environment'
-    FROM @Bound b GROUP BY b.[ConnectionName], b.[DataSourceName], b.[DataSourceType] HAVING COUNT(DISTINCT b.[LoadGroup]) > 1
+    -- One DataSource row (connection + name + type) is shared by every environment that binds to it, and LoadGroup
+    -- lives on that row: different LoadGroups would make the last run win, also for the other environments.
+    SELECT MIN(s.[Source]), N'data source ' + s.[DataSourceName] + N' has more than one LoadGroup in @Sources; '
+         + N'environments that bind to the same connection, database and type share one LoadGroup'
+    FROM @Sources s GROUP BY s.[ConnectionName], s.[DataSourceName], s.[DataSourceType] HAVING COUNT(DISTINCT ISNULL(s.[LoadGroup], '')) > 1
+    UNION ALL
+    -- The pipelines silently skip a source whose connection type does not fit its DataSourceType.
+    SELECT b.[Source], N'DataSourceType ' + b.[DataSourceType] + N' does not fit the type of connection ' + b.[ConnectionName]
+    FROM @Bound b
+    WHERE EXISTS (SELECT 1 FROM [integration].[Connection] c WHERE c.[Name] = b.[ConnectionName])
+      AND NOT EXISTS (SELECT 1 FROM [integration].[Connection] c
+                      JOIN (VALUES ('SQL', 'ASQL_01'), ('SQL', 'ASQL_02'), ('AZURESQLMI', 'SQLMI_01'), ('ORACLE', 'ORACLE_01'),
+                                   ('ADLS', 'ADLS_01'), ('ONELAKE', 'ONELAKE_TABLES_01'), ('ONELAKE', 'ONELAKE_FILES_01'),
+                                   ('SFTP', 'SFTP_01'), ('FTP', 'FTP_01'), ('ADF', 'ADF'), ('NOTEBOOK', 'NOTEBOOK'),
+                                   ('SNOWFLAKE', 'SNOWFLAKE_01')) t([ConnectionType], [DataSourceType])
+                        ON t.[ConnectionType] = c.[Type]
+                      WHERE c.[Name] = b.[ConnectionName] AND t.[DataSourceType] = b.[DataSourceType])
     UNION ALL
     SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'source ' + e.[Source] + N' has no binding for environment ' + @Environment
     FROM @Entities e WHERE NOT EXISTS (SELECT 1 FROM @Bound b WHERE b.[Source] = e.[Source])
