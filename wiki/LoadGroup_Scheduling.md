@@ -16,10 +16,17 @@ The "which sources" decision lives in the metadata (a column on
 `integration.DataSource`), so a schedule only has to say which group it runs.
 
 A Fabric pipeline can have up to 20 schedules, and each schedule can pass its
-own parameter values. `PL_FMD_ORCHESTRATION_TEMPLATE` takes a `LoadGroup`
-parameter, so one pipeline carries all schedules: for example a nightly one
+own parameter values. The schedule pipeline of an environment
+(`PL_FMD_SCHEDULE_<short>`, see below) takes a `LoadGroup` parameter, so one
+pipeline carries all schedules of that environment: for example a nightly one
 without a group and an intraday one with `LoadGroup = INTRADAY`
 ([Run, schedule, or use events to trigger a pipeline](https://learn.microsoft.com/en-us/fabric/data-factory/pipeline-runs)).
+
+The schedules do not sit on the pipelines in the CODE workspaces. A schedule is
+part of the item definition, so a Deployment-Pipeline promotion would copy it,
+enabled and with the times of the source stage, to the next stage. The schedule
+pipelines live in the CONFIG workspace instead, which is in no deployment
+pipeline.
 
 An earlier version of this page said schedules could not carry parameters for
 Data Pipelines. That is no longer true: a schedule created with
@@ -73,64 +80,78 @@ EXEC [integration].[sp_UpsertDataSource]
 Leave `@LoadGroup` unset (or `''`) for sources that only need to load in the
 run without a group (typically the nightly run).
 
-### 2. Schedule `PL_FMD_ORCHESTRATION_TEMPLATE`, once per cadence (recommended)
+### 2. Schedule `PL_FMD_SCHEDULE_<short>` in the CONFIG workspace, once per cadence
+
+The setup creates one schedule pipeline per environment in the CONFIG
+workspace, in the folder `SchedulePipelines`: `PL_FMD_SCHEDULE_D`, `_T` and `_P` for
+Development, Test and Production. It creates each one once and never
+overwrites it, so a setup update leaves your schedules and recipients alone.
+
+A schedule pipeline has two parameters and one Switch on `Target`:
+
+| `Target` | Invokes (in the CODE workspace of that environment) |
+|---|---|
+| `LOAD` (default) | `PL_FMD_ORCHESTRATION_TEMPLATE`, with `LoadGroup` |
+| `MAINTENANCE` | `PL_FMD_MAINTENANCE` |
+| anything else | fails with `UnknownTarget`, so a typo shows as a failed run |
 
 `PL_FMD_ORCHESTRATION_TEMPLATE` runs `PL_FMD_LOAD_ALL` and then the Gold
-pipeline of every business domain (the setup wires those in). It takes a
-`LoadGroup` parameter and passes it to `PL_FMD_LOAD_ALL`.
+pipeline of every business domain (the setup wires those in). The schedule
+pipeline waits for the result, so a failure in the orchestration, in Gold or
+in the maintenance notebook turns the schedule pipeline red.
 
-In the Fabric portal, open the pipeline's **Schedule** and add one schedule
-per cadence, each with its own parameter value:
+In the Fabric portal, open the schedule pipeline's **Schedule** and add one
+schedule per cadence, each with its own parameter values:
 
-| Schedule | Cadence (example) | `LoadGroup` |
-|---|---|---|
-| Nightly | daily at 02:00 | *(empty: all sources)* |
-| Intraday | every 2 hours, 08:00–18:00 | `INTRADAY` |
+| Schedule | Cadence (example) | `Target` | `LoadGroup` |
+|---|---|---|---|
+| Nightly | daily at 02:00 | `LOAD` | *(empty: all sources)* |
+| Intraday | every 2 hours, 08:00–18:00 | `LOAD` | `INTRADAY` |
+| Maintenance | Sunday at 03:00 | `MAINTENANCE` | |
 
-Through the REST API, a schedule takes the parameter as
-`"executionData": {"parameters": {"LoadGroup": "INTRADAY"}}`. The value is
-stored in the item definition (`.schedules`), not in the schedule list that
-`GET …/schedules` returns.
+Through the REST API, a schedule takes the parameters as
+`"executionData": {"parameters": {"Target": "LOAD", "LoadGroup": "INTRADAY"}}`.
+The value is stored in the item definition (`.schedules`), not in the schedule
+list that `GET …/schedules` returns.
 
-- **Overlap:** the pipeline has `concurrency: 1`. A run that starts while
-  another one is busy waits until it is done, so the nightly and an intraday
-  run never load the same entities at the same time.
-- **Gold runs after every run**, also after an intraday run. On a small
+Set **Failure notifications** on the schedule pipeline, once per environment.
+They only cover scheduled runs and can only be set in the portal. Leave them
+empty in Development to avoid mail for a failed development run.
+
+- **Overlap:** the schedule pipeline has `concurrency: 1`, and so does the
+  orchestration. A run that starts while another one is busy waits until it is
+  done, so the nightly and an intraday run never load the same entities at the
+  same time.
+- **Gold runs after every `LOAD` run**, also after an intraday run. On a small
   capacity, keep that in mind when choosing the intraday cadence.
-- **Promotion:** schedules are part of the item definition, so a
-  Deployment-Pipeline promotion copies them (with their parameters) to the
-  target stage, enabled. *Failure notifications* are **not** copied: add the
-  recipients again in every stage, and check the times.
+- **Promotion:** CONFIG is in no deployment pipeline, so a promotion never
+  copies a schedule, its parameters or its recipients. Each environment keeps
+  its own times.
+- **Which source is loaded** is not decided here. The orchestration in each
+  CODE workspace loads the DATA workspace of its own environment (via
+  `VAR_CONFIG_FMD`, with the active value set).
+- **Not in git.** The schedules live in the CONFIG workspace, which is not
+  connected to git. Write the times, `Target` and `LoadGroup` values and
+  recipients down in the implementation plan of the customer.
+- **If an item is re-created.** The schedule pipeline refers to the CODE
+  workspace and to the orchestration and maintenance pipelines by ID. If one
+  of those gets a new ID (a re-created workspace or pipeline), update the
+  schedule pipeline, or delete it and run the setup again to create it anew.
+  Deleting it also deletes its schedules and recipients.
 
-### 3. Alternative: one thin wrapper pipeline per schedule
+### 3. Existing installations: schedules on the pipelines in CODE
 
-These wrappers call `PL_FMD_LOAD_ALL` directly, so they **do not run Gold**,
-and nothing prevents two of them from overlapping. Prefer step 2.
+Installations from before the schedule pipelines have their schedules on
+`PL_FMD_ORCHESTRATION_TEMPLATE` and `PL_FMD_MAINTENANCE` in the CODE
+workspaces, and possibly the wrapper pipelines `PL_FMD_SCHEDULE_NIGHTLY` and
+`PL_FMD_SCHEDULE_INTRADAY`. The setup does not remove them. They keep working,
+with the drawbacks described above: a promotion copies the schedules, enabled,
+to the next stage, without the recipients of the failure notifications.
 
-The framework ships two ready-to-use examples of this pattern:
-`PL_FMD_SCHEDULE_NIGHTLY` and `PL_FMD_SCHEDULE_INTRADAY`. Each is a single
-`InvokePipeline` activity calling `PL_FMD_LOAD_ALL` with `LoadGroup` hard-coded
-to a literal:
-
-| Wrapper pipeline | Invokes | `LoadGroup` |
-|---|---|---|
-| `PL_FMD_SCHEDULE_NIGHTLY` | `PL_FMD_LOAD_ALL` | `"NIGHTLY"` |
-| `PL_FMD_SCHEDULE_INTRADAY` | `PL_FMD_LOAD_ALL` | `"INTRADAY"` |
-
-Rename or duplicate these for whatever group names and cadences your
-implementation actually needs — `NIGHTLY`/`INTRADAY` are examples, not
-reserved values. A new one is a copy-paste of the folder plus one entry in
-`config/item_deployment.json` placed after `PL_FMD_LOAD_ALL`'s entry (so its
-real object ID is already known when the wrapper's placeholder reference to
-it gets resolved at deploy time) — the same recipe as any other new pipeline
-entering the framework. If you only need one layer filtered rather than the
-full chain, point the wrapper at `PL_FMD_LOAD_LANDINGZONE` / `_BRONZE` /
-`_SILVER` instead.
-
-`Data_WorkspaceGuid` still has to be passed through as usual.
-
-Schedule each wrapper on its own pipeline. Note that `PL_FMD_SCHEDULE_NIGHTLY`
-passes `NIGHTLY`, so it skips every source with `LoadGroup = ''`.
+To move over, add the schedules to the new schedule pipelines and delete them
+from the old pipelines. The wrappers call `PL_FMD_LOAD_ALL` directly, so they
+do not run Gold, and `PL_FMD_SCHEDULE_NIGHTLY` passes `NIGHTLY`, so it skips
+every source with `LoadGroup = ''`.
 
 ---
 
@@ -144,10 +165,11 @@ passes `NIGHTLY`, so it skips every source with `LoadGroup = ''`.
 - **Gold is not filtered by `LoadGroup`.** Through
   `PL_FMD_ORCHESTRATION_TEMPLATE`, every run refreshes Gold for all business
   domains, after `PL_FMD_LOAD_ALL` succeeded.
-- **Overlap.** On `PL_FMD_ORCHESTRATION_TEMPLATE`, `concurrency: 1` queues a
-  second run. With the wrapper pipelines, two groups can run at the same time
-  and share the same Spark capacity (`NB_FMD_PROCESSING_PARALLEL_MAIN`);
-  stagger their cadences.
+- **Overlap.** On the schedule pipeline and on
+  `PL_FMD_ORCHESTRATION_TEMPLATE`, `concurrency: 1` queues a second run. Two
+  runs started directly on `PL_FMD_LOAD_ALL` can run at the same time and
+  share the same Spark capacity (`NB_FMD_PROCESSING_PARALLEL_MAIN`); stagger
+  their cadences.
 - **A source not yet tagged behaves exactly as before.** `LoadGroup = ''` is
   the column default, so upgrading the framework requires no metadata
   migration for existing sources.

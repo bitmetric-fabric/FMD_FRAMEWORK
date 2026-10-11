@@ -27,6 +27,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [014](014-snowflake-schrijft-landing-zone.md) | Snowflake schrijft de landing zone zelf, via een storage integration | Proposed |
 | [015](015-opslagbeheer.md) | Opslagbeheer: landing zone opruimen op de wachtrij, wekelijks VACUUM | Accepted |
 | [016](016-historie-in-silver-per-tabel.md) | Historie in Silver per tabel instelbaar | Accepted |
+| [017](017-schedules-in-config-workspace.md) | Schedules op een plan-pipeline in de CONFIG-workspace | Proposed |
 
 ## Openstaande triggers
 
