@@ -1041,6 +1041,97 @@ def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_
     print(f"❌ Failed to wire '{gold_workspace_name}': HTTP {response.status_code} {response.text}")
     return f"failed: HTTP {response.status_code} {response.text}"
 
+SCHEDULE_PIPELINE_FOLDER = "SchedulePipelines"
+
+def schedule_pipeline_definition(code_workspace_id, orchestration_pipeline_id, maintenance_pipeline_id, connection_id):
+    """
+    pipeline-content.json of a schedule pipeline: a Switch on Target that invokes the orchestration (LOAD)
+    or the maintenance pipeline (MAINTENANCE) in the CODE workspace of one environment. Any other Target
+    fails, so a typo in a schedule parameter shows up as a failed run instead of a silent no-op.
+    """
+    def invoke(name, pipeline_id, timeout, parameters):
+        return {
+            "name": name, "type": "InvokePipeline", "dependsOn": [],
+            "policy": {"timeout": timeout, "retry": 0, "retryIntervalInSeconds": 30, "secureInput": False, "secureOutput": False},
+            "typeProperties": {"waitOnCompletion": True, "workspaceId": code_workspace_id, "pipelineId": pipeline_id,
+                               "operationType": "InvokeFabricPipeline", "parameters": parameters},
+            "externalReferences": {"connection": connection_id},
+        }
+
+    return {"properties": {
+        "activities": [{
+            "name": "SW_TARGET", "type": "Switch", "dependsOn": [],
+            "typeProperties": {
+                "on": {"value": "@pipeline().parameters.Target", "type": "Expression"},
+                "cases": [
+                    {"value": "LOAD", "activities": [invoke("PL_FMD_ORCHESTRATION_TEMPLATE", orchestration_pipeline_id, "0.12:00:00",
+                                                           {"LoadGroup": {"value": "@pipeline().parameters.LoadGroup", "type": "Expression"}})]},
+                    {"value": "MAINTENANCE", "activities": [invoke("PL_FMD_MAINTENANCE", maintenance_pipeline_id, "0.04:00:00", {})]},
+                ],
+                "defaultActivities": [{
+                    "name": "FA_UNKNOWN_TARGET", "type": "Fail", "dependsOn": [],
+                    "typeProperties": {"message": {"value": "@concat('Unknown Target: ', pipeline().parameters.Target, '. Use LOAD or MAINTENANCE.')", "type": "Expression"},
+                                       "errorCode": "UnknownTarget"},
+                }],
+            },
+        }],
+        "parameters": {"Target": {"type": "string", "defaultValue": "LOAD"}, "LoadGroup": {"type": "string", "defaultValue": ""}},
+        "concurrency": 1,
+    }}
+
+def create_schedule_pipeline(config_workspace_name, code_workspace_name, environment_short):
+    """
+    Creates PL_FMD_SCHEDULE_<short> in the CONFIG workspace, in the folder SCHEDULE_PIPELINE_FOLDER. It
+    invokes the orchestration or the maintenance pipeline in the CODE workspace of that environment.
+    The schedule and its failure notifications go on this pipeline, not on the pipelines in CODE: CONFIG
+    is in no deployment pipeline, so a promotion never copies a schedule to the next stage.
+    Created once, never overwritten: the schedule, its parameters and its recipients hang on this item.
+    Returns a task status; one starting with "failed" makes the setup end red.
+    """
+    name = f"PL_FMD_SCHEDULE_{environment_short}"
+    item_name = f"{name}.DataPipeline"
+    if run_fab_command(f'exists {config_workspace_name}.Workspace/{item_name}', capture_output=True, silently_continue=True) == "* true":
+        print(f" - {name} already exists in '{config_workspace_name}', skip and do not overwrite")
+        return "already exists, skip creation and do not overwrite"
+
+    config_workspace_id = get_workspace_id_by_name(config_workspace_name)
+    code_workspace_id = get_workspace_id_by_name(code_workspace_name)
+    orchestration_id = get_item_id(code_workspace_name, "PL_FMD_ORCHESTRATION_TEMPLATE.DataPipeline", "id")
+    maintenance_id = get_item_id(code_workspace_name, "PL_FMD_MAINTENANCE.DataPipeline", "id")
+    if not (config_workspace_id and code_workspace_id and orchestration_id and maintenance_id):
+        print(f"❌ Could not resolve IDs to create {name}")
+        return (f"failed: could not resolve IDs (config workspace {config_workspace_id}, code workspace {code_workspace_id}, "
+                f"orchestration {orchestration_id}, maintenance {maintenance_id})")
+
+    # The orchestration already invokes pipelines through the connection of this installation: reuse it
+    response = invoke_fabric_api_request("post", f"workspaces/{code_workspace_id}/items/{orchestration_id}/getDefinition")
+    response.raise_for_status()
+    content_part = next(p for p in response.json()["definition"]["parts"] if p["path"] == "pipeline-content.json")
+    content = json.loads(base64.b64decode(content_part["payload"]).decode("utf-8"))
+    connection_id = content["properties"]["activities"][0]["externalReferences"]["connection"]
+
+    definition = schedule_pipeline_definition(code_workspace_id, orchestration_id, maintenance_id, connection_id)
+    payload = {
+        "displayName": name,
+        "type": "DataPipeline",
+        "description": f"Schedule pipeline for environment {environment_short}. Put the schedule and its failure notifications on this pipeline. "
+                       "Created once by the FMD setup and never overwritten.",
+        "definition": {"parts": [{
+            "path": "pipeline-content.json",
+            "payload": base64.b64encode(json.dumps(definition).encode("utf-8")).decode("utf-8"),
+            "payloadType": "InlineBase64",
+        }]},
+    }
+    response = invoke_fabric_request("post", f"{FABRIC_API_BASE_URL}workspaces/{config_workspace_id}/items", payload)
+    if response is None or response.status_code not in (200, 201):
+        status = "no response" if response is None else f"HTTP {response.status_code} {response.text}"
+        print(f"❌ Failed to create {name}: {status}")
+        return f"failed: {status}"
+
+    assign_item_to_folder(config_workspace_name, get_item_id(config_workspace_name, item_name, "id"), SCHEDULE_PIPELINE_FOLDER)
+    print(f"✅ Created {name} in '{config_workspace_name}'")
+    return "success"
+
 def set_variable_library_stage_values(library_name, stage_workspaces, stage_values):
     """
     Writes per-environment values into a Variable Library that exists in every
