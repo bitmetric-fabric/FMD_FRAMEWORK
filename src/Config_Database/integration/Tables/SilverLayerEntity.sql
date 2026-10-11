@@ -7,6 +7,7 @@ CREATE TABLE [integration].[SilverLayerEntity] (
     [FileType]            NVARCHAR (20)  DEFAULT ('Delta') NOT NULL,
     [CleansingRules]      NVARCHAR (MAX) NULL,
     [IsActive]            BIT            DEFAULT ((1)) NOT NULL,
+    [IsHistorized]        BIT            DEFAULT ((1)) NOT NULL,
     CONSTRAINT [PK_integration_SilverLayerEntity] PRIMARY KEY CLUSTERED ([SilverLayerEntityId] ASC),
     CONSTRAINT [FK_SilverLayerEntity_BronzeLayerEntityId] FOREIGN KEY ([BronzeLayerEntityId]) REFERENCES [integration].[BronzeLayerEntity] ([BronzeLayerEntityId]),
     CONSTRAINT [UC_integration_BSilverLayerEntity] UNIQUE NONCLUSTERED ([LakehouseId] ASC, [Schema] ASC, [Name] ASC)

@@ -26,7 +26,8 @@
   , CHAR(9),  '' )       -- (optional) remove TABs
   AS CleansingRules,
     DS.[Namespace] AS [DataSourceNamespace],
-    DS.[LoadGroup] AS [LoadGroup]
+    DS.[LoadGroup] AS [LoadGroup],
+    SLE.[IsHistorized] AS [IsHistorized]
 FROM [integration].[SilverLayerEntity] SLE
 INNER JOIN [integration].[BronzeLayerEntity] BLE
     ON SLE.BronzeLayerEntityId = BLE.BronzeLayerEntityId

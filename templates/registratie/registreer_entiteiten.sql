@@ -16,6 +16,10 @@
 -- - HistoryDays (optional, per binding): for incremental entities without a watermark yet, the first load
 --   only fetches rows of the last N days. Only for a date/time IsIncrementalColumn. An existing watermark is
 --   never changed. Full-load entities ignore it.
+-- - IsHistorized (optional, per entity, default 1): 1 keeps the history of changes in Silver (SCD2, a new row per
+--   change); 0 keeps only the current version (a change updates the row). Both keep the columns IsCurrent and
+--   IsDeleted, so a Gold query on IsCurrent = 1 works for either. Switching 1 to 0 keeps the history already
+--   there; switching 0 to 1 does not bring it back. Use 0 for large tables whose history nobody needs.
 -- - An existing entity is found by data source + SourceSchema + SourceName. A different SourceName gives a new
 --   entity (see 11_troubleshooting, "Herregistratie onder een andere DataSource").
 SET NOCOUNT ON;
@@ -32,7 +36,7 @@ DECLARE @Sources TABLE ([Environment] VARCHAR(10), [Source] NVARCHAR(100), [Conn
 DECLARE @Entities TABLE ([Nr] INT IDENTITY, [Source] NVARCHAR(100), [SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200),
                          [TargetSchema] NVARCHAR(100), [TargetName] NVARCHAR(200), [FileName] NVARCHAR(200), [FileType] NVARCHAR(20),
                          [IsIncremental] BIT, [IsIncrementalColumn] NVARCHAR(50), [CustomNotebookName] VARCHAR(200),
-                         [PrimaryKeys] NVARCHAR(200), [IsActive] BIT);
+                         [PrimaryKeys] NVARCHAR(200), [IsActive] BIT, [IsHistorized] BIT);
 
 -- ===== Sources (fill in) =======================================================================================
 -- Environment: '*' (all environments) or the short of one environment (D, T, A, P). A specific row wins over '*'.
@@ -46,8 +50,8 @@ INSERT INTO @Sources ([Environment],[Source],[ConnectionName],[DataSourceName],[
 -- ===== Entities (fill in) ======================================================================================
 -- FileName = <TargetSchema>_<TargetName> is the usual choice. CustomNotebookName only for type NOTEBOOK.
 INSERT INTO @Entities ([Source],[SourceSchema],[SourceName],[TargetSchema],[TargetName],[FileName],[FileType],
-                       [IsIncremental],[IsIncrementalColumn],[CustomNotebookName],[PrimaryKeys],[IsActive]) VALUES
- (N'ERP', N'Sales', N'Customer', N'Sales', N'Customer', N'Sales_Customer', N'parquet', 0, NULL, NULL, N'CustomerID', 1)
+                       [IsIncremental],[IsIncrementalColumn],[CustomNotebookName],[PrimaryKeys],[IsActive],[IsHistorized]) VALUES
+ (N'ERP', N'Sales', N'Customer', N'Sales', N'Customer', N'Sales_Customer', N'parquet', 0, NULL, NULL, N'CustomerID', 1, NULL)
 ;
 -- ===============================================================================================================
 
@@ -113,7 +117,7 @@ IF @Error IS NOT NULL THROW 50003, @Error, 1;
 DECLARE @Nr INT = 1, @Max INT = (SELECT MAX([Nr]) FROM @Entities), @ConnectionId INT, @DataSourceId INT, @EntityId BIGINT;
 DECLARE @CN NVARCHAR(200), @DSN NVARCHAR(100), @NS VARCHAR(100), @DST VARCHAR(30), @LG VARCHAR(50), @HD INT, @SS NVARCHAR(100),
         @SN NVARCHAR(200), @TS NVARCHAR(100), @TN NVARCHAR(200), @FN NVARCHAR(200), @FT NVARCHAR(20), @Inc BIT,
-        @IncCol NVARCHAR(50), @NB VARCHAR(200), @PK NVARCHAR(200), @Act BIT;
+        @IncCol NVARCHAR(50), @NB VARCHAR(200), @PK NVARCHAR(200), @Act BIT, @Hist BIT;
 
 BEGIN TRY
     BEGIN TRANSACTION;
@@ -122,7 +126,7 @@ BEGIN TRY
         SELECT @CN=b.[ConnectionName], @DSN=b.[DataSourceName], @NS=b.[Namespace], @DST=b.[DataSourceType], @LG=b.[LoadGroup],
                @HD=b.[HistoryDays], @SS=e.[SourceSchema], @SN=e.[SourceName], @TS=e.[TargetSchema], @TN=e.[TargetName],
                @FN=e.[FileName], @FT=e.[FileType], @Inc=e.[IsIncremental], @IncCol=e.[IsIncrementalColumn],
-               @NB=e.[CustomNotebookName], @PK=e.[PrimaryKeys], @Act=e.[IsActive]
+               @NB=e.[CustomNotebookName], @PK=e.[PrimaryKeys], @Act=e.[IsActive], @Hist=e.[IsHistorized]
         FROM @Entities e JOIN @Bound b ON b.[Source] = e.[Source] WHERE e.[Nr] = @Nr;
 
         SET @ConnectionId = (SELECT [ConnectionId] FROM [integration].[Connection] WHERE [Name] = @CN);
@@ -146,6 +150,11 @@ BEGIN TRY
 
         UPDATE [integration].[LandingzoneEntity] SET [IsActive] = @Act WHERE [LandingzoneEntityId] = @EntityId;
 
+        UPDATE sle SET sle.[IsHistorized] = ISNULL(@Hist, 1)
+        FROM [integration].[SilverLayerEntity] sle
+        JOIN [integration].[BronzeLayerEntity] ble ON ble.[BronzeLayerEntityId] = sle.[BronzeLayerEntityId]
+        WHERE ble.[LandingzoneEntityId] = @EntityId;
+
         -- HistoryDays: a start watermark for a new incremental entity, in the format the load pipelines write
         -- (yyyy-mm-dd hh:mi:ss.mmm). Never overwrites a watermark that is already there.
         IF @HD IS NOT NULL AND @Inc = 1
@@ -164,7 +173,7 @@ END CATCH;
 
 -- 3. Result: the listed entities as they are now in the configuration database, for this environment.
 SELECT e.[Source], b.[DataSourceName], e.[SourceSchema], e.[SourceName], le.[LandingzoneEntityId], le.[IsActive], ds.[LoadGroup],
-       lv.[LoadValue] AS [Watermark], CASE WHEN v.[EntityId] IS NULL THEN 'no' ELSE 'yes' END AS [InLoadView]
+       ISNULL(e.[IsHistorized], 1) AS [IsHistorized], lv.[LoadValue] AS [Watermark], CASE WHEN v.[EntityId] IS NULL THEN 'no' ELSE 'yes' END AS [InLoadView]
 FROM @Entities e
 JOIN @Bound b ON b.[Source] = e.[Source]
 JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]

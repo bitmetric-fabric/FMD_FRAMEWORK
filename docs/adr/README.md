@@ -26,6 +26,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [013](013-configdb-schema-via-dacpac.md) | Schema van de configuratiedatabase via de dacpac | Accepted |
 | [014](014-snowflake-schrijft-landing-zone.md) | Snowflake schrijft de landing zone zelf, via een storage integration | Proposed |
 | [015](015-opslagbeheer.md) | Opslagbeheer: landing zone opruimen op de wachtrij, wekelijks VACUUM | Accepted |
+| [016](016-historie-in-silver-per-tabel.md) | Historie in Silver per tabel instelbaar | Accepted |
 
 ## Openstaande triggers
 

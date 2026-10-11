@@ -17,6 +17,7 @@
 # 
 # ## Key Features
 # - **SCD Type 2 Implementation**: Maintains complete history of records with versioning and temporal tracking
+# - **Optional history**: with `IsHistorized = False` (`integration.SilverLayerEntity.IsHistorized`) a change updates the current row instead of adding a version. The same columns are kept, so `IsCurrent = 1` works for both
 # - **Change Detection**: Uses hashed columns to identify inserts, updates, and deletes
 # - **Data Quality & Cleansing**: Applies configurable cleansing rules from the framework database
 # - **Soft Deletes**: Marks deleted records with IsDeleted flag while preserving history
@@ -59,6 +60,7 @@ default_settings=notebookutils.variableLibrary.getLibrary("VAR_FMD")
 # Set arguments
 PrimaryKeys = "HashedPKColumn"
 IsIncremental = False
+IsHistorized = True
 
 SourceWorkspace= ""
 SourceLakehouse =""
@@ -618,43 +620,72 @@ columns_to_insert = {column: f"updates.{column}" for column in dfDataOriginal.co
 try:
     deltaTable = DeltaTable.forPath(spark, f'{target_data_path}')
 
-    merge = deltaTable.alias('original') \
-        .merge(dfDataChanged.alias('updates'), 'original.HashedPKColumn = updates.HashedPKColumn and original.RecordStartDate = updates.RecordStartDate') \
-        .whenMatchedUpdate(
-                #
-                # Handle rows to be (soft-) deleted:
-                # These rows have action 'D' and are NOT deleted in the original
-                #
-                condition="original.IsCurrent == True AND original.IsDeleted == False AND updates.Action = 'D'",
+    if IsHistorized in [False, 'false', 'False']:
+        # No history: a change updates the current row, a delete closes it, an insert adds a current row.
+        # df_deletes, df_updates_new and df_inserts are lazy; only this merge evaluates them.
+        dfNoHistory = df_deletes.unionByName(df_updates_new).unionByName(df_inserts)
+        merge = deltaTable.alias('original') \
+            .merge(dfNoHistory.alias('updates'), 'original.HashedPKColumn = updates.HashedPKColumn and original.IsCurrent = true and original.IsDeleted = false') \
+            .whenMatchedUpdate(
+                condition="updates.Action = 'D'",
                 set={
                     "IsDeleted": lit(True),
                     "IsCurrent": lit(False),
                     "RecordEndDate": col('updates.RecordEndDate')
                 }) \
-        .whenMatchedUpdate(
-                #
-                # Handle rows to be updated.
-                # These rows have action 'U' and are accompanied by inserts, so IsCurrent must be set to False.
-                # Also closes rows that an older version left as IsDeleted=1, IsCurrent=1.
-                #
-            condition="updates.HashedNonKeyColumns == original.HashedNonKeyColumns and original.IsCurrent = 1  ",
-            set={
-                "IsCurrent": lit(0),
-                "RecordEndDate": col('updates.RecordEndDate')
-            }) \
-        .whenNotMatchedInsert(
-                #
-                # Handle inserts.
-                # These rows have action 'I' and must be inserted.
-                #
-            values={**columns_to_insert,
-                    "HashedPKColumn": col("updates.HashedPKColumn"),
-                    "HashedNonKeyColumns": col("updates.HashedNonKeyColumns"),
-                    "IsCurrent": lit(1),
-                    "RecordStartDate": current_timestamp(),
-                    "RecordModifiedDate": current_timestamp(),
-                    "RecordEndDate": lit('9999-12-31').cast('timestamp'),
-                    "IsDeleted": lit(0)})
+            .whenMatchedUpdate(
+                condition="updates.Action = 'I'",
+                set={**columns_to_insert,
+                     "HashedNonKeyColumns": col("updates.HashedNonKeyColumns"),
+                     "RecordModifiedDate": current_timestamp()}) \
+            .whenNotMatchedInsert(
+                condition="updates.Action = 'I'",
+                values={**columns_to_insert,
+                        "HashedPKColumn": col("updates.HashedPKColumn"),
+                        "HashedNonKeyColumns": col("updates.HashedNonKeyColumns"),
+                        "IsCurrent": lit(1),
+                        "RecordStartDate": current_timestamp(),
+                        "RecordModifiedDate": current_timestamp(),
+                        "RecordEndDate": lit('9999-12-31').cast('timestamp'),
+                        "IsDeleted": lit(0)})
+    else:
+        merge = deltaTable.alias('original') \
+            .merge(dfDataChanged.alias('updates'), 'original.HashedPKColumn = updates.HashedPKColumn and original.RecordStartDate = updates.RecordStartDate') \
+            .whenMatchedUpdate(
+                    #
+                    # Handle rows to be (soft-) deleted:
+                    # These rows have action 'D' and are NOT deleted in the original
+                    #
+                    condition="original.IsCurrent == True AND original.IsDeleted == False AND updates.Action = 'D'",
+                    set={
+                        "IsDeleted": lit(True),
+                        "IsCurrent": lit(False),
+                        "RecordEndDate": col('updates.RecordEndDate')
+                    }) \
+            .whenMatchedUpdate(
+                    #
+                    # Handle rows to be updated.
+                    # These rows have action 'U' and are accompanied by inserts, so IsCurrent must be set to False.
+                    # Also closes rows that an older version left as IsDeleted=1, IsCurrent=1.
+                    #
+                condition="updates.HashedNonKeyColumns == original.HashedNonKeyColumns and original.IsCurrent = 1  ",
+                set={
+                    "IsCurrent": lit(0),
+                    "RecordEndDate": col('updates.RecordEndDate')
+                }) \
+            .whenNotMatchedInsert(
+                    #
+                    # Handle inserts.
+                    # These rows have action 'I' and must be inserted.
+                    #
+                values={**columns_to_insert,
+                        "HashedPKColumn": col("updates.HashedPKColumn"),
+                        "HashedNonKeyColumns": col("updates.HashedNonKeyColumns"),
+                        "IsCurrent": lit(1),
+                        "RecordStartDate": current_timestamp(),
+                        "RecordModifiedDate": current_timestamp(),
+                        "RecordEndDate": lit('9999-12-31').cast('timestamp'),
+                        "IsDeleted": lit(0)})
 
     # Execute the merge operation
     merge.execute()
