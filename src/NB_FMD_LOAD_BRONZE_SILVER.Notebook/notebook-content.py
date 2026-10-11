@@ -575,8 +575,8 @@ df_inserts = (
 # The operation that is listed under 'Action' identifies what happens:
 #
 # For rows marked as D:
-#     If the current row IS NOT marked as IsDeleted: we set IsDeleted to True.
-#     If the current row IS marked as IsDeleted: we set IsCurrent to False
+#     If the current row IS NOT marked as IsDeleted: we set IsDeleted to True and IsCurrent to False.
+#     If the current row IS marked as IsDeleted (left by an older version): we set IsCurrent to False
 #
 # For rows marked as U:
 #     The current row is set to IsCurrent=False
@@ -628,13 +628,14 @@ try:
                 condition="original.IsCurrent == True AND original.IsDeleted == False AND updates.Action = 'D'",
                 set={
                     "IsDeleted": lit(True),
+                    "IsCurrent": lit(False),
                     "RecordEndDate": col('updates.RecordEndDate')
                 }) \
         .whenMatchedUpdate(
                 #
                 # Handle rows to be updated.
-                # These rows have either action 'D' and ARE deleted in the original (so IsCurrent needs to be set to False)
-                # Or these have action 'U' and, are accompanied by inserts, but IsCurrent must be set to False.
+                # These rows have action 'U' and are accompanied by inserts, so IsCurrent must be set to False.
+                # Also closes rows that an older version left as IsDeleted=1, IsCurrent=1.
                 #
             condition="updates.HashedNonKeyColumns == original.HashedNonKeyColumns and original.IsCurrent = 1  ",
             set={
