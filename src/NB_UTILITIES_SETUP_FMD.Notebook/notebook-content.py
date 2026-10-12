@@ -1224,8 +1224,17 @@ def get_existing_connections_by_id():
     return connection_list
 
 
-def create_fabric_sql_connection(connection_name, tenant_id, client_id, client_secret):
-    """Create a FabricSql connection through the Fabric REST API.
+def create_service_principal_connection(connection_name, tenant_id, client_id, client_secret,
+                                        connection_type="FabricSql", creation_method="FabricSql.Contents"):
+    """Create a connection with a service principal credential through the Fabric REST API.
+
+    Used for FabricSql, and for FabricDataPipelines and Notebook (creation methods
+    'FabricDataPipelines.Actions' and 'Notebook.Actions', no parameters). With the
+    service principal, every pipeline-to-pipeline call runs as that principal, which
+    the setup makes Contributor on all framework workspaces (security.service_principal_id).
+    A WorkspaceIdentity connection runs as the calling workspace, which has no role on
+    the workspaces our own cross-workspace calls go to (schedule pipeline in CONFIG,
+    Gold pipelines of a domain).
 
     The fab CLI cannot create this one, which is why it used to be a manual step.
     Two things make it work:
@@ -1244,8 +1253,8 @@ def create_fabric_sql_connection(connection_name, tenant_id, client_id, client_s
         "connectivityType": "ShareableCloud",
         "displayName": connection_name,
         "connectionDetails": {
-            "type": "FabricSql",
-            "creationMethod": "FabricSql.Contents",
+            "type": connection_type,
+            "creationMethod": creation_method,
             "parameters": []
         },
         "privacyLevel": "Organizational",
@@ -1308,7 +1317,7 @@ def create_or_get_fmd_connection(connection_name,connection_role, type):
         try:
             if type =='FabricSql':
                 if fabric_sql_sp_tenant_id and fabric_sql_sp_client_id and fabric_sql_sp_secret:
-                    create_fabric_sql_connection(connection_name,
+                    create_service_principal_connection(connection_name,
                                                  fabric_sql_sp_tenant_id,
                                                  fabric_sql_sp_client_id,
                                                  fabric_sql_sp_secret)
@@ -1317,6 +1326,14 @@ def create_or_get_fmd_connection(connection_name,connection_role, type):
                           "Set fabric_sql_sp_tenant_id / _client_id / _secret, or create it manually.")
             elif type =='AzureDataFactory':
                 print("AzureDataFactory can't created automated yet to CLI limitations, please create manual")
+            elif type in ('FabricDataPipelines', 'Notebooks') and fabric_sql_sp_tenant_id and fabric_sql_sp_client_id and fabric_sql_sp_secret:
+                # Same service principal as the SQL connection: it has a role on every framework workspace.
+                connection_type = 'FabricDataPipelines' if type == 'FabricDataPipelines' else 'Notebook'
+                create_service_principal_connection(connection_name,
+                                                    fabric_sql_sp_tenant_id,
+                                                    fabric_sql_sp_client_id,
+                                                    fabric_sql_sp_secret,
+                                                    connection_type, f'{connection_type}.Actions')
             elif type =='FabricDataPipelines':
                 run_fab_command(f"""create .connections/{connection_name}.Connection 
                     -P connectionDetails.type=FabricDataPipelines,connectionDetails.creationMethod=FabricDataPipelines.Actions,connectionDetails.parameters.dummy=x,credentialDetails.type=WorkspaceIdentity""")
