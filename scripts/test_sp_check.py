@@ -31,7 +31,7 @@ class Response:
 
 
 def token_for(oid):
-    claims = base64.urlsafe_b64encode(json.dumps({"oid": oid, "appid": "app-" + oid[:4]}).encode()).decode().rstrip("=")
+    claims = base64.urlsafe_b64encode(json.dumps({"oid": oid}).encode()).decode().rstrip("=")
     return Response(200, {"access_token": f"header.{claims}.signature"})
 
 
