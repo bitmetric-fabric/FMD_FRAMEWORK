@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
   "metadata": {
     "type": "DataPipeline",
-    "displayName": "PL_FMD_ORCHESTRATION_TEMPLATE",
+    "displayName": "PL_FMD_ORCHESTRATION",
     "description": "Top-of-day orchestrator and the pipeline to schedule: runs PL_FMD_LOAD_ALL (Landingzone/Bronze/Silver) with the LoadGroup parameter, then one Gold-layer pipeline per business domain (wired in by NB_SETUP_BUSINESS_DOMAINS), each dependsOn PL_FMD_LOAD_ALL Succeeded. Add one schedule per cadence, each with its own LoadGroup (empty = all sources). concurrency 1: overlapping runs wait. See wiki/LoadGroup_Scheduling.md."
   },
   "config": {

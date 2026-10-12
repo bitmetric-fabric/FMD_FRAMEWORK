@@ -145,7 +145,7 @@ readable.
 > and give it a role on the new workspaces:
 > - `security.service_principal_id` gets Contributor on the integration workspaces
 >   (CODE, DATA, CONFIG), but `NB_SETUP_BUSINESS_DOMAINS` does not assign it to the
->   business-domain workspaces, where `PL_FMD_ORCHESTRATION_TEMPLATE` invokes the Gold
+>   business-domain workspaces, where `PL_FMD_ORCHESTRATION` invokes the Gold
 >   pipelines;
 > - adding the identity to the group in `security.admin_group_id` covers both, because
 >   that group is assigned everywhere;

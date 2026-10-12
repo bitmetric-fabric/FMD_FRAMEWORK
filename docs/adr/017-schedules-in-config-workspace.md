@@ -3,6 +3,9 @@
 Status: Proposed
 Datum: 2026-10-11
 
+*Bijgewerkt 2026-10-12:* `PL_FMD_ORCHESTRATION_TEMPLATE` heet nu `PL_FMD_ORCHESTRATION`, en
+`PL_FMD_LOAD_GOLD_TEMPLATE` heet `PL_FMD_LOAD_GOLD`. De context en de test hieronder gebruiken de oude namen.
+
 ## Context
 
 Een schedule hoort bij de definitie van een item (`.schedules`). Staat hij op `PL_FMD_ORCHESTRATION_TEMPLATE`
@@ -25,7 +28,7 @@ De tijden en de `LoadGroup`'s verschillen per omgeving, dus ze horen niet in iet
 - Per omgeving één **`PL_FMD_SCHEDULE_<short>`** in de CONFIG-workspace (`PL_FMD_SCHEDULE_D`, `_T`, `_P`), in
   de map `SchedulePipelines`. CONFIG zit in geen enkele deployment pipeline.
 - De pipeline heeft de parameters `Target` (`LOAD` of `MAINTENANCE`, standaard `LOAD`) en `LoadGroup`. Een
-  Switch op `Target` roept `PL_FMD_ORCHESTRATION_TEMPLATE` (met `LoadGroup`) of `PL_FMD_MAINTENANCE` aan in de
+  Switch op `Target` roept `PL_FMD_ORCHESTRATION` (met `LoadGroup`) of `PL_FMD_MAINTENANCE` aan in de
   CODE-workspace van die omgeving, en wacht op het resultaat. Elke andere waarde laat de pipeline falen
   (`UnknownTarget`). `concurrency` is 1.
 - **De schedules en de Failure notifications staan op deze pipeline.** Nachtelijk, intraday en maintenance

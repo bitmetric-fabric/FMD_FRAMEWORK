@@ -195,7 +195,7 @@
         "type": "DataPipeline"
     },
     {
-        "name": "PL_FMD_ORCHESTRATION_TEMPLATE.DataPipeline",
+        "name": "PL_FMD_ORCHESTRATION.DataPipeline",
         "id": "14bb3cb5-26dc-4840-bccc-41556d9a22ec",
         "type": "DataPipeline"
     },
