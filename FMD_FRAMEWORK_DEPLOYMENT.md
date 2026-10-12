@@ -59,22 +59,18 @@ location of your fork already filled in.
 
 ### 2. Create required connections
 
-Set up the following connections and note their Connection IDs for later configuration:
+The setup creates these connections itself, in a single run, with the service principal whose secrets are in the Key Vault (`key_vault.secrets` in `manifest.yaml`). The setup makes that principal Contributor on every framework workspace (`security.service_principal_id`), so every pipeline-to-pipeline call works, also across workspaces (the schedule pipelines in the configuration workspace, the Gold pipelines of a business domain). Without those secrets the setup falls back to Workspace Identity for the pipeline and notebook connections, and cannot create the SQL connection.
 
-| Connection name              | Connection type            | Authentication                                    |Remarks |
-|------------------------------|----------------------------|---------------------------------------------------|--------|
-| CON_FMD_FABRIC_PIPELINES     | Fabric Data Pipelines      | OAuth2/Service Principal/Workspace Identity       |  Connection is automatically created during deployment      |
-| CON_FMD_FABRIC_SQL           | Fabric SQL database        | OAuth2                        |  See below: cannot be created before the first deployment run      |
-| CON_FMD_FABRIC_NOTEBOOKS     | Fabric Notebooks           | OAuth2/Service Principal/Workspace Identity       |  For future use     |
+| Connection name              | Connection type            | Created by the setup with    |Remarks |
+|------------------------------|----------------------------|------------------------------|--------|
+| CON_FMD_FABRIC_PIPELINES     | Fabric Data Pipelines      | Service Principal            |  Workspace Identity when the SP secrets are not set |
+| CON_FMD_FABRIC_SQL           | Fabric SQL database        | Service Principal            |  `FabricSql.Contents`, no database parameter, so the database does not have to exist yet |
+| CON_FMD_FABRIC_NOTEBOOKS     | Fabric Notebooks           | Service Principal            |  Workspace Identity when the SP secrets are not set |
+
+A connection that already exists with the same name is reused as it is, including its credential. Connection names are tenant-wide.
 
 > [!IMPORTANT]
-> **`CON_FMD_FABRIC_SQL` cannot be created at this point.** A Fabric SQL database connection has to name an existing database, and `SQL_FMD_FRAMEWORK` is created by the deployment in step 5. So the order is:
->
-> 1. Run the deployment (step 5). It creates the database. Every activity that needs this connection is left without one.
-> 2. Create `CON_FMD_FABRIC_SQL` against the now existing `SQL_FMD_FRAMEWORK`, in the workspace `<domain_name> CONFIGURATION`.
-> 3. **Run the deployment a second time**, so the pipelines are redeployed with the connection bound.
->
-> The second run is not optional. Until it happens, Fabric writes the lookup error into the pipelines' `externalReferences.connection` field, marks all five audit activities `"state": "Inactive"` with `"onInactiveMarkAs": "Succeeded"`, and every pipeline then reports success while `logging` never receives a row. Nothing fails and nothing warns.
+> Only when you create `CON_FMD_FABRIC_SQL` by hand in the portal: that kind of connection has to name an existing database, so run the deployment, create the connection against `SQL_FMD_FRAMEWORK`, and **run the deployment a second time**. Until then the pipelines have no SQL connection, their audit activities are marked inactive, and `logging` never receives a row.
 
 If you use Azure Data Factory Pipelines, create this additional connection:
 
