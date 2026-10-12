@@ -350,7 +350,7 @@ def replace_ids_in_folder(folder_path, mapping_table, environment_name):
                 with open(file_path, 'w', encoding='utf-8') as file:
                     file.write(content)
 
-def replace_ids_and_mark_inactive(folder_path, mapping_table, environment_name, target_guids):
+def replace_ids_and_mark_inactive(folder_path, mapping_table, environment_name, target_guids, workspace_name=None):
     """
     Replaces old IDs with new ones in JSON-based files and deactivates activities
     that reference connections not in the target_guids list.
@@ -360,10 +360,18 @@ def replace_ids_and_mark_inactive(folder_path, mapping_table, environment_name, 
     - mapping_table (list): List of dictionaries with 'old_id', 'new_id', and 'environment'.
     - environment_name (str): Current environment name to filter applicable mappings.
     - target_guids (list): List of valid connection GUIDs to retain as active.
+    - workspace_name (str, optional): Workspace the item is deployed to. Its own mappings win: with several
+      business domains every domain maps the same template IDs, and the first match used to win, so a
+      second domain's pipeline pointed to the notebooks and workspace of the first.
 
     Returns:
     - None. Files are modified in-place.
     """
+    mappings = [m for m in mapping_table if m["environment"] in (environment_name, "config")]
+    # Stable sort: the target workspace's own mappings first, the rest in their original order
+    mappings.sort(key=lambda m: m.get("workspace") != workspace_name)
+    # Known limit: a template ID for an item in *another* workspace of the same domain (e.g. a Gold lakehouse in DATA)
+    # still resolves to the first domain. No template does that today; add a domain key to the mapping if one does.
     def find_externalReferences_in_dict(j):
         externalReferences = {}
         for key, value in j.items():
@@ -397,9 +405,8 @@ def replace_ids_and_mark_inactive(folder_path, mapping_table, environment_name, 
                     content = file.read()
 
                 # Replace IDs
-                for mapping in mapping_table:
-                    if mapping["environment"] in (environment_name, "config"):
-                        content = content.replace(mapping[f"old_id"], mapping[f"new_id"])
+                for mapping in mappings:
+                    content = content.replace(mapping["old_id"], mapping["new_id"])
 
                 try:
                     data = json.loads(content)
@@ -584,8 +591,8 @@ def deploy_workspaces(domain_name,workspace, workspace_name, environment_name, o
 
     print("--------------------------")
     print(f"Updating Mapping Table: {environment_name}")
-    mapping_table.append({"Description": workspace_name,"environment": environment_name,"ItemType": "Workspace","old_id": old_id,"new_id": workspace_id })
-    mapping_table.append({"Description": workspace_name,"environment": environment_name,"ItemType": "Workspace","old_id": "00000000-0000-0000-0000-000000000000","new_id": workspace_id})
+    mapping_table.append({"Description": workspace_name,"environment": environment_name,"ItemType": "Workspace","old_id": old_id,"new_id": workspace_id, "workspace": workspace_name})
+    mapping_table.append({"Description": workspace_name,"environment": environment_name,"ItemType": "Workspace","old_id": "00000000-0000-0000-0000-000000000000","new_id": workspace_id, "workspace": workspace_name})
 
     assign_workspace_description(workspace_name)
     assign_workspace_roles(workspace,workspace_name)
@@ -790,7 +797,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
     elif "DataPipeline" in name:
         print(f"Replacing connections guid in {workspace_name}: {name}")
         connection_list=get_existing_connections_by_id()
-        replace_ids_and_mark_inactive(tmp_path, mapping_table, environment_name, connection_list)
+        replace_ids_and_mark_inactive(tmp_path, mapping_table, environment_name, connection_list, workspace_name)
         result = fab_import(f"import / {workspace_name}.Workspace/{name} -i {tmp_path} -f")
         assign_item_description(workspace_name, name)
         new_id = get_item_id(workspace_name, name, 'id')
@@ -856,7 +863,7 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
         print("No result produced for this item/path")
 
     if it:
-        mapping_table.append({"Description": name,"environment": environment_name,"ItemType": mapping_type, "old_id": it["id"],"new_id": new_id})
+        mapping_table.append({"Description": name,"environment": environment_name,"ItemType": mapping_type, "old_id": it["id"],"new_id": new_id, "workspace": workspace_name})
 
     tasks.append({
         "task_name": f"Create or Update item Definition {workspace_name} - {name}","task_duration": int(time() - start),"status": result })
