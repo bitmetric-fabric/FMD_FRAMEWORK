@@ -117,6 +117,21 @@ Follow these conventions to keep the Gold layer consistent:
 
 ---
 
+## Running it on schedule
+
+`PL_FMD_LOAD_GOLD` in the CODE workspace of the business domain runs `NB_LOAD_GOLD` and then
+`NB_MLV_EXAMPLE`. `PL_FMD_ORCHESTRATION` invokes it after `PL_FMD_LOAD_ALL` succeeded, so it
+runs with every scheduled load (see [LoadGroup Scheduling](LoadGroup_Scheduling.md)).
+
+The pipeline belongs to the customer, like the notebooks: the setup creates it once in every
+stage and never overwrites it. To run your own Gold notebooks (for example one per domain, or a
+copy of this one under another name), add a notebook activity for each of them to
+`PL_FMD_LOAD_GOLD` in Dev, and promote the notebooks together with the pipeline. A notebook that
+is not yet in the target stage makes the promotion fail with *Missing Dependencies*; promote it
+first, or in the same deployment.
+
+---
+
 ## Related Resources
 
 - [FMD Business Domain Deployment Guide](../FMD_BUSINESS_DOMAIN_DEPLOYMENT.md)

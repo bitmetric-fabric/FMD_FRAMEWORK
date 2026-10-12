@@ -23,7 +23,7 @@ end = source.index("def set_variable_library_stage_values(")
 
 CONFIG_WS, CODE_WS = "CONFIG WS", "CODE WS (D)"
 IDS = {CONFIG_WS: "cfg-ws-id", CODE_WS: "code-ws-id"}
-ITEMS = {"PL_FMD_ORCHESTRATION_TEMPLATE.DataPipeline": "orch-id", "PL_FMD_MAINTENANCE.DataPipeline": "maint-id"}
+ITEMS = {"PL_FMD_ORCHESTRATION.DataPipeline": "orch-id", "PL_FMD_MAINTENANCE.DataPipeline": "maint-id"}
 CONNECTION = "conn-id"
 
 calls = {"post": [], "folder": []}
@@ -46,7 +46,7 @@ def run_fab_command(command, capture_output=False, silently_continue=False, raw_
 
 
 def get_item_id(workspace, item, prop):
-    if workspace == CODE_WS and item == "PL_FMD_ORCHESTRATION_TEMPLATE.DataPipeline":
+    if workspace == CODE_WS and item == "PL_FMD_ORCHESTRATION.DataPipeline":
         return state["orchestration_id"]
     return ITEMS.get(item) or "created-id"
 

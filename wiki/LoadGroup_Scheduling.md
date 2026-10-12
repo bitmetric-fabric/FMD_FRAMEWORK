@@ -91,11 +91,11 @@ A schedule pipeline has two parameters and one Switch on `Target`:
 
 | `Target` | Invokes (in the CODE workspace of that environment) |
 |---|---|
-| `LOAD` (default) | `PL_FMD_ORCHESTRATION_TEMPLATE`, with `LoadGroup` |
+| `LOAD` (default) | `PL_FMD_ORCHESTRATION`, with `LoadGroup` |
 | `MAINTENANCE` | `PL_FMD_MAINTENANCE` |
 | anything else | fails with `UnknownTarget`, so a typo shows as a failed run |
 
-`PL_FMD_ORCHESTRATION_TEMPLATE` runs `PL_FMD_LOAD_ALL` and then the Gold
+`PL_FMD_ORCHESTRATION` runs `PL_FMD_LOAD_ALL` and then the Gold
 pipeline of every business domain (the setup wires those in). The schedule
 pipeline waits for the result, so a failure in the orchestration, in Gold or
 in the maintenance notebook turns the schedule pipeline red.
@@ -142,14 +142,21 @@ empty in Development to avoid mail for a failed development run.
 ### 3. Existing installations: schedules on the pipelines in CODE
 
 Installations from before the schedule pipelines have their schedules on
-`PL_FMD_ORCHESTRATION_TEMPLATE` and `PL_FMD_MAINTENANCE` in the CODE
+`PL_FMD_ORCHESTRATION` and `PL_FMD_MAINTENANCE` in the CODE
 workspaces, and possibly the wrapper pipelines `PL_FMD_SCHEDULE_NIGHTLY` and
 `PL_FMD_SCHEDULE_INTRADAY`. The setup does not remove them. They keep working,
 with the drawbacks described above: a promotion copies the schedules, enabled,
 to the next stage, without the recipients of the failure notifications.
 
 To move over, add the schedules to the new schedule pipelines and delete them
-from the old pipelines. The wrappers call `PL_FMD_LOAD_ALL` directly, so they
+from the old pipelines.
+
+**Pipeline names.** `PL_FMD_ORCHESTRATION` and `PL_FMD_LOAD_GOLD` were called
+`PL_FMD_ORCHESTRATION_TEMPLATE` and `PL_FMD_LOAD_GOLD_TEMPLATE` before. The setup looks
+them up by name, so on an installation with the old names it would create new items next
+to the old ones, and the schedule pipelines would keep invoking the old orchestration.
+Rename the existing items in place first, in every stage (D, T, P): their IDs, the
+deployment-pipeline pairing and every reference to them stay as they are. The wrappers call `PL_FMD_LOAD_ALL` directly, so they
 do not run Gold, and `PL_FMD_SCHEDULE_NIGHTLY` passes `NIGHTLY`, so it skips
 every source with `LoadGroup = ''`.
 
@@ -163,10 +170,10 @@ every source with `LoadGroup = ''`.
   tables. This keeps a frequent schedule cheap and keeps the audit log
   readable per run.
 - **Gold is not filtered by `LoadGroup`.** Through
-  `PL_FMD_ORCHESTRATION_TEMPLATE`, every run refreshes Gold for all business
+  `PL_FMD_ORCHESTRATION`, every run refreshes Gold for all business
   domains, after `PL_FMD_LOAD_ALL` succeeded.
 - **Overlap.** On the schedule pipeline and on
-  `PL_FMD_ORCHESTRATION_TEMPLATE`, `concurrency: 1` queues a second run. Two
+  `PL_FMD_ORCHESTRATION`, `concurrency: 1` queues a second run. Two
   runs started directly on `PL_FMD_LOAD_ALL` can run at the same time and
   share the same Spark capacity (`NB_FMD_PROCESSING_PARALLEL_MAIN`); stagger
   their cadences.

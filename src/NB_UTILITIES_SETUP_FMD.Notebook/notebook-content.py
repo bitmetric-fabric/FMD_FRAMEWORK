@@ -719,13 +719,15 @@ def stage_value_overrides(parts, stage_values):
 # -------------------------------
 # Item deployment
 # -------------------------------
-# Notebooks the customer fills in. Created once in every stage (so the deployment pipeline pairs them),
+# Items the customer fills in. Created once in every stage (so the deployment pipeline pairs them),
 # never overwritten by a re-run of the setup. The Gold notebooks of a business domain hold the customer's
 # Gold code, so a re-run (framework fix, schema change) must not reset them to the template in D, T and P.
+# PL_FMD_LOAD_GOLD is the customer's too: they add their own Gold notebooks to it and promote it.
 # Consequence: a later framework change to one of these templates does not reach an existing installation;
 # apply it by hand in Dev and promote it. The dry-run cells of both setup notebooks repeat this list.
-CUSTOMER_OWNED_NOTEBOOKS = {"NB_FMD_CUSTOM_DQ_CLEANSING.Notebook",
-                            "NB_LOAD_GOLD.Notebook", "NB_MLV_EXAMPLE.Notebook", "NB_CREATE_SHORTCUTS.Notebook"}
+CUSTOMER_OWNED_ITEMS = {"NB_FMD_CUSTOM_DQ_CLEANSING.Notebook",
+                        "NB_LOAD_GOLD.Notebook", "NB_MLV_EXAMPLE.Notebook", "NB_CREATE_SHORTCUTS.Notebook",
+                        "PL_FMD_LOAD_GOLD.DataPipeline"}
 
 def fab_import(command):
     """Runs a fab import and returns its output as the task status, prefixed with 'failed: ' when fab
@@ -760,11 +762,11 @@ def deploy_item(workspace_name,name, mapping_table, environment_name, tasks, lak
     workspace_id = get_workspace_id_by_name(workspace_name)
     cli_parameter = ''
 
-    if "Notebook" in name and name in CUSTOMER_OWNED_NOTEBOOKS and run_fab_command(f'exists {workspace_name}.Workspace/{name}', capture_output=True, silently_continue=True) == "* true":
+    if name in CUSTOMER_OWNED_ITEMS and run_fab_command(f'exists {workspace_name}.Workspace/{name}', capture_output=True, silently_continue=True) == "* true":
         # Holds the customer's own code: create it once so every stage has a paired copy, never overwrite it
         result = f'{name} already exists, skip import and do not overwrite'
         new_id = get_item_id(workspace_name, name, 'id')
-        mapping_type = 'Notebook'
+        mapping_type = name.rsplit('.', 1)[1]
 
     elif "Notebook" in name:
         cli_parameter += " --format .py"
@@ -995,11 +997,11 @@ def report_unpaired_items(pipeline_id):
                   f"This deletes its deployment history and deployment rules.")
 
 def wire_domain_into_orchestration(orchestration_workspace_name, gold_workspace_name, activity_name,
-                                    orchestration_pipeline_name="PL_FMD_ORCHESTRATION_TEMPLATE",
-                                    gold_pipeline_name="PL_FMD_LOAD_GOLD_TEMPLATE"):
+                                    orchestration_pipeline_name="PL_FMD_ORCHESTRATION",
+                                    gold_pipeline_name="PL_FMD_LOAD_GOLD"):
     """
-    Adds an InvokePipeline activity to PL_FMD_ORCHESTRATION_TEMPLATE (in orchestration_workspace_name)
-    that calls PL_FMD_LOAD_GOLD_TEMPLATE in gold_workspace_name.
+    Adds an InvokePipeline activity to PL_FMD_ORCHESTRATION (in orchestration_workspace_name)
+    that calls PL_FMD_LOAD_GOLD in gold_workspace_name.
     Idempotent: skips if an activity with this name is already wired in.
     Returns a task status; one starting with "failed" makes the setup end red.
     """
@@ -1071,7 +1073,7 @@ def schedule_pipeline_definition(code_workspace_id, orchestration_pipeline_id, m
             "typeProperties": {
                 "on": {"value": "@pipeline().parameters.Target", "type": "Expression"},
                 "cases": [
-                    {"value": "LOAD", "activities": [invoke("PL_FMD_ORCHESTRATION_TEMPLATE", orchestration_pipeline_id, "0.12:00:00",
+                    {"value": "LOAD", "activities": [invoke("PL_FMD_ORCHESTRATION", orchestration_pipeline_id, "0.12:00:00",
                                                            {"LoadGroup": {"value": "@pipeline().parameters.LoadGroup", "type": "Expression"}})]},
                     {"value": "MAINTENANCE", "activities": [invoke("PL_FMD_MAINTENANCE", maintenance_pipeline_id, "0.04:00:00", {})]},
                 ],
@@ -1103,7 +1105,7 @@ def create_schedule_pipeline(config_workspace_name, code_workspace_name, environ
 
     config_workspace_id = get_workspace_id_by_name(config_workspace_name)
     code_workspace_id = get_workspace_id_by_name(code_workspace_name)
-    orchestration_id = get_item_id(code_workspace_name, "PL_FMD_ORCHESTRATION_TEMPLATE.DataPipeline", "id")
+    orchestration_id = get_item_id(code_workspace_name, "PL_FMD_ORCHESTRATION.DataPipeline", "id")
     maintenance_id = get_item_id(code_workspace_name, "PL_FMD_MAINTENANCE.DataPipeline", "id")
     if not (config_workspace_id and code_workspace_id and orchestration_id and maintenance_id):
         print(f"❌ Could not resolve IDs to create {name}")

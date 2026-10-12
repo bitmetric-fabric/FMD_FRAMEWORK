@@ -636,7 +636,7 @@ check("stage zonder workspace wordt overgeslagen", "Production" not in " ".join(
 
 # --- deploy_item: klantnotebooks niet overschrijven ------------------------
 print("\n=== deploy_item: klantnotebooks ===")
-d_start = utilities_source.index("CUSTOMER_OWNED_NOTEBOOKS = ")
+d_start = utilities_source.index("CUSTOMER_OWNED_ITEMS = ")
 d_end = utilities_source.index("# METADATA", d_start)
 
 
@@ -665,7 +665,7 @@ cmds, mapping = run_deploy("NB_FMD_CUSTOM_DQ_CLEANSING.Notebook", exists=True)
 check("bestaand klantnotebook: geen import, wel gemapt",
       not any(c.startswith("import") for c in cmds) and mapping == [
           {"Description": "NB_FMD_CUSTOM_DQ_CLEANSING.Notebook", "environment": "development",
-           "ItemType": "Notebook", "old_id": "oud", "new_id": "nieuw"}], (cmds, mapping))
+           "ItemType": "Notebook", "old_id": "oud", "new_id": "nieuw", "workspace": "WS CODE (D)"}], (cmds, mapping))
 cmds, _ = run_deploy("NB_FMD_CUSTOM_DQ_CLEANSING.Notebook", exists=False)
 check("nieuw klantnotebook: wordt geïmporteerd", any(c.startswith("import") for c in cmds), cmds)
 cmds, _ = run_deploy("NB_FMD_DQ_CLEANSING.Notebook", exists=True)
@@ -674,6 +674,9 @@ check("frameworknotebook: altijd geïmporteerd, zonder exists-check",
 for gold in ("NB_LOAD_GOLD.Notebook", "NB_MLV_EXAMPLE.Notebook", "NB_CREATE_SHORTCUTS.Notebook"):
     cmds, _ = run_deploy(gold, exists=True)
     check(f"existing Gold notebook {gold}: not imported (#47)", not any(c.startswith("import") for c in cmds), cmds)
+cmds, mapping = run_deploy("PL_FMD_LOAD_GOLD.DataPipeline", exists=True)
+check("existing Gold pipeline: not imported, mapped as DataPipeline",
+      not any(c.startswith("import") for c in cmds) and mapping[0]["ItemType"] == "DataPipeline", (cmds, mapping))
 run_deploy("NB_FMD_DQ_CLEANSING.Notebook", exists=True, import_rc=1)
 check("failed import: task status starts with 'failed: ' (#39)",
       str(run_deploy.tasks[-1]["status"]).startswith("failed: "), run_deploy.tasks)
