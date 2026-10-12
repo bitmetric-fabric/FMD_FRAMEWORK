@@ -49,7 +49,7 @@ CREATE SCHEMA IF NOT EXISTS gold
 
 ### Step 2 — Add MLV definitions
 
-Replace the placeholder comment in the code cell with one or more `CREATE MATERIALIZED LAKE VIEW` statements:
+Add a Spark SQL cell below the markdown cell *Your materialized lake views*, with one or more `CREATE MATERIALIZED LAKE VIEW` statements. A fresh notebook has no SQL cell, so it runs without error before you add your views:
 
 ```sql
 CREATE MATERIALIZED LAKE VIEW <mlv_name>

@@ -65,18 +65,16 @@
 -- META   "language_group": "synapse_pyspark"
 -- META }
 
--- CELL ********************
+-- MARKDOWN ********************
 
--- Welcome to your new notebook
--- Type here in the cell editor to add code!
--- CREATE MATERIALIZED LAKE VIEW <mlv_name> AS select_statement
-
--- METADATA ********************
-
--- META {
--- META   "language": "sparksql",
--- META   "language_group": "synapse_pyspark"
--- META }
+-- ## Your materialized lake views
+-- Add a Spark SQL cell here for each view, for example:
+-- ```sql
+-- CREATE MATERIALIZED LAKE VIEW IF NOT EXISTS <schema>.<mlv_name> AS
+-- SELECT ... FROM <schema>.<table>
+-- ```
+-- This was a SQL cell with only comments, which Spark rejects (PARSE_SYNTAX_ERROR). In a fresh installation the
+-- orchestration runs this notebook through the Gold pipeline, so every scheduled load failed until the cell was replaced.
 
 -- MARKDOWN ********************
 
