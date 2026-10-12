@@ -61,6 +61,8 @@ location of your fork already filled in.
 
 The setup creates these connections itself, in a single run, with the service principal whose secrets are in the Key Vault (`key_vault.secrets` in `manifest.yaml`). The setup makes that principal Contributor on every framework workspace (`security.service_principal_id`), so every pipeline-to-pipeline call works, also across workspaces (the schedule pipelines in the configuration workspace, the Gold pipelines of a business domain). Without those secrets the setup falls back to Workspace Identity for the pipeline and notebook connections, and cannot create the SQL connection.
 
+The names below use the default prefix `CON_FMD`; set `naming.connection_prefix` in `manifest.yaml` to use your own (for example `CON_ACME_FMD`). Choose it before the first installation: connection names are tenant-wide. The setup registers every connection whose name starts with this prefix in the configuration database, so give the connections to your **sources** the same prefix (for example `CON_ACME_FMD_ASQL_ERP`); a source connection with another prefix is not registered, and the registration template stops with `connection … not registered`.
+
 | Connection name              | Connection type            | Created by the setup with    |Remarks |
 |------------------------------|----------------------------|------------------------------|--------|
 | CON_FMD_FABRIC_PIPELINES     | Fabric Data Pipelines      | Service Principal            |  Workspace Identity when the SP secrets are not set |
@@ -111,7 +113,7 @@ readable.
 | Section | What it holds |
 |---|---|
 | `repository` | Owner, name and branch of your fork. Must match the three values in the bootstrap notebook. |
-| `naming` | `domain_name` (the shared ingestion domain), `framework_pre_fix` (a prefix for every workspace and deployment pipeline name), and the list of business domains. |
+| `naming` | `domain_name` (the shared ingestion domain), `framework_pre_fix` (a prefix for every workspace and deployment pipeline name), `connection_prefix` (the prefix of the framework connections, default `CON_FMD`; choose it before the first installation), and the list of business domains. |
 | `environments` | One entry per environment: `name`, `short` (D/T/A/P), `capacity`, and optionally `capacity_business_domain` for the business-domain workspaces. The order is the stage order of the deployment pipelines, and it decides which value sets are deployed. |
 | `config_workspace` | Capacity for the CONFIG workspace, which exists once per customer rather than once per environment. |
 | `spark` | Runtime version and Spark sizing, written into the Environment item at deploy time. One `ENV_FMD.Environment` is deployed into the CONFIG workspace and shared by every environment, so this sizing applies everywhere. |
@@ -133,7 +135,8 @@ readable.
 > [!IMPORTANT]
 > All zeros is only safe for the **first** FMD installation in a tenant. Connection
 > names are tenant-wide and get no `framework_pre_fix`, so a second installation (a
-> trial next to production, a reinstall) reuses the existing `CON_FMD_*` connections,
+> trial next to production, a reinstall) with the same `naming.connection_prefix` reuses the
+> existing `CON_FMD_*` connections,
 > including their credential. If `CON_FMD_FABRIC_PIPELINES` runs as a service principal
 > that has no role on the new workspaces, every `InvokePipeline` in `PL_FMD_LOAD_ALL`
 > fails with `InsufficientPrivileges` (403), while the setup run itself stays green.

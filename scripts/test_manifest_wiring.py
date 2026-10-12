@@ -107,6 +107,11 @@ def check(label, got, want):
 
 check("FMD domain_name", fmd["domain_name"], "INTEGRATION")
 check("FMD framework_pre_fix", fmd["framework_pre_fix"], "")
+check("FMD connection_prefix", fmd["connection_prefix"], "CON_FMD")
+check("FMD connectie pipelines", fmd["connection_fabric_datapipelines_name"], "CON_FMD_FABRIC_PIPELINES")
+check("FMD connectie notebooks", fmd["connection_fabric_notebooks_name"], "CON_FMD_FABRIC_NOTEBOOKS")
+check("FMD connectie database", fmd["connection_fabric_database_name"], "CON_FMD_FABRIC_SQL")
+check("FMD connectie adf", fmd["connection_fabric_adf_name"], "CON_FMD_ADF_PIPELINES")
 check("FMD lakehouse_schema_enabled", fmd["lakehouse_schema_enabled"], True)
 check("FMD spark_version", fmd["spark_version"], "2.0")
 check("FMD capacity_name_config", fmd["capacity_name_config"], CAP)
