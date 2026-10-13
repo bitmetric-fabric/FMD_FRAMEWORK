@@ -180,6 +180,11 @@
         "type": "DataPipeline"
     },
     {
+        "name": "PL_FMD_DISCOVER_SOURCE.DataPipeline",
+        "id": "45a3601e-5c91-4874-b123-fdfb61ddc4dc",
+        "type": "DataPipeline"
+    },
+    {
         "name": "PL_FMD_TOOLING_LOAD_TO_PURVIEW.DataPipeline",
         "id": "78439211-a76c-a426-4934-268e37d55689",
         "type": "DataPipeline"

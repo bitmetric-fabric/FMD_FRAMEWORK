@@ -727,7 +727,7 @@ def stage_value_overrides(parts, stage_values):
 # apply it by hand in Dev and promote it. The dry-run cells of both setup notebooks repeat this list.
 CUSTOMER_OWNED_ITEMS = {"NB_FMD_CUSTOM_DQ_CLEANSING.Notebook",
                         "NB_LOAD_GOLD.Notebook", "NB_MLV_EXAMPLE.Notebook", "NB_CREATE_SHORTCUTS.Notebook",
-                        "PL_FMD_LOAD_GOLD.DataPipeline"}
+                        "PL_FMD_LOAD_GOLD.DataPipeline", "NB_REGISTRATIE.Notebook"}
 
 def fab_import(command):
     """Runs a fab import and returns its output as the task status, prefixed with 'failed: ' when fab

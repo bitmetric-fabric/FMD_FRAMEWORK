@@ -28,6 +28,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [015](015-opslagbeheer.md) | Opslagbeheer: landing zone opruimen op de wachtrij, wekelijks VACUUM | Accepted |
 | [016](016-historie-in-silver-per-tabel.md) | Historie in Silver per tabel instelbaar | Accepted |
 | [017](017-schedules-in-config-workspace.md) | Schedules op een plan-pipeline in de CONFIG-workspace | Proposed |
+| [018](018-registratie-via-notebook.md) | Bronnen registreren via een notebook, niet via `sqlcmd` | Proposed |
 
 ## Openstaande triggers
 

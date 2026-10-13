@@ -10,6 +10,16 @@
             "name": "SQL_FMD_FRAMEWORK",
             "type": "SQLEndpoint",
             "id": "b6c9a8ce-8888-4dd2-9c3e-ce98279ad8ef"
-        } 
-    
+        },
+        {
+            "name": "NB_FMD_REGISTRATION_FUNCTIONS.Notebook",
+            "type": "Notebook",
+            "id": "b983296b-a2fb-493a-b5cc-cd827fa21993"
+        },
+        {
+            "name": "NB_REGISTRATIE.Notebook",
+            "type": "Notebook",
+            "id": "c69bc17b-4ee7-4c1c-88e6-8b102affc5ea"
+        }
+
 ]
