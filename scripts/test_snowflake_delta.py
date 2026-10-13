@@ -7,18 +7,20 @@ Checks the landing_path() helper and the structure of PL_FMD_LDZ_COPY_FROM_SNOWF
 
 import ast
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 REPO = Path(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).parent.parent).resolve()
 PIPELINE = REPO / "src/PL_FMD_LDZ_COPY_FROM_SNOWFLAKE_01.DataPipeline/pipeline-content.json"
 UTILITY = REPO / "src/NB_FMD_UTILITY_FUNCTIONS.Notebook/notebook-content.py"
+PARALLEL = REPO / "src/NB_FMD_PROCESSING_PARALLEL_MAIN.Notebook/notebook-content.py"
 
 
-def load_function(path, name):
+def load_function(path, name, **namespace):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
-    namespace = {}
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), namespace)
     return namespace[name]
 
@@ -79,7 +81,10 @@ def test_pipeline_branches_on_filetype():
 def test_copy_activity_writes_a_delta_table_per_run():
     copy = foreach_activities()["IF_FILETYPE"]["typeProperties"]["ifTrueActivities"][0]
     tp = copy["typeProperties"]
-    assert tp["source"]["type"] == "SnowflakeV2Source"
+    # the pipeline editor cannot open the V2 types inside a ForEach (testplan T-F05)
+    assert tp["source"]["type"] == "SnowflakeSource"
+    assert tp["source"]["datasetSettings"]["type"] == "SnowflakeTable"
+    assert tp["source"]["datasetSettings"]["version"] == "1.1"
     assert tp["source"]["query"]["value"] == "@item().SourceDataRetrieval"
     assert tp["sink"]["type"] == "LakehouseTableSink"
     assert tp["sink"]["tableActionOption"] == "Overwrite"
@@ -100,6 +105,35 @@ def test_queue_row_carries_the_location():
     # the audit expressions name the activity of the branch that ran
     text = json.dumps(acts["SP_END_AUDIT_PIPELINE_CP"]) + json.dumps(acts["SP_FAIL_AUDIT_PIPELINE_CP"])
     assert "activity('SC_COPY_INTO_LANDINGZONE')" in text and "activity('CP_COPY_TO_LANDINGZONE')" in text
+
+
+def test_landing_format_follows_the_delivery_not_the_registration():
+    landing_format = load_function(UTILITY, "landing_format")
+    assert landing_format("Tables/ldz", "delta") == "delta"
+    assert landing_format("Tables", "parquet") == "delta"
+    # entity switched to delta while an old COPY INTO delivery is still in the queue
+    assert landing_format("fmd/sf/TPCH_CUSTOMER/2026/10/13", "delta") == "parquet"
+    assert landing_format("fmd/sf/TPCH_CUSTOMER/2026/10/13", "parquet") == "parquet"
+    assert landing_format("fmd/x/2026/10/13", "csv") == "csv"
+
+
+def test_delivery_order_includes_delta_tables():
+    extract = load_function(PARALLEL, "extract_ts_from_name", re=re, datetime=datetime)
+    assert extract("Sales_Invoices_202601311402.parquet") == datetime(2026, 1, 31, 14, 2)
+    assert extract("sf_TPCH_CUSTOMER_202610130900") == datetime(2026, 10, 13, 9, 0)
+    assert extract("Sales_Invoices_202601311402.csv") == datetime(2026, 1, 31, 14, 2)
+    assert extract("sf_TPCH_CUSTOMER_202610130900") < extract("TPCH_CUSTOMER_202610131000.parquet")
+    for bad in ("Sales_Invoices.parquet", "202601311402", "x_20260131140"):
+        try:
+            extract(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad} must be rejected")
+
+
+def test_bronze_derives_the_format_from_the_path():
+    bronze = BRONZE.read_text(encoding="utf-8")
+    assert "SourceFileType = landing_format(SourceFilePath, SourceFileType)" in bronze
 
 
 if __name__ == "__main__":

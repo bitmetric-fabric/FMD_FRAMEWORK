@@ -259,6 +259,7 @@ spark.conf.set("spark.fabric.resourceProfile", "writeHeavy")
 
 #Set SourceFile and target Location
 source_changes_data_path = landing_path(SourceWorkspace, SourceLakehouse, SourceFilePath, SourceFileName)
+SourceFileType = landing_format(SourceFilePath, SourceFileType)
 print(source_changes_data_path)
 
 if str(schema_enabled).lower() == "true":

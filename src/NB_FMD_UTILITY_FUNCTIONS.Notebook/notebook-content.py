@@ -243,6 +243,17 @@ def landing_path(workspace, lakehouse, file_path, file_name):
     root = "" if file_path == "Tables" or file_path.startswith("Tables/") else "Files/"
     return f"abfss://{workspace}@onelake.dfs.fabric.microsoft.com/{lakehouse}/{root}{file_path}/{file_name}"
 
+
+def landing_format(file_path, file_type):
+    """Format of a landing zone delivery: a delivery under Tables is a Delta table, whatever FileType says now.
+
+    An entity switched to delta keeps its older COPY INTO deliveries in the queue (and the other way round),
+    so the delivery decides, not the current registration. A delivery under Files/ is never read as Delta.
+    """
+    if file_path == "Tables" or file_path.startswith("Tables/"):
+        return "delta"
+    return "parquet" if file_type == "delta" else file_type
+
 # METADATA ********************
 
 # META {
