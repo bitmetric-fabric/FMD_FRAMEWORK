@@ -232,3 +232,31 @@ def execute_with_outputs(exec_statement, driver, connstring, database, **params)
 # META   "language": "python",
 # META   "language_group": "synapse_pyspark"
 # META }
+
+# CELL ********************
+
+def landing_path(workspace, lakehouse, file_path, file_name):
+    """OneLake path of a landing zone delivery.
+
+    A file_path that starts with 'Tables' is relative to the lakehouse root (Delta landing, ADR-014); anything else is relative to Files/.
+    """
+    root = "" if file_path == "Tables" or file_path.startswith("Tables/") else "Files/"
+    return f"abfss://{workspace}@onelake.dfs.fabric.microsoft.com/{lakehouse}/{root}{file_path}/{file_name}"
+
+
+def landing_format(file_path, file_type):
+    """Format of a landing zone delivery: a delivery under Tables is a Delta table, whatever FileType says now.
+
+    An entity switched to delta keeps its older COPY INTO deliveries in the queue (and the other way round),
+    so the delivery decides, not the current registration. A delivery under Files/ is never read as Delta.
+    """
+    if file_path == "Tables" or file_path.startswith("Tables/"):
+        return "delta"
+    return "parquet" if file_type == "delta" else file_type
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }

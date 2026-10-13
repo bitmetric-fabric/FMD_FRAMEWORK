@@ -113,8 +113,9 @@ def is_valid_guid(guid_str: str) -> bool:
 def extract_ts_from_name(name: str) -> datetime:
     """
     Extracts YYYYMMDDHHMM from names like 'Sales_Invoices_202601311402.parquet'
+    or 'sf_TPCH_CUSTOMER_202610130900' (a Delta landing table has no extension)
     """
-    match = re.search(r'_(\d{12})(?=\.parquet$)', name)
+    match = re.search(r'_(\d{12})(?:\.\w+)?$', name)
     if not match:
         raise ValueError(f"Invalid filename timestamp: {name}")
     return datetime.strptime(match.group(1), "%Y%m%d%H%M")

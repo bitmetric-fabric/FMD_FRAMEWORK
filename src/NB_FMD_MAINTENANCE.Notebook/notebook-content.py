@@ -98,10 +98,10 @@ deleted, already_gone = 0, 0
 # Beperking: elke run controleert alle oude, verwerkte leveringen opnieuw (fs.exists per levering).
 # Wordt dat traag, markeer verwijderde leveringen dan in de wachtrij en sla ze over in sp_GetMaintenanceTargets.
 for d in deliveries:
-    path = f"abfss://{d['WorkspaceGuid']}@{onelake}/{d['LakehouseGuid']}/Files/{d['FilePath']}/{d['FileName']}"
+    path = landing_path(d['WorkspaceGuid'], d['LakehouseGuid'], d['FilePath'], d['FileName'])
     try:
         if notebookutils.fs.exists(path):
-            notebookutils.fs.rm(path, True)  # een bestand, of een map (Snowflake schrijft meerdere bestanden)
+            notebookutils.fs.rm(path, True)  # een bestand, of een map (Snowflake schrijft meerdere bestanden, of een Delta-tabelmap)
             deleted += 1
         else:
             already_gone += 1
