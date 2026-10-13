@@ -14,7 +14,7 @@
 # # Registratie
 # Customer-owned: run `NB_SETUP_FMD` places this notebook once and never overwrites it, so your
 # lists survive a re-run of the setup. Lives in the configuration workspace.
-#
+# 
 # **Werkwijze** (draaiboek §A.4a):
 # 1. Nieuwe bron met veel tabellen? Draai eerst `PL_FMD_DISCOVER_SOURCE` (in de CODE-workspace) met de
 #    connectie en de database. Gebruik daarna `print_entity_list(...)` hieronder om de regels voor
@@ -24,7 +24,7 @@
 #    draait dan terug, en toont per entiteit of hij nieuw, gewijzigd of ongewijzigd is.
 # 4. Zonder verrassingen: `register(..., dry_run=False)`.
 # 5. Na een promotie: dezelfde lijst, nu met `environments=["T"]` (of `["P"]`).
-#
+# 
 # IsIncremental, IsActive en IsHistorized: 0 of 1 (geen True/False).
 
 # CELL ********************
