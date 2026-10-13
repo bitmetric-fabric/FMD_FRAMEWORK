@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "NB_REGISTRATIE",
+    "description": "Customer-owned: the setup places this once and never overwrites it. Registers sources and entities through NB_FMD_REGISTRATION_FUNCTIONS; see draaiboek paragraaf A.4a."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "c69bc17b-4ee7-4c1c-88e6-8b102affc5ea"
+  }
+}
