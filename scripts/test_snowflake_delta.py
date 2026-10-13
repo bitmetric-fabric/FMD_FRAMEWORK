@@ -54,6 +54,54 @@ def test_bronze_reads_delta():
     assert "spark.read.format('delta').load(source_changes_data_path)" in bronze
 
 
+def foreach_activities():
+    pipeline = json.loads(PIPELINE.read_text(encoding="utf-8"))["properties"]
+    foreach = next(a for a in pipeline["activities"] if a["name"] == "FE_ENTITY")
+    return {a["name"]: a for a in foreach["typeProperties"]["activities"]}
+
+
+def test_pipeline_branches_on_filetype():
+    acts = foreach_activities()
+    branch = acts["IF_FILETYPE"]
+    assert branch["type"] == "IfCondition"
+    assert branch["typeProperties"]["expression"]["value"] == "@equals(item().TargetFileType,'delta')"
+    assert [a["name"] for a in branch["typeProperties"]["ifTrueActivities"]] == ["CP_COPY_TO_LANDINGZONE"]
+    assert [a["name"] for a in branch["typeProperties"]["ifFalseActivities"]] == ["SC_COPY_INTO_LANDINGZONE"]
+    assert [d["activity"] for d in branch["dependsOn"]] == ["LK_GET_LASTLOADDATE"]
+    # nothing outside the If may depend on an activity inside it
+    for name in ("SP_FAIL_AUDIT_PIPELINE_CP", "SP_UPDATE_PROCESS"):
+        assert [d["activity"] for d in acts[name]["dependsOn"]] == ["IF_FILETYPE"], name
+    for name, a in acts.items():
+        for d in a.get("dependsOn", []):
+            assert d["activity"] in acts, f"{name} depends on {d['activity']} which is not at the ForEach level"
+
+
+def test_copy_activity_writes_a_delta_table_per_run():
+    copy = foreach_activities()["IF_FILETYPE"]["typeProperties"]["ifTrueActivities"][0]
+    tp = copy["typeProperties"]
+    assert tp["source"]["type"] == "SnowflakeV2Source"
+    assert tp["source"]["query"]["value"] == "@item().SourceDataRetrieval"
+    assert tp["sink"]["type"] == "LakehouseTableSink"
+    assert tp["sink"]["tableActionOption"] == "Overwrite"
+    assert tp["enableStaging"] is True
+    sink_ds = tp["sink"]["datasetSettings"]
+    assert sink_ds["linkedService"]["properties"]["typeProperties"]["workspaceId"] == "@item().WorkspaceGuid"
+    assert sink_ds["linkedService"]["properties"]["typeProperties"]["artifactId"] == "@item().TargetLakehouseGuid"
+    assert "item().DataSourceNamespace" in sink_ds["typeProperties"]["table"]["value"]
+
+
+def test_queue_row_carries_the_location():
+    acts = foreach_activities()
+    update = acts["SP_UPDATE_PROCESS"]["typeProperties"]["storedProcedureParameters"]
+    name = update["Filename"]["value"]["value"]
+    path = update["FilePath"]["value"]["value"]
+    assert "item().TargetFileName" in name and "item().DataSourceNamespace" in name and "'delta'" in name
+    assert "item().TargetFilePath" in path and "'Tables/ldz'" in path
+    # the audit expressions name the activity of the branch that ran
+    text = json.dumps(acts["SP_END_AUDIT_PIPELINE_CP"]) + json.dumps(acts["SP_FAIL_AUDIT_PIPELINE_CP"])
+    assert "activity('SC_COPY_INTO_LANDINGZONE')" in text and "activity('CP_COPY_TO_LANDINGZONE')" in text
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     for name, fn in tests:

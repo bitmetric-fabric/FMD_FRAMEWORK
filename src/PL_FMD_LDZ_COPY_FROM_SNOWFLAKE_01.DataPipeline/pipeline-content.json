@@ -19,8 +19,8 @@
           },
           "activities": [
             {
-              "name": "SC_COPY_INTO_LANDINGZONE",
-              "type": "Script",
+              "name": "IF_FILETYPE",
+              "type": "IfCondition",
               "dependsOn": [
                 {
                   "activity": "LK_GET_LASTLOADDATE",
@@ -29,30 +29,125 @@
                   ]
                 }
               ],
-              "policy": {
-                "timeout": "0.01:00:00",
-                "retry": 0,
-                "retryIntervalInSeconds": 30,
-                "secureOutput": false,
-                "secureInput": false
-              },
-              "description": "Snowflake schrijft de entiteit als parquet in de landing zone (COPY INTO via storage integration, zie ADR-014).",
               "typeProperties": {
-                "connectionVersion": "1.1",
-                "scripts": [
+                "expression": {
+                  "value": "@equals(item().TargetFileType,'delta')",
+                  "type": "Expression"
+                },
+                "ifTrueActivities": [
                   {
-                    "type": "Query",
-                    "text": {
-                      "value": "COPY INTO 'azure://onelake.blob.fabric.microsoft.com/@{item().WorkspaceGuid}/@{item().TargetLakehouseGuid}/Files/@{item().TargetFilePath}/@{item().TargetFileName}/' FROM (@{item().SourceDataRetrieval}) STORAGE_INTEGRATION = @{pipeline().libraryVariables.VAR_FMD_snowflake_storage_integration} FILE_FORMAT = (TYPE = PARQUET) HEADER = TRUE OVERWRITE = TRUE MAX_FILE_SIZE = 268435456",
-                      "type": "Expression"
+                    "name": "CP_COPY_TO_LANDINGZONE",
+                    "type": "Copy",
+                    "dependsOn": [],
+                    "policy": {
+                      "timeout": "0.01:00:00",
+                      "retry": 0,
+                      "retryIntervalInSeconds": 30,
+                      "secureOutput": false,
+                      "secureInput": false
+                    },
+                    "description": "Snowflake naar een Delta-tabel per run in de landing zone, zonder storage integration (ADR-014, Delta-variant).",
+                    "typeProperties": {
+                      "source": {
+                        "type": "SnowflakeV2Source",
+                        "query": {
+                          "value": "@item().SourceDataRetrieval",
+                          "type": "Expression"
+                        },
+                        "exportSettings": {
+                          "type": "SnowflakeExportCopyCommand"
+                        },
+                        "datasetSettings": {
+                          "annotations": [],
+                          "type": "SnowflakeV2Table",
+                          "schema": [],
+                          "typeProperties": {
+                            "database": {
+                              "value": "@item().DataSourceName",
+                              "type": "Expression"
+                            }
+                          },
+                          "externalReferences": {
+                            "connection": "@item().ConnectionGuid"
+                          }
+                        }
+                      },
+                      "sink": {
+                        "type": "LakehouseTableSink",
+                        "tableActionOption": "Overwrite",
+                        "partitionOption": "None",
+                        "datasetSettings": {
+                          "annotations": [],
+                          "linkedService": {
+                            "name": "LDZ",
+                            "properties": {
+                              "annotations": [],
+                              "type": "Lakehouse",
+                              "typeProperties": {
+                                "workspaceId": "@item().WorkspaceGuid",
+                                "artifactId": "@item().TargetLakehouseGuid",
+                                "rootFolder": "Tables"
+                              }
+                            }
+                          },
+                          "type": "LakehouseTable",
+                          "schema": [],
+                          "typeProperties": {
+                            "schema": {
+                              "value": "@if(pipeline().libraryVariables.VAR_FMD_lakehouse_schema_enabled,'ldz','')",
+                              "type": "Expression"
+                            },
+                            "table": {
+                              "value": "@concat(item().DataSourceNamespace,'_',replace(item().TargetFileName,concat('.',item().TargetFileType),''))",
+                              "type": "Expression"
+                            }
+                          }
+                        }
+                      },
+                      "enableStaging": true,
+                      "translator": {
+                        "type": "TabularTranslator",
+                        "typeConversion": true,
+                        "typeConversionSettings": {
+                          "allowDataTruncation": true,
+                          "treatBooleanAsNumber": false
+                        }
+                      }
                     }
                   }
                 ],
-                "scriptBlockExecutionTimeout": "02:00:00"
-              },
-              "externalReferences": {
-                "connection": "@item().ConnectionGuid",
-                "connectionType": "Snowflake"
+                "ifFalseActivities": [
+                  {
+                    "name": "SC_COPY_INTO_LANDINGZONE",
+                    "type": "Script",
+                    "dependsOn": [],
+                    "policy": {
+                      "timeout": "0.01:00:00",
+                      "retry": 0,
+                      "retryIntervalInSeconds": 30,
+                      "secureOutput": false,
+                      "secureInput": false
+                    },
+                    "description": "Snowflake schrijft de entiteit als parquet in de landing zone (COPY INTO via storage integration, zie ADR-014).",
+                    "typeProperties": {
+                      "connectionVersion": "1.1",
+                      "scripts": [
+                        {
+                          "type": "Query",
+                          "text": {
+                            "value": "COPY INTO 'azure://onelake.blob.fabric.microsoft.com/@{item().WorkspaceGuid}/@{item().TargetLakehouseGuid}/Files/@{item().TargetFilePath}/@{item().TargetFileName}/' FROM (@{item().SourceDataRetrieval}) STORAGE_INTEGRATION = @{pipeline().libraryVariables.VAR_FMD_snowflake_storage_integration} FILE_FORMAT = (TYPE = PARQUET) HEADER = TRUE OVERWRITE = TRUE MAX_FILE_SIZE = 268435456",
+                            "type": "Expression"
+                          }
+                        }
+                      ],
+                      "scriptBlockExecutionTimeout": "02:00:00"
+                    },
+                    "externalReferences": {
+                      "connection": "@item().ConnectionGuid",
+                      "connectionType": "Snowflake"
+                    }
+                  }
+                ]
               }
             },
             {
@@ -200,7 +295,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('SC_COPY_INTO_LANDINGZONE').output},    }",
+                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{if(equals(item().TargetFileType,'delta'),activity('CP_COPY_TO_LANDINGZONE').output,activity('SC_COPY_INTO_LANDINGZONE').output)},    }",
                       "type": "Expression"
                     },
                     "type": "String"
@@ -351,7 +446,7 @@
               "type": "SqlServerStoredProcedure",
               "dependsOn": [
                 {
-                  "activity": "SC_COPY_INTO_LANDINGZONE",
+                  "activity": "IF_FILETYPE",
                   "dependencyConditions": [
                     "Failed"
                   ]
@@ -372,7 +467,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"Error\",     \"Message\" : @{activity('SC_COPY_INTO_LANDINGZONE').error}}",
+                      "value": "{    \"Action\" : \"Error\",     \"Message\" : @{if(equals(item().TargetFileType,'delta'),activity('CP_COPY_TO_LANDINGZONE').error,activity('SC_COPY_INTO_LANDINGZONE').error)}}",
                       "type": "Expression"
                     },
                     "type": "String"
@@ -603,7 +698,7 @@
               "type": "SqlServerStoredProcedure",
               "dependsOn": [
                 {
-                  "activity": "SC_COPY_INTO_LANDINGZONE",
+                  "activity": "IF_FILETYPE",
                   "dependencyConditions": [
                     "Succeeded"
                   ]
@@ -621,14 +716,14 @@
                 "storedProcedureParameters": {
                   "Filename": {
                     "value": {
-                      "value": "@item().TargetFileName",
+                      "value": "@if(equals(item().TargetFileType,'delta'),concat(item().DataSourceNamespace,'_',replace(item().TargetFileName,concat('.',item().TargetFileType),'')),item().TargetFileName)",
                       "type": "Expression"
                     },
                     "type": "String"
                   },
                   "FilePath": {
                     "value": {
-                      "value": "@item().TargetFilePath",
+                      "value": "@if(equals(item().TargetFileType,'delta'),if(pipeline().libraryVariables.VAR_FMD_lakehouse_schema_enabled,'Tables/ldz','Tables'),item().TargetFilePath)",
                       "type": "Expression"
                     },
                     "type": "String"
