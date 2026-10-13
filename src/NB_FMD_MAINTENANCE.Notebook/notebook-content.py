@@ -21,7 +21,7 @@
 # Ruimt opslag op in de DATA-workspace van deze omgeving:
 # 1. Leveringen in de landing zone die Bronze heeft verwerkt en die ouder zijn dan de bewaartermijn
 #    (`VAR_FMD.landingzone_retention_days`). Een onverwerkte levering blijft altijd staan.
-# 2. Oude Delta-bestanden in Bronze en Silver (`VACUUM`, standaard 168 uur). De historie in Silver zit in de rijen (SCD2) en blijft.
+# 2. Oude Delta-bestanden in Bronze en Silver (`VACUUM`, standaard 168 uur). Bij `IsHistorized = 1` zit de historie in Silver in de rijen (SCD2) en blijft die.
 #
 # Draait via `PL_FMD_MAINTENANCE`, met een eigen schema los van de loads. Een fout laat dus geen load falen.
 

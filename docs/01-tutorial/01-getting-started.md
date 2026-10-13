@@ -322,6 +322,8 @@ Silver carries **eight technical columns** on top of the source's twelve: `Hashe
 
 One detail worth noticing, because it explains how change detection works: **`HashedNonKeyColumns` differs between Bronze and Silver for the same row.** Silver recomputes it over its own column set. It is not carried across.
 
+> **Update 2026-10-13:** this run predates ADR-016. Since then Silver keeps only the current row per key by default (`IsHistorized = 0`): the same columns, and `IsCurrent = 1` still works, but a change updates the row instead of adding a version. Set `IsHistorized = 1` for an entity in the registration list to get the SCD Type 2 record shown above.
+
 You have a loaded, historised Silver table. That is the whole framework, working.
 
 ## What this run established

@@ -260,7 +260,7 @@ BEGIN
                  WHEN le.[FileName] <> e.[FileName] OR le.[IsIncremental] <> e.[IsIncremental]
                       OR ISNULL(le.[IsIncrementalColumn], '') <> ISNULL(e.[IsIncrementalColumn], '')
                       OR ble.[PrimaryKeys] <> e.[PrimaryKeys] OR le.[IsActive] <> e.[IsActive]
-                      OR ISNULL(sle.[IsHistorized], 1) <> ISNULL(e.[IsHistorized], 1)
+                      OR ISNULL(sle.[IsHistorized], 0) <> ISNULL(e.[IsHistorized], 0)
                  THEN 'Changed'
                  ELSE 'Unchanged'
             END
@@ -337,7 +337,7 @@ BEGIN
 
             UPDATE [integration].[LandingzoneEntity] SET [IsActive] = @Act WHERE [LandingzoneEntityId] = @EntityId;
 
-            UPDATE sle SET sle.[IsHistorized] = ISNULL(@Hist, 1)
+            UPDATE sle SET sle.[IsHistorized] = ISNULL(@Hist, 0)
             FROM [integration].[SilverLayerEntity] sle
             JOIN [integration].[BronzeLayerEntity] ble ON ble.[BronzeLayerEntityId] = sle.[BronzeLayerEntityId]
             WHERE ble.[LandingzoneEntityId] = @EntityId;
@@ -371,7 +371,7 @@ BEGIN
     END
 
     SELECT e.[Source], b.[DataSourceName], e.[SourceSchema], e.[SourceName], le.[LandingzoneEntityId], le.[IsActive], ds.[LoadGroup],
-           ISNULL(e.[IsHistorized], 1) AS [IsHistorized], lv.[LoadValue] AS [Watermark], CASE WHEN v.[EntityId] IS NULL THEN 'no' ELSE 'yes' END AS [InLoadView]
+           ISNULL(e.[IsHistorized], 0) AS [IsHistorized], lv.[LoadValue] AS [Watermark], CASE WHEN v.[EntityId] IS NULL THEN 'no' ELSE 'yes' END AS [InLoadView]
     FROM @EntitiesT e
     JOIN @Bound b ON b.[Source] = e.[Source]
     JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]
