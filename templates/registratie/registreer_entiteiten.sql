@@ -49,6 +49,9 @@ INSERT INTO @Sources ([Environment],[Source],[ConnectionName],[DataSourceName],[
 
 -- ===== Entities (fill in) ======================================================================================
 -- FileName = <TargetSchema>_<TargetName> is the usual choice. CustomNotebookName only for type NOTEBOOK.
+-- FileType: 'parquet' (default). For a Snowflake source: 'parquet' makes Snowflake write the file with a storage integration,
+-- 'delta' copies into a Delta table per run (no storage integration needed, slower, uses Fabric capacity; see ADR-014).
+-- With 'delta', FileName may only contain letters, digits and '_' (it becomes part of a table name).
 INSERT INTO @Entities ([Source],[SourceSchema],[SourceName],[TargetSchema],[TargetName],[FileName],[FileType],
                        [IsIncremental],[IsIncrementalColumn],[CustomNotebookName],[PrimaryKeys],[IsActive],[IsHistorized]) VALUES
  (N'ERP', N'Sales', N'Customer', N'Sales', N'Customer', N'Sales_Customer', N'parquet', 0, NULL, NULL, N'CustomerID', 1, NULL)

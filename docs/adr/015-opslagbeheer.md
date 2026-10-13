@@ -21,6 +21,9 @@ table maintenance per tabel (`VACUUM` minimaal 7 dagen), en de Delete-activiteit
   `LoadEndDateTime` ouder is dan `VAR_FMD.landingzone_retention_days` (standaard 30). Een levering die
   ook als onverwerkt in de wachtrij staat, blijft. `execution.sp_GetMaintenanceTargets` levert de lijst
   en weigert een termijn kleiner dan 1.
+  Een Delta-landingtabel van Snowflake (`FileType = 'delta'`, ADR-014) gaat op dezelfde manier weg: de wachtrij
+  legt het pad vast (`FilePath` met `Tables` als eerste deel is relatief aan de lakehouse-root, anders aan
+  `Files/`), en `landing_path()` in `NB_FMD_UTILITY_FUNCTIONS` zet dat om voor Bronze en voor het onderhoud.
 - **`VACUUM`** op alle Bronze- en Silver-tabellen van de DATA-workspace, met 168 uur (het minimum van Delta).
 - Het verwijderen wordt gelogd in de uitvoer van het notebook, niet in de wachtrij.
 
@@ -51,3 +54,7 @@ table maintenance per tabel (`VACUUM` minimaal 7 dagen), en de Delete-activiteit
 FMD_TRIAL trial-Dev, 2026-10-07: een verwerkte levering van 40 dagen werd verwijderd, een onverwerkte van
 40 dagen bleef, een nieuwe bleef (runs `adf2f335`, `e82020d9`). `VACUUM` op 24 tabellen zonder fouten.
 Een fout (hoofdletter-GUID's, eerste run) liet de pipeline zichtbaar falen met de lijst van fouten.
+
+Delta-landing, FMD_GR Dev, 2026-10-13: een verwerkte levering (tabel `sf_TPCH_CUSTOMER_…` en `sf_TPCH_ORDERS_…` in `Tables/ldz`) ouder dan de
+bewaartermijn werd verwijderd, de nieuwere bleef (notebook-run `559f7d3c`, `RetentionDays = 1`, `LoadEndDateTime` van de oudste
+leveringen met 2 dagen teruggezet in de configdb voor de test). *Getest in eigen omgeving.*
