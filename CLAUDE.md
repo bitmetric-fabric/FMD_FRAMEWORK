@@ -14,6 +14,9 @@ Dit bestand bevat alleen wat je niet uit de code haalt.
 - De dacpac is het enige dat wordt uitgerold. Een `.sql`-wijziging onder `src/Config_Database/` bereikt niemand zonder een nieuwe dacpac, en de dacpac-guard faalt dan.
 - Bouwen: `dotnet build src/Config_Database/SQL_FMD_FRAMEWORK.sqlproj -c Release`, en daarna `bin/Release/SQL_FMD_FRAMEWORK.dacpac` kopiëren naar `src/SQL_FMD_FRAMEWORK.SQLDatabase/`.
 - Op Windows: bouw in Docker (`mcr.microsoft.com/dotnet/sdk:8.0`) vanuit een LF-checkout. Een CRLF-checkout geeft een ander `model.xml`.
+  - De eenvoudigste LF-checkout is een clone in de container zelf. Een clone in de Windows-scratchpad loopt tegen de padlimiet aan en mist dan stil bestanden. Commando: `docker run --rm -v "<repo>:/repo:ro" -v "<out>:/out" mcr.microsoft.com/dotnet/sdk:8.0 bash -c "git config --global --add safe.directory '*' && git clone -q --branch <branch> /repo /tmp/b && cd /tmp/b && dotnet build src/Config_Database/SQL_FMD_FRAMEWORK.sqlproj -c Release && cp src/Config_Database/bin/Release/SQL_FMD_FRAMEWORK.dacpac /out/"`.
+  - De clone neemt alleen gecommitte bestanden mee: commit eerst. Controleer daarna dat `model.xml` geen `&#xD;` bevat.
+  - De dacpac vergelijken met een build uit de eigen CRLF-checkout bewijst niets (gevonden 2026-10-13, PR #60).
 
 ## Verwijzingen tussen items
 - Geen letterlijke workspace- of item-GUID's: gebruik de Variable Libraries (ADR-009, ADR-010). De guid-guard controleert dat; uitzonderingen staan met reden in `config/guid_allowlist.txt`.
