@@ -726,5 +726,24 @@ check("NB_SETUP_BUSINESS_DOMAINS: aanhaken wordt een taak, en de laatste cel faa
       any("status = wire_domain_into_orchestration(" in s and "tasks.append(" in s for s in bd_cells)
       and "failed_tasks" in bd_cells[-1] and "raise RuntimeError" in bd_cells[-1])
 
+# --- CONFIG-items uit data_deployment.json -------------------------------------
+# Elke rij die deploy_item bereikt, moet een "naam.Type" met een eigen bron zijn. De
+# SQLEndpoint-rij hoort bij de database en heeft geen bron: een kale else liet hem
+# deploy_item bereiken, en de setup stopte daar (FMD_TRIAL, 2026-10-13).
+print("\n=== CONFIG-items uit data_deployment.json ===")
+deployed = []
+data_scope = dict(fmd)
+data_scope.update({
+    "data_deployment": json.loads((REPO / "config" / "data_deployment.json").read_text(encoding="utf-8")),
+    "mapping_table": [], "tasks": [], "lakehouse_schema_enabled": True,
+    "deploy_item": lambda **k: deployed.append(k["name"]) or ("server", "db"),
+})
+exec(compile(fmd_sources["ec325609-7c22-4691-b309-d0a67069712d"], "fmd-config-items", "exec"), data_scope)
+check("CONFIG: de database en de twee registratienotebooks, niets anders",
+      deployed == [data_scope["configuration"]["DatabaseName"] + ".SQLDatabase",
+                   "NB_FMD_REGISTRATION_FUNCTIONS.Notebook", "NB_REGISTRATIE.Notebook"], deployed)
+check("CONFIG: elk uitgerold item heeft een bron in src/",
+      all((REPO / "src" / n).is_dir() for n in deployed[1:]), deployed)
+
 print(f"\nresultaat: {len(failures)} fout(en)")
 sys.exit(1 if (failures or NOTEBOOK_FAILURES) else 0)
