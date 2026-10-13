@@ -36,6 +36,14 @@
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
                               "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
+                              "type": "Expression"
                             }
                           },
                           "waitOnCompletion": true,
@@ -75,6 +83,14 @@
                             },
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
                               "type": "Expression"
                             }
                           },
@@ -116,6 +132,14 @@
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
                               "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
+                              "type": "Expression"
                             }
                           },
                           "waitOnCompletion": true,
@@ -155,6 +179,14 @@
                             },
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
                               "type": "Expression"
                             }
                           },
@@ -196,6 +228,14 @@
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
                               "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
+                              "type": "Expression"
                             }
                           },
                           "waitOnCompletion": true,
@@ -235,6 +275,14 @@
                             },
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
                               "type": "Expression"
                             }
                           },
@@ -276,6 +324,14 @@
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
                               "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
+                              "type": "Expression"
                             }
                           },
                           "waitOnCompletion": true,
@@ -315,6 +371,14 @@
                             },
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
                               "type": "Expression"
                             }
                           },
@@ -356,6 +420,14 @@
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
                               "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
+                              "type": "Expression"
                             }
                           },
                           "waitOnCompletion": true,
@@ -395,6 +467,14 @@
                             },
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
                               "type": "Expression"
                             }
                           },
@@ -682,7 +762,7 @@
           "source": {
             "type": "FabricSqlDatabaseSource",
             "sqlReaderQuery": {
-              "value": "SELECT distinct     [ConnectionType] FROM [execution].[vw_LoadSourceToLandingzone] where  WorkspaceGuid='@{if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}')",
+              "value": "SELECT distinct     [ConnectionType] FROM [execution].[vw_LoadSourceToLandingzone] where  WorkspaceGuid='@{if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}') and [execution].[fn_EntityInFilter]('@{replace(pipeline().parameters.DataSourceName,'''','''''')}','@{replace(pipeline().parameters.Entities,'''','''''')}',DataSourceName,SourceSchema,SourceName) = 1",
               "type": "Expression"
             },
             "partitionOption": "None",
@@ -853,6 +933,14 @@
         "defaultValue": ""
       },
       "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "DataSourceName": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "Entities": {
         "type": "string",
         "defaultValue": ""
       }

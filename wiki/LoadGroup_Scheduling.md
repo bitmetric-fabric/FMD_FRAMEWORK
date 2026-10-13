@@ -162,6 +162,46 @@ every source with `LoadGroup = ''`.
 
 ---
 
+## Loading a subset of tables
+
+For a one-off run (re-load one table, test one source) you can narrow a run
+further than `LoadGroup`. `PL_FMD_LOAD_ALL`, `PL_FMD_LOAD_LANDINGZONE`,
+`PL_FMD_LOAD_BRONZE` and `PL_FMD_LOAD_SILVER` take two more optional
+parameters, default `''` (no filter):
+
+| Parameter | Meaning |
+|---|---|
+| `DataSourceName` | Exact name of one data source (`integration.DataSource.Name`). |
+| `Entities` | Comma-separated list. An item matches the `SourceName` of the landing-zone entity, or `SourceSchema.SourceName`. Spaces around an item are ignored. |
+
+Both filled is an AND. Together with `LoadGroup` all three must match.
+Examples: `DataSourceName = Customers`, `Entities = dbo.Customer,Orders`.
+
+- **The name is the name in the source**, in every layer, also in Bronze and
+  Silver. It is not the Bronze or Silver table name.
+- **One rule in one place:** `execution.fn_EntityInFilter`. The two getter
+  procedures and every inline query in the landing-zone pipelines call it.
+  Single quotes in the values are doubled in those queries, so a quote in a
+  table name does not break the query.
+- **`PL_FMD_LOAD_ALL` passes both parameters on** to the landing zone, Bronze
+  and Silver.
+- **`PL_FMD_ORCHESTRATION` (the schedule wrapper) does not have them.** A
+  schedule should not carry a table list; start `PL_FMD_LOAD_ALL` by hand.
+
+**Bronze and Silver on their own only process what is already queued.** They
+read the queue (`execution.PipelineLandingzoneEntity`,
+`execution.PipelineBronzeLayerEntity`), not the configuration. Running
+`PL_FMD_LOAD_BRONZE` with `Entities = dbo.Customer` processes the unprocessed
+files of that table; it does not load the table again. To load a table fresh,
+run `PL_FMD_LOAD_ALL` with the filter.
+
+**A filtered run leaves the queue rows of other tables untouched.** They stay
+queued until a run without that filter (or with a filter that matches them).
+`PL_FMD_LOAD_BRONZE` and `PL_FMD_LOAD_SILVER` still need `Data_WorkspaceGuid`;
+unlike `PL_FMD_LOAD_ALL` they have no fallback to the library variable.
+
+---
+
 ## Design notes
 
 - **Bronze and Silver are filtered too, not just Landingzone.** A group's
