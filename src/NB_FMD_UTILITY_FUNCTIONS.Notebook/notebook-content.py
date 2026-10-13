@@ -232,3 +232,20 @@ def execute_with_outputs(exec_statement, driver, connstring, database, **params)
 # META   "language": "python",
 # META   "language_group": "synapse_pyspark"
 # META }
+
+# CELL ********************
+
+def landing_path(workspace, lakehouse, file_path, file_name):
+    """OneLake path of a landing zone delivery.
+
+    A file_path that starts with 'Tables' is relative to the lakehouse root (Delta landing, ADR-014); anything else is relative to Files/.
+    """
+    root = "" if file_path == "Tables" or file_path.startswith("Tables/") else "Files/"
+    return f"abfss://{workspace}@onelake.dfs.fabric.microsoft.com/{lakehouse}/{root}{file_path}/{file_name}"
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
