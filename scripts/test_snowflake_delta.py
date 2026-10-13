@@ -35,6 +35,25 @@ def test_landing_path():
     assert landing_path("ws", "lh", "TablesX/y", "f.parquet") == base + "Files/TablesX/y/f.parquet"
 
 
+BRONZE = REPO / "src/NB_FMD_LOAD_LANDING_BRONZE.Notebook/notebook-content.py"
+MAINTENANCE = REPO / "src/NB_FMD_MAINTENANCE.Notebook/notebook-content.py"
+
+
+def test_notebooks_use_landing_path():
+    bronze = BRONZE.read_text(encoding="utf-8")
+    maintenance = MAINTENANCE.read_text(encoding="utf-8")
+    assert "source_changes_data_path = landing_path(SourceWorkspace, SourceLakehouse, SourceFilePath, SourceFileName)" in bronze
+    assert "/Files/{SourceFilePath}/{SourceFileName}" not in bronze
+    assert "path = landing_path(d['WorkspaceGuid'], d['LakehouseGuid'], d['FilePath'], d['FileName'])" in maintenance
+    assert "/Files/{d['FilePath']}" not in maintenance
+
+
+def test_bronze_reads_delta():
+    bronze = BRONZE.read_text(encoding="utf-8")
+    assert "if SourceFileType == 'delta':" in bronze
+    assert "spark.read.format('delta').load(source_changes_data_path)" in bronze
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     for name, fn in tests:

@@ -258,7 +258,7 @@ spark.conf.set("spark.fabric.resourceProfile", "writeHeavy")
 # CELL ********************
 
 #Set SourceFile and target Location
-source_changes_data_path = f"abfss://{SourceWorkspace}@onelake.dfs.fabric.microsoft.com/{SourceLakehouse}/Files/{SourceFilePath}/{SourceFileName}"
+source_changes_data_path = landing_path(SourceWorkspace, SourceLakehouse, SourceFilePath, SourceFileName)
 print(source_changes_data_path)
 
 if str(schema_enabled).lower() == "true":
@@ -315,7 +315,10 @@ if not notebookutils.fs.exists(source_changes_data_path):
 
 # CELL ********************
 
-if SourceFileType=='csv':
+if SourceFileType == 'delta':
+    # Delta landing (ADR-014): one table per run, written by the Snowflake copy activity
+    dfDataChanged = spark.read.format('delta').load(source_changes_data_path)
+elif SourceFileType=='csv':
     dfDataChanged = (
         spark.read
             .option("header", True)            # first row has column names
