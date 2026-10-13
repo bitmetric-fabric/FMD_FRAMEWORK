@@ -11,7 +11,8 @@
 -- (see its header comment for the per-column rules: HistoryDays, LoadGroup, IsHistorized, ...).
 -- An unknown field in a row is an error, same as a typo would have been invisible in the template.
 -- @DryRun: 1 runs every check and the registration, then rolls back and returns a preview
--- (New / Changed / Unchanged per entity, plus active entities in this scope that the list omits)
+-- (New / Changed / Unchanged per entity with what a Changed changes, plus active entities in this
+-- scope that the list omits)
 -- instead of committing.
 CREATE PROCEDURE [integration].[sp_RegisterEntities](
     @Domain NVARCHAR(100),
@@ -250,20 +251,17 @@ BEGIN
     IF @Error IS NOT NULL THROW 50003, @Error, 1;
 
     -- ===== 2. Dry-run preview: computed against the current state, before any write ===========
-    DECLARE @Preview TABLE ([SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200), [Action] VARCHAR(10));
+    DECLARE @Preview TABLE ([SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200), [Action] VARCHAR(10), [Changes] NVARCHAR(2000));
     DECLARE @Orphans TABLE ([DataSourceName] NVARCHAR(100), [SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200));
     IF @DryRun = 1
     BEGIN
         INSERT INTO @Preview
         SELECT e.[SourceSchema], e.[SourceName],
             CASE WHEN le.[LandingzoneEntityId] IS NULL THEN 'New'
-                 WHEN le.[FileName] <> e.[FileName] OR le.[IsIncremental] <> e.[IsIncremental]
-                      OR ISNULL(le.[IsIncrementalColumn], '') <> ISNULL(e.[IsIncrementalColumn], '')
-                      OR ble.[PrimaryKeys] <> e.[PrimaryKeys] OR le.[IsActive] <> e.[IsActive]
-                      OR ISNULL(sle.[IsHistorized], 0) <> ISNULL(e.[IsHistorized], 0)
-                 THEN 'Changed'
+                 WHEN chg.[Changes] <> '' THEN 'Changed'
                  ELSE 'Unchanged'
-            END
+            END,
+            CASE WHEN le.[LandingzoneEntityId] IS NOT NULL THEN chg.[Changes] END
         FROM @EntitiesT e
         JOIN @Bound b ON b.[Source] = e.[Source]
         JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]
@@ -277,7 +275,19 @@ BEGIN
         LEFT JOIN [integration].[LandingzoneEntity] le ON le.[DataSourceId] = ds.[DataSourceId] AND le.[LakehouseId] = lh.[LakehouseId]
             AND le.[SourceSchema] = e.[SourceSchema] AND le.[SourceName] = e.[SourceName]
         LEFT JOIN [integration].[BronzeLayerEntity] ble ON ble.[LandingzoneEntityId] = le.[LandingzoneEntityId]
-        LEFT JOIN [integration].[SilverLayerEntity] sle ON sle.[BronzeLayerEntityId] = ble.[BronzeLayerEntityId];
+        LEFT JOIN [integration].[SilverLayerEntity] sle ON sle.[BronzeLayerEntityId] = ble.[BronzeLayerEntityId]
+        -- What a "Changed" changes, old -> new, so the dry run shows e.g. that an omitted IsHistorized
+        -- turns history off (ADR-016: an empty field means 0, also for an entity registered with 1).
+        CROSS APPLY (SELECT CONCAT_WS(', ',
+            CASE WHEN le.[FileName] <> e.[FileName] THEN CONCAT('FileName ', le.[FileName], ' -> ', e.[FileName]) END,
+            CASE WHEN le.[IsIncremental] <> e.[IsIncremental] THEN CONCAT('IsIncremental ', le.[IsIncremental], ' -> ', e.[IsIncremental]) END,
+            CASE WHEN ISNULL(le.[IsIncrementalColumn], '') <> ISNULL(e.[IsIncrementalColumn], '')
+                 THEN CONCAT('IsIncrementalColumn ', ISNULL(le.[IsIncrementalColumn], '(none)'), ' -> ', ISNULL(e.[IsIncrementalColumn], '(none)')) END,
+            CASE WHEN ble.[PrimaryKeys] <> e.[PrimaryKeys] THEN CONCAT('PrimaryKeys ', ble.[PrimaryKeys], ' -> ', e.[PrimaryKeys]) END,
+            CASE WHEN le.[IsActive] <> e.[IsActive] THEN CONCAT('IsActive ', le.[IsActive], ' -> ', e.[IsActive]) END,
+            CASE WHEN ISNULL(sle.[IsHistorized], 0) <> ISNULL(e.[IsHistorized], 0)
+                 THEN CONCAT('IsHistorized ', ISNULL(sle.[IsHistorized], 0), ' -> ', ISNULL(e.[IsHistorized], 0)) END
+        ) AS [Changes]) chg;
 
         -- Active in this workspace's scope, but not in this list: this run would leave them as is.
         INSERT INTO @Orphans
