@@ -93,22 +93,43 @@ met `FileType` in de registratie:
 
 - **Vastgesteld in de code:** in `PL_FMD_LDZ_COPY_FROM_SNOWFLAKE_01` kiest een If (`IF_FILETYPE`, op
   `item().TargetFileType`) per entiteit tussen de Script-activiteit en de Copy-activiteit. De
-  afhankelijkheden, de audit en de wachtrij verwijzen naar de If.
+  afhankelijkheden (`SP_FAIL_AUDIT_PIPELINE_CP`, `SP_UPDATE_PROCESS`) hangen aan de If; de audit-expressies
+  lezen de uitvoer of de fout van de activiteit in de tak die draaide. De Copy-activiteit gebruikt
+  `SnowflakeSource`/`SnowflakeTable` 1.1 (net als `LK_GET_LASTLOADDATE`): de pipeline-editor opent de V2-typen
+  binnen een ForEach niet (testplan T-F05).
 - **De wachtrij legt het pad vast.** Voor `delta` schrijft de pipeline `FilePath = Tables/ldz` (of `Tables` zonder
   schema's) en `FileName = <tabelnaam>` in `execution.PipelineLandingzoneEntity`. Een `FilePath` die met `Tables`
   begint, is relatief aan de lakehouse-root, anders aan `Files/`. `landing_path()` in `NB_FMD_UTILITY_FUNCTIONS`
   zet dat om, voor Bronze (die bij `SourceFileType = 'delta'` met `format('delta')` leest) en voor het onderhoud
   (ADR-015). Geen dacpac.
 - **Een tabel per run**, niet één per entiteit: overschrijven verliest een levering als er twee runs in de
-  wachtrij staan (zelfde reden als hierboven). Een tweede run binnen dezelfde minuut overschrijft de eerste.
+  wachtrij staan (zelfde reden als hierboven). **Beperking:** twee runs van dezelfde entiteit in dezelfde
+  UTC-minuut geven dezelfde tabelnaam en dezelfde wachtrijsleutel. `sp_UpsertPipelineLandingzoneEntity` voegt dan
+  niets toe en de tweede copy vervangt de tabel van de eerste. Is de eerste levering al verwerkt, dan bereikt de
+  tweede Bronze nooit; bij een incrementele entiteit zijn dan de rijen tussen de twee watermarks kwijt. Dit
+  bestond al bij `COPY INTO` (dezelfde minuutstempel in de bestandsnaam), de kans is klein; start een entiteit niet
+  twee keer binnen een minuut. (*Vastgesteld in de code*, review 2026-10-13.)
+- **Het formaat volgt de levering, niet de registratie.** Een entiteit die van `parquet` naar `delta` wordt
+  omgezet (of terug) heeft nog oudere leveringen in de wachtrij. Bronze leidt het formaat af uit het pad
+  (`landing_format()`: onder `Tables` is Delta, onder `Files/` nooit), en de volgorde van leveringen in
+  `NB_FMD_PROCESSING_PARALLEL_MAIN` herkent ook een tabelnaam zonder extensie. Zonder dat faalt Bronze op een
+  parquet-map (die geen Delta-tabel is) en blokkeert het de latere leveringen van die entiteit; of een
+  oudere Delta-levering na een nieuwere parquet-levering wordt verwerkt.
+- **Een volledige load met 0 rijen** maakt bij `delta` een lege landingtabel, en de Bronze-merge verwijdert dan alle
+  rijen van die entiteit. Bij `parquet` schrijft Snowflake geen bestand, en Bronze slaat de levering over. Een
+  bron die bewust leeg is, leegt Bronze dus alleen bij `delta` (*aanname* voor een volledige load; een
+  incrementele load met 0 rijen is getest en laat Bronze ongemoeid).
 - **Types blijven behouden** zonder mapping (`NUMBER(38,0)` naar `decimal(38,0)`, `NUMBER(12,2)` naar
   `decimal(12,2)`, `DATE` en `TIMESTAMP_NTZ` naar `timestamp`). *Getest in eigen omgeving, 2026-10-13.*
 - **Kosten en duur.** Gemeten voor 1,5 miljoen rijen (`ORDERS`): 85 tot 99 s in de copy, 4 DIU, 0,27 DIU-uur
   per activiteit (*DataMovement*), tegen 5 s en geen DataMovement met `COPY INTO`. *Getest in eigen omgeving,
   2026-10-13.* Voor grote tabellen (`LINEITEM`, 6 miljoen rijen) is dat een veelvoud (*aanname*, niet gemeten).
   Gebruik `delta` dus alleen voor entiteiten die niet via de integration kunnen.
-- **Beperkingen.** `FileName` mag bij `delta` alleen letters, cijfers en `_` bevatten (het wordt een
-  tabelnaam). Een lakehouse zonder schema's (`lakehouse_schema_enabled = false`) is niet getest (*aanname*:
+- **Beperkingen.** `FileName` en de namespace van de bron mogen bij `delta` alleen letters, cijfers en `_`
+  bevatten (samen worden ze de tabelnaam `<namespace>_<FileName>_<tijdstempel>`; een spatie, punt of streepje
+  laat de copy zichtbaar falen). `FileType` moet in kleine letters (`delta`) worden geregistreerd (*vastgesteld in
+  de code*: de vergelijking is hoofdlettergevoelig). De Purview-lineage-extractor gaat voor `delta`-entiteiten uit
+  van een map onder `Files/` die niet bestaat (alleen informatief). Een lakehouse zonder schema's (`lakehouse_schema_enabled = false`) is niet getest (*aanname*:
   de tabel komt dan direct onder `Tables/`). De accountparameters `PREVENT_UNLOAD_TO_INLINE_URL` en
   `REQUIRE_STORAGE_INTEGRATION_FOR_STAGE_OPERATION` kunnen een staged copy blokkeren; dat is niet getest en
   moet de klant bevestigen (*aanname*).
@@ -163,3 +184,15 @@ Delta-variant (aanvulling 2026-10-13), *getest in eigen omgeving*:
    (run `ccc01d32`): oude en nieuwe leveringen worden allemaal verwerkt en de aantallen blijven kloppen.
    Onderhoud, notebook-run `8a52407e`: een verwerkte delta-tabel en een verwerkt parquet-bestand van dezelfde
    entiteit gaan allebei weg, de nieuwste levering blijft.
+7. Review 2026-10-13 (onafhankelijke reviewer) vond twee fouten bij omschakelen van `FileType` met leveringen in de wachtrij;
+   beide zijn hersteld en getest. FMD_TRIAL Dev: een onverwerkte parquet-levering van `CUSTOMER`, daarna omgezet
+   naar `delta` en `LOAD_ALL` (run `f49c5fcb`): de parquet-levering werd als parquet verwerkt en daarna de
+   delta-levering (`landing_format()`). Die run faalde op `NATION` door een tijdelijke `Login timeout expired` van de
+   configdb-verbinding (los van deze wijziging); een tweede Bronze-run (`8ebc3757`) verwerkte de twee
+   delta-leveringen van `NATION` in de juiste volgorde, daarna stond er niets open. Daarna is `CUSTOMER` terug
+   op `parquet` gezet.
+8. FMD_GR Dev, na de overstap van de Copy-activiteit naar `SnowflakeSource`/`SnowflakeTable` 1.1 (editor-compatibel),
+   run `14beddb3`: Completed, Silver `CUSTOMER` 150.000 en `ORDERS` 1.500.001, `ORDERS` kopieert 0 rijen, types
+   ongewijzigd. *Getest in eigen omgeving, 2026-10-13.*
+9. **Nog niet getest:** een incrementele delta-run met echte wijzigingen in de bron, en het openen van de pipeline in de
+   editor (T-F05) met de Copy-activiteit in de If.
