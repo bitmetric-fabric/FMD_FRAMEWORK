@@ -247,7 +247,18 @@ testen; de framework-bestanden verwijzen nog naar de oorspronkelijke GUID.
   zie de tabel hierboven.
 - ~~De twee notebooks zelf zijn niet in Fabric getest.~~ *Gedaan 2026-10-13*, zie "De notebooks in
   Fabric" hierboven.
-- Een echte registratie in T ná een promotie is nog niet gedaan. De dry run in T is wel getest.
+- ~~Een echte registratie in T ná een promotie is nog niet gedaan.~~ *Gedaan 2026-10-13* in de rookproef
+  na de merge, met de echte setup (`testplan-trial.md`, "vervolg 7"):
+  - `TPCH.NATION` geregistreerd in T vanuit het uitgerolde `NB_REGISTRATIE` (`29cf50c8`);
+  - `PL_FMD_LOAD_ALL` in T geladen tot Silver (`df23d149`);
+  - een tweede setup-run overschreef `NB_REGISTRATIE` niet.
+
+  De rookproef vond twee fouten in deze ADR-wijziging, gefixt in PR #63:
+  - de setup stopte na de dacpac;
+  - een lege markdownregel werd samengevoegd met de volgende regel.
+- ~~Waarom de GUID uit `config/item_config.yaml` niet bestaat.~~ *Verklaard 2026-10-13:* het is een
+  placeholder die de setup vervangt door de echte `CON_FMD_FABRIC_SQL` (mapping in `NB_SETUP_FMD`).
+  Vastgesteld in de uitgerolde `PL_FMD_DISCOVER_SOURCE`.
 - ~~`sp_RegisterEntities` overschrijft bij elke run `DataSource.Description`.~~ *Gefixt 2026-10-13,
   op verzoek van Mitchell:* een bestaande bron houdt zijn beschrijving, en alleen een nieuwe krijgt
   "Registered with sp_RegisterEntities". Geen `Description`-veld in de lijst, want daar is niet om
@@ -255,6 +266,3 @@ testen; de framework-bestanden verwijzen nog naar de oorspronkelijke GUID.
   - een echte run voor `AdventureWorks` (`Sales.Currency`): "Demoklant" bleef staan, en de checksum
     was onveranderd;
   - een nieuwe bron, binnen een teruggedraaide transactie, kreeg de standaardtekst.
-- Waarom de GUID uit `config/item_config.yaml` niet (meer) bestaat onder Mitchells eigen account is
-  niet uitgezocht; voor de echte deployment maakt dit niets uit zolang de setup zelf die GUID blijft
-  gebruiken zoals nu, maar het is het nalopen waard voor een toekomstige her-setup of een nieuwe klant.
