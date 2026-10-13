@@ -198,4 +198,5 @@ Delta-variant (aanvulling 2026-10-13), *getest in eigen omgeving*:
    gewijzigd (`GEWIJZIGD_OP` en `O_TOTALPRICE`). De copy haalt precies 10 rijen op (landingtabel
    `sf_TPCH_ORDERS_202610131134`), de watermark schuift op, en Silver krijgt 10 nieuwe versies (1.500.011 rijen, waarvan
    1.500.001 actueel). *Getest in eigen omgeving.*
-10. **Nog niet getest:** het openen van de pipeline in de editor (T-F05) met de Copy-activiteit in de If.
+10. Pipeline openen in de editor (T-F05), FMD_GR Dev, 2026-10-13 (Mitchell): `COPY_FROM_SNOWFLAKE_01` opent en toont de Copy-activiteit
+    in de If. De editor sloeg niets op: de definitie bleef gelijk aan de gepatchte versie. *Getest in eigen omgeving.*
