@@ -234,7 +234,7 @@
           "source": {
             "type": "FabricSqlDatabaseSource",
             "sqlReaderQuery": {
-              "value": "SELECT  DatasourceType  FROM [execution].[vw_LoadSourceToLandingzone]  where ConnectionType='ONELAKE' and WorkspaceGuid='@{pipeline().parameters.Data_WorkspaceGuid}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}') group by DatasourceType",
+              "value": "SELECT  DatasourceType  FROM [execution].[vw_LoadSourceToLandingzone]  where ConnectionType='ONELAKE' and WorkspaceGuid='@{pipeline().parameters.Data_WorkspaceGuid}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}') and [execution].[fn_EntityInFilter]('@{replace(pipeline().parameters.DataSourceName,'''','''''')}','@{replace(pipeline().parameters.Entities,'''','''''')}',DataSourceName,SourceSchema,SourceName) = 1 group by DatasourceType",
               "type": "Expression"
             },
             "partitionOption": "None",
@@ -310,6 +310,14 @@
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
                               "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
+                              "type": "Expression"
                             }
                           },
                           "waitOnCompletion": true,
@@ -346,6 +354,14 @@
                             },
                             "LoadGroup": {
                               "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
                               "type": "Expression"
                             }
                           },
@@ -529,6 +545,14 @@
         "type": "string"
       },
       "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "DataSourceName": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "Entities": {
         "type": "string",
         "defaultValue": ""
       }

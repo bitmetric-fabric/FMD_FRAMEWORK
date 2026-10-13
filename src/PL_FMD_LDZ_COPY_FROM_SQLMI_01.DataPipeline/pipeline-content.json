@@ -1005,7 +1005,7 @@
           "source": {
             "type": "FabricSqlDatabaseSource",
             "sqlReaderQuery": {
-              "value": "SELECT *  FROM [execution].[vw_LoadSourceToLandingzone]  where DataSourceType='SQLMI_01'\nand WorkspaceGuid='@{pipeline().parameters.Data_WorkspaceGuid}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}')",
+              "value": "SELECT *  FROM [execution].[vw_LoadSourceToLandingzone]  where DataSourceType='SQLMI_01'\nand WorkspaceGuid='@{pipeline().parameters.Data_WorkspaceGuid}' and (''='@{pipeline().parameters.LoadGroup}' or LoadGroup='@{pipeline().parameters.LoadGroup}') and [execution].[fn_EntityInFilter]('@{replace(pipeline().parameters.DataSourceName,'''','''''')}','@{replace(pipeline().parameters.Entities,'''','''''')}',DataSourceName,SourceSchema,SourceName) = 1",
               "type": "Expression"
             },
             "queryTimeout": "02:00:00",
@@ -1179,6 +1179,14 @@
         "type": "string"
       },
       "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "DataSourceName": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "Entities": {
         "type": "string",
         "defaultValue": ""
       }

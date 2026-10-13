@@ -27,7 +27,10 @@
   AS CleansingRules,
     DS.[Namespace] AS [DataSourceNamespace],
     DS.[LoadGroup] AS [LoadGroup],
-    SLE.[IsHistorized] AS [IsHistorized]
+    SLE.[IsHistorized] AS [IsHistorized],
+    DS.[Name] AS [DataSourceName],
+    LZE.[SourceSchema] AS [LandingzoneSourceSchema],
+    LZE.[SourceName] AS [LandingzoneSourceName]
 FROM [integration].[SilverLayerEntity] SLE
 INNER JOIN [integration].[BronzeLayerEntity] BLE
     ON SLE.BronzeLayerEntityId = BLE.BronzeLayerEntityId

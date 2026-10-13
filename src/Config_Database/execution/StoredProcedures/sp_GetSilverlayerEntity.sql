@@ -2,6 +2,8 @@
 CREATE   PROCEDURE [execution].[sp_GetSilverlayerEntity]
 (    @WorkspaceId UNIQUEIDENTIFIER
     ,@LoadGroup VARCHAR(50) = ''
+    ,@DataSourceName NVARCHAR(100) = ''
+    ,@Entities NVARCHAR(MAX) = ''
     )
 WITH EXECUTE AS CALLER
 AS
@@ -41,6 +43,7 @@ BEGIN
     WHERE SourceWorkspaceId = @WorkspaceId
       -- Fabric passes an empty-string pipeline parameter to a procedure as NULL
       AND (ISNULL(@LoadGroup, '') = '' OR LoadGroup = @LoadGroup)
+      AND [execution].[fn_EntityInFilter](@DataSourceName, @Entities, DataSourceName, LandingzoneSourceSchema, LandingzoneSourceName) = 1
 END;
 
 GO

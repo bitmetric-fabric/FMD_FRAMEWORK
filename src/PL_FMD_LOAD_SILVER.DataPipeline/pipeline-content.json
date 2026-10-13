@@ -21,6 +21,20 @@
                   "type": "Expression"
                 },
                 "type": "String"
+              },
+              "DataSourceName": {
+                "value": {
+                  "value": "@pipeline().parameters.DataSourceName",
+                  "type": "Expression"
+                },
+                "type": "String"
+              },
+              "Entities": {
+                "value": {
+                  "value": "@pipeline().parameters.Entities",
+                  "type": "Expression"
+                },
+                "type": "String"
               }
             },
             "partitionOption": "None",
@@ -526,6 +540,14 @@
         "type": "string"
       },
       "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "DataSourceName": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "Entities": {
         "type": "string",
         "defaultValue": ""
       }

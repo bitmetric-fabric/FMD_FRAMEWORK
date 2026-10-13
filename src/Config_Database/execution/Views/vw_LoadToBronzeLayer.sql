@@ -18,7 +18,10 @@
     LZE.[IsIncremental],
     BLE.[PrimaryKeys],
     DS.[Namespace] AS [DataSourceNamespace],
-    DS.[LoadGroup] AS [LoadGroup]
+    DS.[LoadGroup] AS [LoadGroup],
+    DS.[Name] AS [DataSourceName],
+    LZE.[SourceSchema] AS [LandingzoneSourceSchema],
+    LZE.[SourceName] AS [LandingzoneSourceName]
 FROM [integration].[BronzeLayerEntity] BLE
 INNER JOIN [integration].[LandingzoneEntity] LZE
     ON LZE.[LandingzoneEntityId] = BLE.[LandingzoneEntityId]

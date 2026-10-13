@@ -12,6 +12,14 @@
             "LoadGroup": {
               "value": "@pipeline().parameters.LoadGroup",
               "type": "Expression"
+            },
+            "DataSourceName": {
+              "value": "@pipeline().parameters.DataSourceName",
+              "type": "Expression"
+            },
+            "Entities": {
+              "value": "@pipeline().parameters.Entities",
+              "type": "Expression"
             }
           },
           "waitOnCompletion": true,
@@ -49,6 +57,14 @@
             },
             "LoadGroup": {
               "value": "@pipeline().parameters.LoadGroup",
+              "type": "Expression"
+            },
+            "DataSourceName": {
+              "value": "@pipeline().parameters.DataSourceName",
+              "type": "Expression"
+            },
+            "Entities": {
+              "value": "@pipeline().parameters.Entities",
               "type": "Expression"
             }
           },
@@ -550,6 +566,14 @@
             "LoadGroup": {
               "value": "@pipeline().parameters.LoadGroup",
               "type": "Expression"
+            },
+            "DataSourceName": {
+              "value": "@pipeline().parameters.DataSourceName",
+              "type": "Expression"
+            },
+            "Entities": {
+              "value": "@pipeline().parameters.Entities",
+              "type": "Expression"
             }
           },
           "waitOnCompletion": true,
@@ -755,6 +779,14 @@
         "defaultValue": ""
       },
       "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "DataSourceName": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "Entities": {
         "type": "string",
         "defaultValue": ""
       }
