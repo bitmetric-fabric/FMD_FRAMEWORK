@@ -58,7 +58,7 @@ Business Domains add two more: a Gold/Reporting workspace and a separate Busines
 |---|---|---|
 | Landing Zone | `LH_DATA_LANDINGZONE` | Raw files ingested from source systems |
 | Bronze | `LH_BRONZE_LAYER` | Cleansed Delta tables with hash-based change tracking |
-| Silver | `LH_SILVER_LAYER` | SCD Type 2 Delta tables (full history) |
+| Silver | `LH_SILVER_LAYER` | Delta tables with the current row per key; SCD Type 2 (full history) per entity via `IsHistorized = 1` |
 | Gold | Domain-specific lakehouse | Aggregated / modelled data for reporting |
 
 ### Pipeline naming convention
@@ -112,7 +112,7 @@ All notebooks live in `src/NB_*.Notebook/` and are saved as `notebook-content.py
 |---|---|
 | `NB_FMD_UTILITY_FUNCTIONS` | Shared helper functions — always referenced via `%run` or `notebookutils.notebook.run`. Contains `execute_with_outputs` (pyodbc + AAD token) and `build_exec_statement`. |
 | `NB_FMD_LOAD_LANDING_BRONZE` | Reads Landing Zone files → applies DQ + cleansing → writes Bronze Delta |
-| `NB_FMD_LOAD_BRONZE_SILVER` | Bronze → Silver SCD Type 2 merge |
+| `NB_FMD_LOAD_BRONZE_SILVER` | Bronze → Silver merge (current row; SCD Type 2 when `IsHistorized = 1`) |
 | `NB_FMD_DQ_CLEANSING` | Applies framework cleansing rules |
 | `NB_FMD_CUSTOM_DQ_CLEANSING` | User-extensible cleansing notebook |
 | `NB_FMD_PROCESSING_LANDINGZONE_MAIN` | Wrapper that invokes custom extraction notebooks |

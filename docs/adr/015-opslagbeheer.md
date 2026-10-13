@@ -41,8 +41,8 @@ table maintenance per tabel (`VACUUM` minimaal 7 dagen), en de Delete-activiteit
 
 ## Gevolgen
 
-- **Time travel** in Bronze en Silver gaat maximaal 7 dagen terug. De historie in Silver zit in de rijen
-  (SCD2) en blijft.
+- **Time travel** in Bronze en Silver gaat maximaal 7 dagen terug. Bij `IsHistorized = 1` zit de historie
+  in Silver in de rijen (SCD2) en blijft die (ADR-016).
 - **Herverwerken** van een levering kan alleen binnen de bewaartermijn; daarna opnieuw laden uit de bron.
 - Het schema van `PL_FMD_MAINTENANCE` richt de klant in per omgeving (draaiboek). Zonder schema groeit
   de opslag zoals voorheen.

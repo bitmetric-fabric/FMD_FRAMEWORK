@@ -13,11 +13,11 @@
 # # FMD Load Bronze to Silver Notebook
 # 
 # ## Overview
-# This notebook handles the data transformation and loading process from the Bronze layer to the Silver layer in the FMD framework. It implements Slowly Changing Dimension (SCD) Type 2 logic to track historical changes while applying data quality checks and cleansing rules.
-# 
+# This notebook handles the data transformation and loading process from the Bronze layer to the Silver layer in the FMD framework. By default Silver keeps only the current version of each row; with `IsHistorized = True` it implements Slowly Changing Dimension (SCD) Type 2 logic to track historical changes. Data quality checks and cleansing rules are applied either way.
+#
 # ## Key Features
-# - **SCD Type 2 Implementation**: Maintains complete history of records with versioning and temporal tracking
-# - **Optional history**: with `IsHistorized = False` (`integration.SilverLayerEntity.IsHistorized`) a change updates the current row instead of adding a version. The same columns are kept, so `IsCurrent = 1` works for both
+# - **Optional SCD Type 2**: with `IsHistorized = True` (`integration.SilverLayerEntity.IsHistorized`, default 0) Silver keeps the complete history of records with versioning and temporal tracking
+# - **Default without history**: with `IsHistorized = False` a change updates the current row instead of adding a version. The same columns are kept, so `IsCurrent = 1` works for both
 # - **Change Detection**: Uses hashed columns to identify inserts, updates, and deletes
 # - **Data Quality & Cleansing**: Applies configurable cleansing rules from the framework database
 # - **Soft Deletes**: Marks deleted records with IsDeleted flag while preserving history
@@ -26,7 +26,7 @@
 # - **Change Data Feed**: Enables CDC capabilities for downstream consumers
 # - **Audit Logging**: Tracks execution details in the framework database
 # 
-# ## SCD Type 2 Operations
+# ## SCD Type 2 Operations (`IsHistorized = True`)
 # - **Inserts**: New records marked as IsCurrent=True with RecordEndDate='9999-12-31'
 # - **Updates**: Old version marked as IsCurrent=False, new version inserted with IsCurrent=True
 # - **Deletes**: Records marked as IsDeleted=True and IsCurrent=False
@@ -60,7 +60,7 @@ default_settings=notebookutils.variableLibrary.getLibrary("VAR_FMD")
 # Set arguments
 PrimaryKeys = "HashedPKColumn"
 IsIncremental = False
-IsHistorized = True
+IsHistorized = False
 
 SourceWorkspace= ""
 SourceLakehouse =""

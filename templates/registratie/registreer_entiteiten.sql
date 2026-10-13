@@ -16,10 +16,11 @@
 -- - HistoryDays (optional, per binding): for incremental entities without a watermark yet, the first load
 --   only fetches rows of the last N days. Only for a date/time IsIncrementalColumn. An existing watermark is
 --   never changed. Full-load entities ignore it.
--- - IsHistorized (optional, per entity, default 1): 1 keeps the history of changes in Silver (SCD2, a new row per
---   change); 0 keeps only the current version (a change updates the row). Both keep the columns IsCurrent and
---   IsDeleted, so a Gold query on IsCurrent = 1 works for either. Switching 1 to 0 keeps the history already
---   there; switching 0 to 1 does not bring it back. Use 0 for large tables whose history nobody needs.
+-- - IsHistorized (optional, per entity, default 0): 0 keeps only the current version in Silver (a change updates
+--   the row); 1 keeps the history of changes (SCD2, a new row per change). Both keep the columns IsCurrent and
+--   IsDeleted, so a Gold query on IsCurrent = 1 works for either. Empty means 0, also for an entity that was
+--   registered with 1 before: the list is the truth. Switching 1 to 0 keeps the history already there; switching
+--   0 to 1 does not bring it back. Set 1 only for tables whose history of changes someone needs.
 -- - An existing entity is found by data source + SourceSchema + SourceName. A different SourceName gives a new
 --   entity (see 11_troubleshooting, "Herregistratie onder een andere DataSource").
 SET NOCOUNT ON;
@@ -168,7 +169,7 @@ BEGIN TRY
 
         UPDATE [integration].[LandingzoneEntity] SET [IsActive] = @Act WHERE [LandingzoneEntityId] = @EntityId;
 
-        UPDATE sle SET sle.[IsHistorized] = ISNULL(@Hist, 1)
+        UPDATE sle SET sle.[IsHistorized] = ISNULL(@Hist, 0)
         FROM [integration].[SilverLayerEntity] sle
         JOIN [integration].[BronzeLayerEntity] ble ON ble.[BronzeLayerEntityId] = sle.[BronzeLayerEntityId]
         WHERE ble.[LandingzoneEntityId] = @EntityId;
@@ -191,7 +192,7 @@ END CATCH;
 
 -- 3. Result: the listed entities as they are now in the configuration database, for this environment.
 SELECT e.[Source], b.[DataSourceName], e.[SourceSchema], e.[SourceName], le.[LandingzoneEntityId], le.[IsActive], ds.[LoadGroup],
-       ISNULL(e.[IsHistorized], 1) AS [IsHistorized], lv.[LoadValue] AS [Watermark], CASE WHEN v.[EntityId] IS NULL THEN 'no' ELSE 'yes' END AS [InLoadView]
+       ISNULL(e.[IsHistorized], 0) AS [IsHistorized], lv.[LoadValue] AS [Watermark], CASE WHEN v.[EntityId] IS NULL THEN 'no' ELSE 'yes' END AS [InLoadView]
 FROM @Entities e
 JOIN @Bound b ON b.[Source] = e.[Source]
 JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]

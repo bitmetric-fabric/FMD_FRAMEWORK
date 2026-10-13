@@ -18,15 +18,15 @@ daardoor nog één run lang. Dat is apart opgelost, vóór deze wijziging.
 
 ## Beslissing
 
-- **`integration.SilverLayerEntity.IsHistorized`** (BIT, standaard 1). Bestaande installaties en nieuwe
-  entiteiten houden SCD2; wie de historie niet nodig heeft, zet het per entiteit op 0.
+- **`integration.SilverLayerEntity.IsHistorized`** (BIT, oorspronkelijk standaard 1; sinds 2026-10-13
+  standaard 0, zie *Herzien*). Bij 1 houdt Silver SCD2.
 - Bij `IsHistorized = 0` houdt Silver dezelfde kolommen (`IsCurrent`, `IsDeleted`, `RecordStartDate`,
   `RecordEndDate`, `RecordModifiedDate`), zodat een Gold-query op `IsCurrent = 1` voor beide werkt:
   - een gewijzigde rij wordt bijgewerkt, met een nieuwe `RecordModifiedDate`; `RecordStartDate` blijft;
   - een nieuwe rij wordt toegevoegd;
   - een verwijderde bronrij wordt een soft delete in één run: `IsDeleted = 1`, `IsCurrent = 0`.
 - De waarde komt uit het lijstsjabloon (`templates/registratie/registreer_entiteiten.sql`, kolom
-  `IsHistorized`, leeg betekent 1), net als `IsActive`. De lijst is de bron van waarheid.
+  `IsHistorized`, leeg betekent 0 sinds 2026-10-13), net als `IsActive`. De lijst is de bron van waarheid.
 - `sp_GetSilverlayerEntity` geeft de waarde als parameter aan het notebook.
 
 ## Alternatieven
@@ -48,6 +48,22 @@ daardoor nog één run lang. Dat is apart opgelost, vóór deze wijziging.
 - Dit lost niet op dat Silver elke run de hele Bronze- en Silver-tabel leest. Change Data Feed staat aan,
   maar het notebook gebruikt het niet. Alleen de wijzigingen lezen is een apart voorstel.
 - Een wijziging in de configdb-tabel bereikt een omgeving pas met een nieuwe dacpac (ADR-013).
+
+## Herzien 2026-10-13: standaard geen historie
+
+Reden: historie die niemand vraagt kost opslag en merge-tijd, ook als het een klant met veel tabellen
+treft die er nooit om vroeg. SCD2 is daarom een bewuste keuze per tabel, geen standaard.
+
+- **`IsHistorized` is standaard 0** (kolomdefault, notebookparameter en lijstsjabloon). De rest van de
+  beslissing hierboven blijft gelden: dezelfde kolommen, `IsCurrent = 1` werkt voor beide.
+- **Leeg in de registratielijst betekent 0, ook voor een entiteit die eerder met 1 is geregistreerd.**
+  De lijst is de bron van waarheid (`sp_RegisterEntities`, `registreer_entiteiten.sql`). Wie SCD2 wil, zet
+  `IsHistorized = 1` in de lijst. Een bestaande installatie die de historie nodig heeft, moet dat vóór de
+  eerstvolgende registratierun doen; de historie die al in Silver staat blijft anders wel staan, maar
+  groeit niet meer.
+- Een entiteit die buiten de lijst om is geregistreerd (bijvoorbeeld via `sp_UpsertLandingzoneBronzeSilver`
+  of `PL_TOOLING_POST_ASQL_TO_FMD`) krijgt bij aanmaak 0. Een bestaande rij houdt zijn waarde tot de
+  lijst die verandert. De dacpac zet bestaande rijen niet om.
 
 ## Test
 
