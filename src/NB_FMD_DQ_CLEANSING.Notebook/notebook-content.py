@@ -227,6 +227,7 @@ def handle_cleansing_functions(df: DataFrame, cleansing_rules):
 
 from pyspark.sql.functions import col, trim, regexp_replace, lower, upper, initcap, when, length, lit, coalesce,to_date, to_timestamp, when
 from pyspark.sql import DataFrame
+from pyspark.sql.types import NumericType
 
 # METADATA ********************
 
@@ -299,7 +300,7 @@ def fill_nulls(df: DataFrame, columns, args):
 
             if default_string is not None and dtype.simpleString().startswith('string'):
                 df = df.withColumn(c, coalesce(col(c), lit(default_string)))
-            elif default_numeric is not None and dtype.simpleString() in ('int', 'bigint', 'double', 'float', 'decimal'):
+            elif default_numeric is not None and isinstance(dtype, NumericType):
                 df = df.withColumn(c, coalesce(col(c), lit(default_numeric)))
             elif default_date is not None and dtype.simpleString() in ('date',):
                 df = df.withColumn(c, coalesce(col(c), lit(default_date)))
