@@ -217,7 +217,7 @@ def print_entity_list(connection_name, data_source_name, schema=None, source_ali
 
 # CELL ********************
 
-def register(sources, entities, domain, environments, dry_run=True):
+def register(sources, entities, domain, environments, dry_run=True, requeue_silver=False):
     """
     Registers `sources` and `entities` into one domain's DATA workspace, once per environment in
     `environments`: "D", "T", "A", "P", or "DEV_<NAME>" for a developer's own DATA workspace
@@ -226,6 +226,11 @@ def register(sources, entities, domain, environments, dry_run=True):
     Everything, including the "nothing registered yet" case, happens inside sp_RegisterEntities' own
     transaction: dry_run=True runs the full check and the registration, then rolls back and prints
     what would have changed.
+
+    requeue_silver (only with dry_run=False): a changed Silver cleansing rule only reaches rows that
+    change afterwards. With True, the entities whose Silver rule this run changes are put back in the
+    queue (execution.sp_RequeueSilverLayerEntities), so the next PL_FMD_LOAD_SILVER rebuilds them from
+    Bronze. A change of a type or of the columns also needs the Silver table dropped first.
 
     sources: a row binds a logical Source to a connection and database for one environment.
       Environment '*' applies to every environment without a row of its own (D, T, A, P; a DEV_
@@ -242,15 +247,27 @@ def register(sources, entities, domain, environments, dry_run=True):
       An entity is found by data source + SourceSchema + SourceName; another SourceName is a new one.
     """
     driver, connstring, database = resolve_config_database()
-    for environment in environments:
-        print(f"\n=== {domain} / {environment} ({'dry run' if dry_run else 'registering'}) ===")
+
+    def call(environment, dry):
         result = execute_with_outputs("[integration].[sp_RegisterEntities]", driver, connstring, database,
                                       Domain=domain, Environment=environment,
                                       Sources=json.dumps(sources), Entities=json.dumps(entities),
-                                      DryRun=1 if dry_run else 0)
+                                      DryRun=1 if dry else 0)
+        return result["result_sets"]
+
+    def silver_changed(preview):
+        # ponytail: the requeue filter is a comma-separated Schema.Name list, so a name with a comma
+        # cannot be requeued this way; none exist in the framework's sources so far.
+        return [f"{r['SourceSchema']}.{r['SourceName']}" for r in preview
+                if "SilverCleansingRules changed" in (r.get('Changes') or "")]
+
+    for environment in environments:
+        print(f"\n=== {domain} / {environment} ({'dry run' if dry_run else 'registering'}) ===")
+        # The old rule is gone after the real run, so find the changed entities with a dry run first.
+        to_requeue = silver_changed(call(environment, True)[-2]) if requeue_silver and not dry_run else []
         # First result set: the resolved workspace. The procedure's own result is always at the
         # end (dry run: preview, then orphans); the nested upsert procedures add sets in between.
-        sets = result["result_sets"]
+        sets = call(environment, dry_run)
         print(f"Workspace: {sets[0][0]['ResolvedWorkspace']}")
 
         if dry_run:
@@ -260,6 +277,10 @@ def register(sources, entities, domain, environments, dry_run=True):
                 print(f"  {row['Action']:<9} {row['SourceSchema']}.{row['SourceName']}{changes}")
                 if row.get('Warning'):
                     print(f"            WARNING: {row['Warning']}")
+            if silver_changed(sets[-2]):
+                print("A changed Silver rule only reaches rows that change afterwards. To rebuild those "
+                      "entities from Bronze, register with dry_run=False, requeue_silver=True (drop the "
+                      "Silver table first if the rule changes a type or the columns).")
             orphans = sets[-1]
             if orphans:
                 print("Active in this workspace but not in this list (left as is):")
@@ -270,6 +291,15 @@ def register(sources, entities, domain, environments, dry_run=True):
             for row in sets[-1]:
                 print(f"  {row['SourceSchema']}.{row['SourceName']}: IsActive={row['IsActive']}, "
                       f"InLoadView={row['InLoadView']}, Watermark={row['Watermark']}")
+            if to_requeue:
+                queued = execute_with_outputs("[execution].[sp_RequeueSilverLayerEntities]", driver, connstring,
+                                              database, WorkspaceId=sets[0][0]['WorkspaceGuid'],
+                                              Entities=",".join(to_requeue), DryRun=0)["result_sets"][-1]
+                print("Silver queue (next PL_FMD_LOAD_SILVER rebuilds these from Bronze):")
+                for row in queued:
+                    print(f"  {row['SourceSchema']}.{row['SourceName']}: {row['Result']}")
+            elif requeue_silver:
+                print("No Silver rule changed: nothing put back in the queue.")
 
 # METADATA ********************
 
