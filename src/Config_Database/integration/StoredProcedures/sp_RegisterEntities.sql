@@ -1,15 +1,19 @@
 -- Registers sources and entities for one domain's DATA workspace in one environment. Repeatable.
--- Replaces templates/registratie/registreer_entiteiten.sql: same checks and the same "all or
--- nothing" transaction, but driven by JSON from NB_REGISTRATIE instead of sqlcmd variables, and
--- with the DATA workspace resolved from @Domain + @Environment instead of typed by name (removes
--- the customer-prefix guesswork and the mismatch risk fixed for the template in E-R5).
+-- The only registration route (ADR-018; it replaced the sqlcmd template registreer_entiteiten.sql): one
+-- "all or nothing" transaction, driven by JSON from NB_REGISTRATIE, with the DATA workspace resolved
+-- from @Domain + @Environment instead of typed by name (removes the customer-prefix guesswork and the
+-- mismatch risk the template had, E-R5).
 --
 -- @Domain: the workspace name without DATA/(D)/(T)/(A), e.g. 'INTEGRATION' or 'FINANCE'.
 -- @Environment: D, T, A or P. Resolves to the one workspace matching '<DOMAIN> DATA%' with that
 -- suffix (none for P) and an active LH_DATA_LANDINGZONE. Errors if that is not exactly one workspace.
--- @Sources / @Entities: JSON arrays, same columns and meaning as the lists in the old template
--- (see its header comment for the per-column rules: HistoryDays, LoadGroup, IsHistorized, ...).
--- An unknown field in a row is an error, same as a typo would have been invisible in the template.
+-- Or DEV_<NAME>: a developer's own DATA workspace, named DEV_<NAME>_<prefix>_<DOMAIN>_DATA (so
+-- 'DEV_MITCHELL' finds DEV_MITCHELL_TRIAL_INTEGRATION_DATA), registered in the configdb like any other.
+-- It uses the bindings of D, because a developer workspace reads from the same source as Dev. The
+-- data source rows are shared with D: a DEV_ run that changes a source's LoadGroup or Namespace changes it for D.
+-- @Sources / @Entities: JSON arrays. Per-column rules (HistoryDays, LoadGroup, IsHistorized, ...): see
+-- the markdown of NB_REGISTRATIE and the docstring of register() in NB_FMD_REGISTRATION_FUNCTIONS.
+-- An unknown field in a row is an error: a typo in a key would be silently ignored by JSON otherwise.
 -- BronzeCleansingRules / SilverCleansingRules (optional, a JSON array of {"function", "columns", "parameters"},
 -- as NB_FMD_DQ_CLEANSING reads them): a row without the field leaves the rules as they are; with the field the
 -- list is the truth, and [] or null clears them. A rule that is not valid is an error; a function that is not
@@ -20,7 +24,7 @@
 -- instead of committing.
 CREATE PROCEDURE [integration].[sp_RegisterEntities](
     @Domain NVARCHAR(100),
-    @Environment VARCHAR(10),
+    @Environment VARCHAR(100),
     @Sources NVARCHAR(MAX),
     @Entities NVARCHAR(MAX),
     @DryRun BIT = 0
@@ -33,8 +37,13 @@ BEGIN
 
     DECLARE @Description NVARCHAR(200) = N'Registered with sp_RegisterEntities';
 
-    IF @Environment NOT IN ('D', 'T', 'A', 'P')
-        THROW 50002, 'sp_RegisterEntities: @Environment must be D, T, A or P.', 1;
+    -- DEV_<NAME>: letters, digits, '_' and '-' only. The name goes into a LIKE pattern below, so a
+    -- wildcard ('%', '[') must never get through.
+    DECLARE @IsDev BIT = IIF(@Environment LIKE 'DEV[_]_%' AND @Environment NOT LIKE '%[^A-Za-z0-9_-]%', 1, 0);
+    IF @Environment NOT IN ('D', 'T', 'A', 'P') AND @IsDev = 0
+        THROW 50002, 'sp_RegisterEntities: @Environment must be D, T, A, P or DEV_<NAME> (letters, digits, underscore and hyphen).', 1;
+    -- A developer workspace reads from the same source as Dev, so it uses the D bindings.
+    DECLARE @BindingEnv VARCHAR(10) = IIF(@IsDev = 1, 'D', @Environment);
     IF ISJSON(@Sources) = 0
         THROW 50002, 'sp_RegisterEntities: @Sources is not valid JSON.', 1;
     IF ISJSON(@Entities) = 0
@@ -49,17 +58,22 @@ BEGIN
     -- Workspace names carry a customer prefix ("FMD_TRIAL INTEGRATION DATA (D)"), so the domain
     -- is matched as a substring, not an exact prefix. Getest in FMD_TRIAL, 2026-10-13: zonder de
     -- leading '%' vond dit niets, want elke workspace heeft een prefix voor het domein.
-    WHERE UPPER(W.[Name]) LIKE '%' + UPPER(@Domain) + ' DATA%'
-      AND (
-           (@Environment IN ('D', 'T', 'A') AND W.[Name] LIKE '% (' + @Environment + ')')
-        OR (@Environment = 'P' AND W.[Name] NOT LIKE '% (D)' AND W.[Name] NOT LIKE '% (T)' AND W.[Name] NOT LIKE '% (A)')
-      );
+    WHERE (@IsDev = 0
+           AND UPPER(W.[Name]) LIKE '%' + UPPER(@Domain) + ' DATA%'
+           AND (
+                (@Environment IN ('D', 'T', 'A') AND W.[Name] LIKE '% (' + @Environment + ')')
+             OR (@Environment = 'P' AND W.[Name] NOT LIKE '% (D)' AND W.[Name] NOT LIKE '% (T)' AND W.[Name] NOT LIKE '% (A)')
+           ))
+       -- A developer workspace is named DEV_<NAME>_<prefix>_<DOMAIN>_DATA: underscores, no suffix.
+       -- Every '_' is written as '[_]' so it matches a literal underscore, not any character.
+       OR (@IsDev = 1
+           AND UPPER(W.[Name]) LIKE REPLACE(UPPER(@Environment), '_', '[_]') + '[_]%[_]' + REPLACE(REPLACE(UPPER(@Domain), ' ', '_'), '_', '[_]') + '[_]DATA');
 
     DECLARE @WsCount INT = (SELECT COUNT(*) FROM @WsCandidates);
     IF @WsCount = 0
         -- No literal '%' here: a THROW message with one renders blank via sqlcmd/ODBC Driver 18
         -- (getest in FMD_TRIAL, 2026-10-13; PRINT shows the same string fine, THROW does not).
-        THROW 50002, 'sp_RegisterEntities: no DATA workspace found for this @Domain and @Environment (workspace name containing "<DOMAIN> DATA", with the (D)/(T)/(A) suffix or none for P, and an active LH_DATA_LANDINGZONE).', 1;
+        THROW 50002, 'sp_RegisterEntities: no DATA workspace found for this @Domain and @Environment (workspace name containing "<DOMAIN> DATA", with the (D)/(T)/(A) suffix or none for P; for DEV_<NAME> a workspace named DEV_<NAME>_<prefix>_<DOMAIN>_DATA; and an active LH_DATA_LANDINGZONE).', 1;
     IF @WsCount > 1
     BEGIN
         DECLARE @Candidates NVARCHAR(500) = (SELECT STRING_AGG([Name], ', ') FROM @WsCandidates);
@@ -154,14 +168,14 @@ BEGIN
     ) f;
     IF @KeyError IS NOT NULL THROW 50003, @KeyError, 1;
 
-    -- The binding that applies in this environment: its own row, otherwise the '*' row.
+    -- The binding that applies in this environment: its own row, otherwise the '*' row. DEV_<NAME> uses D.
     DECLARE @Bound TABLE ([Source] NVARCHAR(100), [ConnectionName] NVARCHAR(200), [DataSourceName] NVARCHAR(100), [Namespace] VARCHAR(100),
                           [DataSourceType] VARCHAR(30), [LoadGroup] VARCHAR(50), [HistoryDays] INT);
     INSERT INTO @Bound
     SELECT s.[Source], s.[ConnectionName], s.[DataSourceName], s.[Namespace], s.[DataSourceType], ISNULL(s.[LoadGroup], ''), s.[HistoryDays]
     FROM @SourcesT s
-    WHERE s.[Environment] = @Environment
-       OR (s.[Environment] = '*' AND NOT EXISTS (SELECT 1 FROM @SourcesT x WHERE x.[Source] = s.[Source] AND x.[Environment] = @Environment));
+    WHERE s.[Environment] = @BindingEnv
+       OR (s.[Environment] = '*' AND NOT EXISTS (SELECT 1 FROM @SourcesT x WHERE x.[Source] = s.[Source] AND x.[Environment] = @BindingEnv));
 
     -- ===== 1. Checks: the same ones as the template, plus the metadata check below ============
     DECLARE @Error NVARCHAR(2000);
@@ -196,7 +210,7 @@ BEGIN
                             ON t.[ConnectionType] = c.[Type]
                           WHERE c.[Name] = b.[ConnectionName] AND t.[DataSourceType] = b.[DataSourceType])
         UNION ALL
-        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'source ' + e.[Source] + N' has no binding for environment ' + @Environment
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'source ' + e.[Source] + N' has no binding for environment ' + @BindingEnv
         FROM @EntitiesT e WHERE NOT EXISTS (SELECT 1 FROM @Bound b WHERE b.[Source] = e.[Source])
         UNION ALL
         SELECT CONCAT([SourceSchema], '.', [SourceName]), N'IsIncrementalColumn is required when IsIncremental = 1'

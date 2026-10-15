@@ -23,9 +23,23 @@
 # 3. Draai eerst `register(..., dry_run=True)`: dat voert alle controles en de registratie uit en
 #    draait dan terug, en toont per entiteit of hij nieuw, gewijzigd of ongewijzigd is.
 # 4. Zonder verrassingen: `register(..., dry_run=False)`.
-# 5. Na een promotie: dezelfde lijst, nu met `environments=["T"]` (of `["P"]`).
-# 
+# 5. Dezelfde lijst gebruik je in elke stap van een feature:
+#    - tijdens de feature in je eigen developer-workspace: `environments=["DEV_<NAAM>"]` (bijvoorbeeld
+#      `["DEV_MITCHELL"]`; de workspace `DEV_<NAAM>_<prefix>_INTEGRATION_DATA` moet al in de configdb
+#      staan, en de bronbinding is die van D);
+#    - na de merge: `["D"]`;
+#    - vlak voor een promotie: `["T"]`, en later `["P"]`.
+#
 # IsIncremental, IsActive en IsHistorized: 0 of 1 (geen True/False).
+#
+# **Velden** (de volledige uitleg staat in de docstring van `register`):
+# - `sources`: `Environment` is `'*'` (alle omgevingen) of D, T, A, P; een eigen regel wint van `'*'`.
+#   `Namespace` moet voor een Source in elke omgeving gelijk zijn. `LoadGroup` hoort bij de bron, dus
+#   omgevingen met dezelfde binding delen hem. `HistoryDays` (optioneel): een incrementele entiteit zonder
+#   watermark haalt de eerste keer alleen de laatste N dagen op.
+# - `entities`: `FileName` is standaard `<TargetSchema>_<TargetName>` en `FileType` `parquet`. `IsActive`: de
+#   lijst is de waarheid, zet een entiteit uit met `0` in de lijst en niet met de hand in de database.
+#   `IsHistorized` (standaard 0): 1 bewaart de historie in Silver (SCD2), leeg betekent 0.
 #
 # **Cleansing rules** (optioneel): `BronzeCleansingRules` en `SilverCleansingRules` per entiteit, een lijst
 # van `{"function": ..., "columns": "A;B", "parameters": {...}}`. Een entiteit zonder het veld houdt zijn

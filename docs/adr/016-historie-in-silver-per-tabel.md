@@ -25,8 +25,10 @@ daardoor nog één run lang. Dat is apart opgelost, vóór deze wijziging.
   - een gewijzigde rij wordt bijgewerkt, met een nieuwe `RecordModifiedDate`; `RecordStartDate` blijft;
   - een nieuwe rij wordt toegevoegd;
   - een verwijderde bronrij wordt een soft delete in één run: `IsDeleted = 1`, `IsCurrent = 0`.
-- De waarde komt uit het lijstsjabloon (`templates/registratie/registreer_entiteiten.sql`, kolom
-  `IsHistorized`, leeg betekent 0 sinds 2026-10-13), net als `IsActive`. De lijst is de bron van waarheid.
+- De waarde komt uit de registratielijst (veld `IsHistorized`, leeg betekent 0 sinds 2026-10-13), net als
+  `IsActive`. De lijst is de bron van waarheid. *Bijgewerkt 2026-10-15:* de lijst staat in `NB_REGISTRATIE`
+  (ADR-018); het sjabloon `templates/registratie/registreer_entiteiten.sql` waar dit eerst stond, is
+  verwijderd.
 - `sp_GetSilverlayerEntity` geeft de waarde als parameter aan het notebook.
 
 ## Alternatieven
@@ -54,10 +56,10 @@ daardoor nog één run lang. Dat is apart opgelost, vóór deze wijziging.
 Reden: historie die niemand vraagt kost opslag en merge-tijd, ook als het een klant met veel tabellen
 treft die er nooit om vroeg. SCD2 is daarom een bewuste keuze per tabel, geen standaard.
 
-- **`IsHistorized` is standaard 0** (kolomdefault, notebookparameter en lijstsjabloon). De rest van de
+- **`IsHistorized` is standaard 0** (kolomdefault, notebookparameter en registratielijst). De rest van de
   beslissing hierboven blijft gelden: dezelfde kolommen, `IsCurrent = 1` werkt voor beide.
 - **Leeg in de registratielijst betekent 0, ook voor een entiteit die eerder met 1 is geregistreerd.**
-  De lijst is de bron van waarheid (`sp_RegisterEntities`, `registreer_entiteiten.sql`). Wie SCD2 wil, zet
+  De lijst is de bron van waarheid (`sp_RegisterEntities`, via `NB_REGISTRATIE`). Wie SCD2 wil, zet
   `IsHistorized = 1` in de lijst. Een bestaande installatie die de historie nodig heeft, moet dat vóór de
   eerstvolgende registratierun doen; de historie die al in Silver staat blijft anders wel staan, maar
   groeit niet meer.

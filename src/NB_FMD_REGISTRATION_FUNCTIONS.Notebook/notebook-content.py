@@ -219,11 +219,27 @@ def print_entity_list(connection_name, data_source_name, schema=None, source_ali
 
 def register(sources, entities, domain, environments, dry_run=True):
     """
-    Registers `sources` and `entities` (see templates/registratie/registreer_entiteiten.sql for
-    the column meanings) into one domain's DATA workspace, once per environment in `environments`
-    (e.g. ["D"], or ["T", "P"] after a promotion). Everything, including the "nothing registered
-    yet" case, happens inside sp_RegisterEntities' own transaction: dry_run=True runs the full
-    check and the registration, then rolls back and prints what would have changed.
+    Registers `sources` and `entities` into one domain's DATA workspace, once per environment in
+    `environments`: "D", "T", "A", "P", or "DEV_<NAME>" for a developer's own DATA workspace
+    (DEV_<NAME>_<prefix>_<DOMAIN>_DATA; it uses the bindings of D). Use the same lists throughout:
+    ["DEV_<NAME>"] during a feature, ["D"] after the merge, ["T"] and ["P"] before each promotion.
+    Everything, including the "nothing registered yet" case, happens inside sp_RegisterEntities' own
+    transaction: dry_run=True runs the full check and the registration, then rolls back and prints
+    what would have changed.
+
+    sources: a row binds a logical Source to a connection and database for one environment.
+      Environment '*' applies to every environment without a row of its own (D, T, A, P; a DEV_
+      run uses the D row). Namespace must be the same for a Source in every environment.
+      LoadGroup lives on the data source, so environments that share a binding share it.
+      HistoryDays (optional): for an incremental entity without a watermark yet, the first load
+      only fetches the last N days; an existing watermark is never changed.
+    entities: Source, SourceSchema, SourceName and PrimaryKeys are required.
+      FileName defaults to <TargetSchema>_<TargetName>, FileType to 'parquet' ('delta' for
+      Snowflake without a storage integration, ADR-014; FileName then only letters, digits, '_').
+      IsActive: the list is the truth, switch an entity off with 0 here, not by hand.
+      IsHistorized (default 0): 1 keeps the history of changes in Silver (SCD2), ADR-016; empty
+      means 0, also for an entity registered with 1 before. CustomNotebookName only for NOTEBOOK.
+      An entity is found by data source + SourceSchema + SourceName; another SourceName is a new one.
     """
     driver, connstring, database = resolve_config_database()
     for environment in environments:
