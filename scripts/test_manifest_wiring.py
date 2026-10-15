@@ -113,6 +113,7 @@ check("FMD connectie notebooks", fmd["connection_fabric_notebooks_name"], "CON_F
 check("FMD connectie database", fmd["connection_fabric_database_name"], "CON_FMD_FABRIC_SQL")
 check("FMD connectie adf", fmd["connection_fabric_adf_name"], "CON_FMD_ADF_PIPELINES")
 check("FMD lakehouse_schema_enabled", fmd["lakehouse_schema_enabled"], True)
+check("FMD load_demo_data: standaard uit", fmd["load_demo_data"], False)
 check("FMD spark_version", fmd["spark_version"], "2.0")
 check("FMD capacity_name_config", fmd["capacity_name_config"], CAP)
 check("FMD key_vault", fmd["key_vault"], "<your key vault name>")

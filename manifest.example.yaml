@@ -109,6 +109,10 @@ framework:
   # dat is geen geldige waarde (triage V3). true is de default; false is een
   # legitieme klantkeuze, maar kies bij oplevering en verander daarna niet meer.
   lakehouse_schema_enabled: true
+  # Demodata: de setup registreert de demo-entiteit [in].[customer] en maakt de tabel aan
+  # (NB_FMD_LOAD_DEMO_DATA). Standaard uit: een klantomgeving krijgt anders bij elke
+  # setup-run een demo-entiteit erbij. Zet op true voor een demo of een eerste kennismaking.
+  load_demo_data: false
 
 # --- Beveiliging -------------------------------------------------------------
 # Object-ID's van Entra-groepen die toegang krijgen tot de workspaces.

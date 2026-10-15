@@ -117,7 +117,7 @@ readable.
 | `environments` | One entry per environment: `name`, `short` (D/T/A/P), `capacity`, and optionally `capacity_business_domain` for the business-domain workspaces. The order is the stage order of the deployment pipelines, and it decides which value sets are deployed. |
 | `config_workspace` | Capacity for the CONFIG workspace, which exists once per customer rather than once per environment. |
 | `spark` | Runtime version and Spark sizing, written into the Environment item at deploy time. One `ENV_FMD.Environment` is deployed into the CONFIG workspace and shared by every environment, so this sizing applies everywhere. |
-| `framework` | `lakehouse_schema_enabled`. |
+| `framework` | `lakehouse_schema_enabled`, and `load_demo_data` (optional, default `false`: `true` registers the demo entity `[in].[customer]` and creates its table). |
 | `security` | Object IDs of the Entra groups, and optionally a service principal. |
 | `key_vault` | Key Vault name, and the **names** of the secrets holding the service principal credentials. |
 
