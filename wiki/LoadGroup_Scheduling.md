@@ -197,8 +197,9 @@ run `PL_FMD_LOAD_ALL` with the filter.
 
 **A filtered run leaves the queue rows of other tables untouched.** They stay
 queued until a run without that filter (or with a filter that matches them).
-`PL_FMD_LOAD_BRONZE` and `PL_FMD_LOAD_SILVER` still need `Data_WorkspaceGuid`;
-unlike `PL_FMD_LOAD_ALL` they have no fallback to the library variable.
+Like `PL_FMD_LOAD_ALL`, `PL_FMD_LOAD_BRONZE` and `PL_FMD_LOAD_SILVER` fall back
+to `VAR_CONFIG_FMD.fmd_data_workspace_guid` when `Data_WorkspaceGuid` is empty,
+so a run on its own loads the DATA workspace of its own environment.
 
 ---
 

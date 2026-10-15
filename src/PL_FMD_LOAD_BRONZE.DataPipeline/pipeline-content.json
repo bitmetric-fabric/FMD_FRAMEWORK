@@ -237,7 +237,7 @@
             "storedProcedureParameters": {
               "WorkspaceId": {
                 "value": {
-                  "value": "@pipeline().parameters.Data_WorkspaceGuid",
+                  "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
                   "type": "Expression"
                 },
                 "type": "Guid"
@@ -533,7 +533,8 @@
     ],
     "parameters": {
       "Data_WorkspaceGuid": {
-        "type": "string"
+        "type": "string",
+        "defaultValue": ""
       },
       "LoadGroup": {
         "type": "string",
@@ -567,6 +568,11 @@
       "VAR_CONFIG_FMD_fmd_config_workspace_guid": {
         "type": "String",
         "variableName": "fmd_config_workspace_guid",
+        "libraryName": "VAR_CONFIG_FMD"
+      },
+      "VAR_CONFIG_FMD_fmd_data_workspace_guid": {
+        "type": "String",
+        "variableName": "fmd_data_workspace_guid",
         "libraryName": "VAR_CONFIG_FMD"
       }
     }
