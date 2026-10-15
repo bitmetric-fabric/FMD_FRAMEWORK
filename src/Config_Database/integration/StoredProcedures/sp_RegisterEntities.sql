@@ -10,6 +10,10 @@
 -- @Sources / @Entities: JSON arrays, same columns and meaning as the lists in the old template
 -- (see its header comment for the per-column rules: HistoryDays, LoadGroup, IsHistorized, ...).
 -- An unknown field in a row is an error, same as a typo would have been invisible in the template.
+-- BronzeCleansingRules / SilverCleansingRules (optional, a JSON array of {"function", "columns", "parameters"},
+-- as NB_FMD_DQ_CLEANSING reads them): a row without the field leaves the rules as they are; with the field the
+-- list is the truth, and [] or null clears them. A rule that is not valid is an error; a function that is not
+-- built in is only a warning in the dry run (it may be registered in NB_FMD_CUSTOM_DQ_CLEANSING).
 -- @DryRun: 1 runs every check and the registration, then rolls back and returns a preview
 -- (New / Changed / Unchanged per entity with what a Changed changes, plus active entities in this
 -- scope that the list omits)
@@ -87,9 +91,12 @@ BEGIN
     DECLARE @EntitiesT TABLE ([Nr] INT IDENTITY, [Source] NVARCHAR(100), [SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200),
                              [TargetSchema] NVARCHAR(100), [TargetName] NVARCHAR(200), [FileName] NVARCHAR(200), [FileType] NVARCHAR(20),
                              [IsIncremental] BIT, [IsIncrementalColumn] NVARCHAR(50), [CustomNotebookName] VARCHAR(200),
-                             [PrimaryKeys] NVARCHAR(200), [IsActive] BIT, [IsHistorized] BIT);
+                             [PrimaryKeys] NVARCHAR(200), [IsActive] BIT, [IsHistorized] BIT,
+                             [BronzeRulesSet] BIT, [BronzeRules] NVARCHAR(MAX), [BronzeRulesText] NVARCHAR(MAX),
+                             [SilverRulesSet] BIT, [SilverRules] NVARCHAR(MAX), [SilverRulesText] NVARCHAR(MAX));
     INSERT INTO @EntitiesT ([Source], [SourceSchema], [SourceName], [TargetSchema], [TargetName], [FileName], [FileType],
-                            [IsIncremental], [IsIncrementalColumn], [CustomNotebookName], [PrimaryKeys], [IsActive], [IsHistorized])
+                            [IsIncremental], [IsIncrementalColumn], [CustomNotebookName], [PrimaryKeys], [IsActive], [IsHistorized],
+                            [BronzeRulesSet], [BronzeRules], [BronzeRulesText], [SilverRulesSet], [SilverRules], [SilverRulesText])
     SELECT
         e.[Source], e.[SourceSchema], e.[SourceName],
         ISNULL(NULLIF(e.[TargetSchema], ''), e.[SourceSchema]) AS [TargetSchema],
@@ -99,8 +106,15 @@ BEGIN
         ISNULL(e.[IsIncremental], 0) AS [IsIncremental],
         e.[IsIncrementalColumn], e.[CustomNotebookName], e.[PrimaryKeys],
         ISNULL(e.[IsActive], 1) AS [IsActive],
-        e.[IsHistorized]
-    FROM OPENJSON(@Entities)
+        e.[IsHistorized],
+        JSON_PATH_EXISTS(r.[value], '$.BronzeCleansingRules'),
+        CASE WHEN REPLACE(REPLACE(REPLACE(e.[BronzeRules], ' ', ''), CHAR(13), ''), CHAR(10), '') = '[]' THEN NULL ELSE e.[BronzeRules] END,
+        e.[BronzeRulesText],
+        JSON_PATH_EXISTS(r.[value], '$.SilverCleansingRules'),
+        CASE WHEN REPLACE(REPLACE(REPLACE(e.[SilverRules], ' ', ''), CHAR(13), ''), CHAR(10), '') = '[]' THEN NULL ELSE e.[SilverRules] END,
+        e.[SilverRulesText]
+    FROM OPENJSON(@Entities) r
+    CROSS APPLY OPENJSON(r.[value])
         WITH (
             [Source]              NVARCHAR(100) '$.Source',
             [SourceSchema]        NVARCHAR(100) '$.SourceSchema',
@@ -114,8 +128,13 @@ BEGIN
             [CustomNotebookName]  VARCHAR(200)  '$.CustomNotebookName',
             [PrimaryKeys]         NVARCHAR(200) '$.PrimaryKeys',
             [IsActive]            BIT           '$.IsActive',
-            [IsHistorized]        BIT           '$.IsHistorized'
-        ) e;
+            [IsHistorized]        BIT           '$.IsHistorized',
+            [BronzeRules]         NVARCHAR(MAX) '$.BronzeCleansingRules' AS JSON,
+            [BronzeRulesText]     NVARCHAR(MAX) '$.BronzeCleansingRules',
+            [SilverRules]         NVARCHAR(MAX) '$.SilverCleansingRules' AS JSON,
+            [SilverRulesText]     NVARCHAR(MAX) '$.SilverCleansingRules'
+        ) e
+    ORDER BY CAST(r.[key] AS INT);
 
     -- ===== 0. Unknown fields: a typo in a key is silently ignored by JSON otherwise ===========
     DECLARE @KeyError NVARCHAR(2000);
@@ -130,7 +149,8 @@ BEGIN
         FROM OPENJSON(@Entities) e
         CROSS APPLY OPENJSON(e.[value]) k
         WHERE k.[key] NOT IN ('Source', 'SourceSchema', 'SourceName', 'TargetSchema', 'TargetName', 'FileName', 'FileType',
-                              'IsIncremental', 'IsIncrementalColumn', 'CustomNotebookName', 'PrimaryKeys', 'IsActive', 'IsHistorized')
+                              'IsIncremental', 'IsIncrementalColumn', 'CustomNotebookName', 'PrimaryKeys', 'IsActive', 'IsHistorized',
+                              'BronzeCleansingRules', 'SilverCleansingRules')
     ) f;
     IF @KeyError IS NOT NULL THROW 50003, @KeyError, 1;
 
@@ -190,6 +210,28 @@ BEGIN
         UNION ALL
         SELECT CONCAT(MIN([SourceSchema]), '.', MIN([SourceName])), N'listed twice'
         FROM @EntitiesT GROUP BY [Source], [SourceSchema], [SourceName] HAVING COUNT(*) > 1
+        UNION ALL
+        -- Cleansing rules: a JSON array of objects, as handle_cleansing_functions reads them.
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), CONCAT(l.[Layer], N'CleansingRules must be a JSON array of rules, not a string or an object')
+        FROM @EntitiesT e
+        CROSS APPLY (VALUES ('Bronze', e.[BronzeRulesSet], e.[BronzeRules], e.[BronzeRulesText]),
+                            ('Silver', e.[SilverRulesSet], e.[SilverRules], e.[SilverRulesText])) l([Layer], [IsSet], [Rules], [Text])
+        WHERE l.[IsSet] = 1 AND ((l.[Text] IS NOT NULL) OR (l.[Rules] IS NOT NULL AND LEFT(LTRIM(l.[Rules]), 1) <> '['))
+        UNION ALL
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]),
+               CONCAT(l.[Layer], N'CleansingRules[', x.[key], N']: ',
+                      CASE WHEN x.[type] <> 5 THEN N'a rule must be an object with "function", "columns" and "parameters"'
+                           WHEN ISNULL(JSON_VALUE(x.[value], '$.function'), '') = '' THEN N'"function" is missing'
+                           WHEN EXISTS (SELECT 1 FROM OPENJSON(x.[value]) k WHERE k.[key] = 'columns' AND k.[type] NOT IN (0, 1))
+                                THEN N'"columns" must be text, columns separated by a semicolon'
+                           ELSE N'"parameters" must be an object' END)
+        FROM @EntitiesT e
+        CROSS APPLY (VALUES ('Bronze', e.[BronzeRules]), ('Silver', e.[SilverRules])) l([Layer], [Rules])
+        CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(l.[Rules]), 1) = '[' THEN l.[Rules] END) x
+        WHERE x.[type] <> 5
+           OR ISNULL(JSON_VALUE(x.[value], '$.function'), '') = ''
+           OR EXISTS (SELECT 1 FROM OPENJSON(x.[value]) k WHERE k.[key] = 'columns' AND k.[type] NOT IN (0, 1))
+           OR EXISTS (SELECT 1 FROM OPENJSON(x.[value]) k WHERE k.[key] = 'parameters' AND k.[type] NOT IN (0, 5))
         UNION ALL
         -- Metadata check: only when PL_FMD_DISCOVER_SOURCE has already read this SCHEMA. Scoped to
         -- SourceSchema, not just the connection+database: a scoped discovery (@SchemaFilter) must
@@ -251,7 +293,7 @@ BEGIN
     IF @Error IS NOT NULL THROW 50003, @Error, 1;
 
     -- ===== 2. Dry-run preview: computed against the current state, before any write ===========
-    DECLARE @Preview TABLE ([SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200), [Action] VARCHAR(10), [Changes] NVARCHAR(2000));
+    DECLARE @Preview TABLE ([SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200), [Action] VARCHAR(10), [Changes] NVARCHAR(2000), [Warning] NVARCHAR(2000));
     DECLARE @Orphans TABLE ([DataSourceName] NVARCHAR(100), [SourceSchema] NVARCHAR(100), [SourceName] NVARCHAR(200));
     IF @DryRun = 1
     BEGIN
@@ -261,7 +303,8 @@ BEGIN
                  WHEN chg.[Changes] <> '' THEN 'Changed'
                  ELSE 'Unchanged'
             END,
-            CASE WHEN le.[LandingzoneEntityId] IS NOT NULL THEN chg.[Changes] END
+            CASE WHEN le.[LandingzoneEntityId] IS NOT NULL THEN chg.[Changes] END,
+            NULLIF(CONCAT_WS('; ', wrn.[Unknown], wrn.[Rebuild]), '')
         FROM @EntitiesT e
         JOIN @Bound b ON b.[Source] = e.[Source]
         JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]
@@ -286,8 +329,20 @@ BEGIN
             CASE WHEN ble.[PrimaryKeys] <> e.[PrimaryKeys] THEN CONCAT('PrimaryKeys ', ble.[PrimaryKeys], ' -> ', e.[PrimaryKeys]) END,
             CASE WHEN le.[IsActive] <> e.[IsActive] THEN CONCAT('IsActive ', le.[IsActive], ' -> ', e.[IsActive]) END,
             CASE WHEN ISNULL(sle.[IsHistorized], 0) <> ISNULL(e.[IsHistorized], 0)
-                 THEN CONCAT('IsHistorized ', ISNULL(sle.[IsHistorized], 0), ' -> ', ISNULL(e.[IsHistorized], 0)) END
-        ) AS [Changes]) chg;
+                 THEN CONCAT('IsHistorized ', ISNULL(sle.[IsHistorized], 0), ' -> ', ISNULL(e.[IsHistorized], 0)) END,
+            CASE WHEN e.[BronzeRulesSet] = 1 AND ISNULL(ble.[CleansingRules], '') <> ISNULL(e.[BronzeRules], '') THEN 'BronzeCleansingRules changed' END,
+            CASE WHEN e.[SilverRulesSet] = 1 AND ISNULL(sle.[CleansingRules], '') <> ISNULL(e.[SilverRules], '') THEN 'SilverCleansingRules changed' END
+        ) AS [Changes]) chg
+        -- Warnings, never errors: a function that is not built in may be a custom one, and a changed Silver
+        -- rule only reaches the rows that change afterwards unless the entity is put back in the queue.
+        CROSS APPLY (SELECT
+            (SELECT STRING_AGG(CONVERT(NVARCHAR(MAX), CONCAT(l.[Layer], ' function ', f.[Name], ' is not built in; fine if NB_FMD_CUSTOM_DQ_CLEANSING registers it')), '; ')
+             FROM (VALUES ('Bronze', e.[BronzeRules]), ('Silver', e.[SilverRules])) l([Layer], [Rules])
+             CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(l.[Rules]), 1) = '[' THEN l.[Rules] END) x
+             CROSS APPLY (SELECT JSON_VALUE(x.[value], '$.function') AS [Name]) f
+             WHERE f.[Name] IS NOT NULL AND f.[Name] NOT IN ('normalize_text', 'fill_nulls', 'parse_datetime')) AS [Unknown],
+            CASE WHEN le.[LandingzoneEntityId] IS NOT NULL AND e.[SilverRulesSet] = 1 AND ISNULL(sle.[CleansingRules], '') <> ISNULL(e.[SilverRules], '')
+                 THEN 'a changed Silver rule only reaches rows that change afterwards; to apply it to the whole table, run execution.sp_RequeueSilverLayerEntities (and drop the Silver table if the rule changes a type or the columns)' END AS [Rebuild]) wrn;
 
         -- Active in this workspace's scope, but not in this list: this run would leave them as is.
         INSERT INTO @Orphans
@@ -307,7 +362,8 @@ BEGIN
     DECLARE @Nr INT = 1, @Max INT = (SELECT MAX([Nr]) FROM @EntitiesT), @ConnectionId INT, @DataSourceId INT, @EntityId BIGINT;
     DECLARE @CN NVARCHAR(200), @DSN NVARCHAR(100), @NS VARCHAR(100), @DST VARCHAR(30), @LG VARCHAR(50), @HD INT, @SS NVARCHAR(100),
             @SN NVARCHAR(200), @TS NVARCHAR(100), @TN NVARCHAR(200), @FN NVARCHAR(200), @FT NVARCHAR(20), @Inc BIT,
-            @IncCol NVARCHAR(50), @NB VARCHAR(200), @PK NVARCHAR(200), @Act BIT, @Hist BIT, @Desc NVARCHAR(200);
+            @IncCol NVARCHAR(50), @NB VARCHAR(200), @PK NVARCHAR(200), @Act BIT, @Hist BIT, @Desc NVARCHAR(200),
+            @BrSet BIT, @BrRules NVARCHAR(MAX), @SiSet BIT, @SiRules NVARCHAR(MAX);
 
     -- A savepoint, not a plain BEGIN/ROLLBACK: a caller with autocommit off (pyodbc's default, so
     -- NB_FMD_REGISTRATION_FUNCTIONS) already holds a transaction, and a plain ROLLBACK for the dry
@@ -321,7 +377,8 @@ BEGIN
             SELECT @CN=b.[ConnectionName], @DSN=b.[DataSourceName], @NS=b.[Namespace], @DST=b.[DataSourceType], @LG=b.[LoadGroup],
                    @HD=b.[HistoryDays], @SS=e.[SourceSchema], @SN=e.[SourceName], @TS=e.[TargetSchema], @TN=e.[TargetName],
                    @FN=e.[FileName], @FT=e.[FileType], @Inc=e.[IsIncremental], @IncCol=e.[IsIncrementalColumn],
-                   @NB=e.[CustomNotebookName], @PK=e.[PrimaryKeys], @Act=e.[IsActive], @Hist=e.[IsHistorized]
+                   @NB=e.[CustomNotebookName], @PK=e.[PrimaryKeys], @Act=e.[IsActive], @Hist=e.[IsHistorized],
+                   @BrSet=e.[BronzeRulesSet], @BrRules=e.[BronzeRules], @SiSet=e.[SilverRulesSet], @SiRules=e.[SilverRules]
             FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source] WHERE e.[Nr] = @Nr;
 
             SET @ConnectionId = (SELECT [ConnectionId] FROM [integration].[Connection] WHERE [Name] = @CN);
@@ -351,6 +408,15 @@ BEGIN
             FROM [integration].[SilverLayerEntity] sle
             JOIN [integration].[BronzeLayerEntity] ble ON ble.[BronzeLayerEntityId] = sle.[BronzeLayerEntityId]
             WHERE ble.[LandingzoneEntityId] = @EntityId;
+
+            -- Cleansing rules: only when the row has the field; [] and null clear them.
+            IF @BrSet = 1
+                UPDATE [integration].[BronzeLayerEntity] SET [CleansingRules] = @BrRules WHERE [LandingzoneEntityId] = @EntityId;
+            IF @SiSet = 1
+                UPDATE sle SET sle.[CleansingRules] = @SiRules
+                FROM [integration].[SilverLayerEntity] sle
+                JOIN [integration].[BronzeLayerEntity] ble ON ble.[BronzeLayerEntityId] = sle.[BronzeLayerEntityId]
+                WHERE ble.[LandingzoneEntityId] = @EntityId;
 
             -- HistoryDays: a start watermark for a new incremental entity. Never overwrites one that is already there.
             IF @HD IS NOT NULL AND @Inc = 1
