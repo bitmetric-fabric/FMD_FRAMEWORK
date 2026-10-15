@@ -323,8 +323,8 @@ elif SourceFileType=='csv':
     dfDataChanged = (
         spark.read
             .option("header", True)            # first row has column names
-            .option("inferSchema", True)       # ask Spark to infer types
-            .option("samplingRatio", 0.1)      # sample 10% of rows; omit to scan fully
+            .option("inferSchema", True)       # infer types from all rows: with a sample, a value outside it that does
+                                               # not fit the inferred type is read as NULL without an error
             .csv(f"{source_changes_data_path}")
     )
 elif SourceFileType=='xlsx':

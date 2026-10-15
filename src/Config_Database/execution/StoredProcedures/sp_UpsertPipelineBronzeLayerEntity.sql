@@ -41,7 +41,8 @@
                 [LoadEndDateTime] = GETDATE()
             WHERE [BronzeLayerEntityId] = @BronzeLayerEntityId
                 AND [SchemaName] = @SchemaName
-                AND [TableName] = @TableName;
+                AND [TableName] = @TableName
+                AND [IsProcessed] = 0;
         END
 
         -- Output for Fabric Pipeline
