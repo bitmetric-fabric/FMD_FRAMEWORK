@@ -45,8 +45,10 @@
 # van `{"function": ..., "columns": "A;B", "parameters": {...}}`. Een entiteit zonder het veld houdt zijn
 # regels. Met het veld is de lijst de waarheid, en `[]` wist ze. Een ongeldige regel stopt de registratie; een
 # functie die niet ingebouwd is (`normalize_text`, `fill_nulls`, `parse_datetime`) geeft een waarschuwing.
-# Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel: zie
-# `execution.sp_RequeueSilverLayerEntities` (en de tabel verwijderen als de regel een type verandert).
+# Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel: registreer
+# met `register(..., dry_run=False, requeue_silver=True)`; dat zet de entiteiten met een gewijzigde Silver-regel
+# terug in de wachtrij (`execution.sp_RequeueSilverLayerEntities`). Verwijder de Silver-tabel eerst als de regel
+# een type of de kolommen verandert. De dry run toont een hint zodra een Silver-regel verandert.
 
 # CELL ********************
 
