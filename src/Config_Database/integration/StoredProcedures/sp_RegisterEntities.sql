@@ -219,7 +219,7 @@ BEGIN
         WHERE l.[IsSet] = 1 AND ((l.[Text] IS NOT NULL) OR (l.[Rules] IS NOT NULL AND LEFT(LTRIM(l.[Rules]), 1) <> '['))
         UNION ALL
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]),
-               CONCAT(l.[Layer], N'CleansingRules[', x.[key], N']: ',
+               CONCAT(l.[Layer], N'CleansingRules[', CONVERT(NVARCHAR(10), x.[key]) COLLATE DATABASE_DEFAULT, N']: ',
                       CASE WHEN x.[type] <> 5 THEN N'a rule must be an object with "function", "columns" and "parameters"'
                            WHEN ISNULL(JSON_VALUE(x.[value], '$.function'), '') = '' THEN N'"function" is missing'
                            WHEN EXISTS (SELECT 1 FROM OPENJSON(x.[value]) k WHERE k.[key] = 'columns' AND k.[type] NOT IN (0, 1))
