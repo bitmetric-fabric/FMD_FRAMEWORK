@@ -242,6 +242,8 @@ def register(sources, entities, domain, environments, dry_run=True):
             for row in sets[-2]:
                 changes = f"   {row['Changes']}" if row.get('Changes') else ""
                 print(f"  {row['Action']:<9} {row['SourceSchema']}.{row['SourceName']}{changes}")
+                if row.get('Warning'):
+                    print(f"            WARNING: {row['Warning']}")
             orphans = sets[-1]
             if orphans:
                 print("Active in this workspace but not in this list (left as is):")

@@ -26,6 +26,13 @@
 # 5. Na een promotie: dezelfde lijst, nu met `environments=["T"]` (of `["P"]`).
 # 
 # IsIncremental, IsActive en IsHistorized: 0 of 1 (geen True/False).
+#
+# **Cleansing rules** (optioneel): `BronzeCleansingRules` en `SilverCleansingRules` per entiteit, een lijst
+# van `{"function": ..., "columns": "A;B", "parameters": {...}}`. Een entiteit zonder het veld houdt zijn
+# regels. Met het veld is de lijst de waarheid, en `[]` wist ze. Een ongeldige regel stopt de registratie; een
+# functie die niet ingebouwd is (`normalize_text`, `fill_nulls`, `parse_datetime`) geeft een waarschuwing.
+# Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel: zie
+# `execution.sp_RequeueSilverLayerEntities` (en de tabel verwijderen als de regel een type verandert).
 
 # CELL ********************
 
@@ -70,6 +77,9 @@ sources = [
 # standaardwaarde (TargetSchema/TargetName gelijk aan de bron, FileType parquet, IsActive 1).
 entities = [
     {"Source": "ERP", "SourceSchema": "Sales", "SourceName": "Customer", "PrimaryKeys": "CustomerID"},
+    # Met cleansing rules:
+    # {"Source": "ERP", "SourceSchema": "Sales", "SourceName": "Store", "PrimaryKeys": "StoreID",
+    #  "SilverCleansingRules": [{"function": "normalize_text", "columns": "Name", "parameters": {"case": "upper"}}]},
 ]
 
 # METADATA ********************
