@@ -1,6 +1,6 @@
 # ADR-018: Bronnen registreren via een notebook, niet via `sqlcmd`
 
-Status: Proposed
+Status: Accepted (2026-10-15, akkoord Mitchell; was Proposed sinds 2026-10-13)
 Datum: 2026-10-13
 
 ## Context
@@ -38,6 +38,20 @@ Registreren gaat via een notebook, `NB_REGISTRATIE`, in de **CONFIG-workspace** 
   *Correctie, getest in FMD_TRIAL 2026-10-13:* de eerste versie zocht op een exacte prefix-match
   (`LIKE '<Domain> DATA%'`) en vond daardoor niets, want elke workspace heeft het klantprefix vóór
   het domein (`"FMD_TRIAL INTEGRATION DATA (D)"`). Gefixt naar een deelstring-match.
+- **Ook een developer-workspace, `DEV_<NAAM>`** (aanvulling 2026-10-15, op verzoek van Mitchell).
+  `environments=["DEV_MITCHELL"]` zoekt de DATA-workspace `DEV_MITCHELL_<prefix>_<DOMEIN>_DATA` (ADR-011
+  noemt `DEV_<NAAM>_<PREFIX>_INTEGRATION_DATA`) en registreert daarin met de bindingen van D: een
+  developer-workspace leest uit dezelfde bron als Dev.
+  - *Reden:* zonder dit moest een developer tijdens een feature een los SQL-script gebruiken, zonder
+    controles of dry run, en dezelfde entiteit daarna nog eens in de lijst zetten voor D. Nu gebruik je
+    dezelfde lijst in elke stap: `DEV_<NAAM>` tijdens de feature, `D` na de merge, `T` en `P` voor de
+    promotie.
+  - *Beperking:* alleen voor `domain="INTEGRATION"`. De DATA-workspace van een business domain heet
+    `DEV_<NAAM>_<PREFIX>_DATA`, zonder domeinnaam, en bevat geen landing zone.
+  - De DataSource-rijen worden gedeeld met D (één rij per connectie, database en type): een gewijzigde
+    `LoadGroup` of `Namespace` vanuit een `DEV_`-run geldt ook voor D.
+  - De naam mag alleen letters, cijfers, `_` en `-` bevatten, omdat hij in een `LIKE`-patroon terechtkomt.
+  - De workspace moet al in de configdb staan (`sp_UpsertWorkspace` en `sp_UpsertLakehouse`).
 - **`dry_run=True` is de voorgeschreven eerste stap.** De procedure voert alle controles en de
   registratie echt uit en draait dan terug, en toont per entiteit of hij nieuw, gewijzigd of
   ongewijzigd is, plus de entiteiten die in die workspace actief zijn maar niet in de lijst staan.
@@ -74,7 +88,13 @@ Registreren gaat via een notebook, `NB_REGISTRATIE`, in de **CONFIG-workspace** 
 ## Gevolgen
 
 - `templates/registratie/registreer_entiteiten.sql` en `PL_TOOLING_POST_ASQL_TO_FMD` vervallen.
-  Verwijderen pas na akkoord Mitchell.
+  ~~Verwijderen pas na akkoord Mitchell.~~ *Bijgewerkt 2026-10-15, na akkoord van Mitchell:*
+  - het sjabloon is verwijderd; de uitleg van de velden staat nu in de docstring van `register()` en in
+    `NB_REGISTRATIE`;
+  - `PL_TOOLING_POST_ASQL_TO_FMD` staat niet meer in `config/item_deployment.json`, dus de setup rolt
+    hem niet meer uit. De bestanden in `src/` blijven staan, want de pipeline bestaat ook in
+    `edkreuk/FMD_FRAMEWORK`: verwijderen geeft bij elke upstream-sync een mergeconflict. Een bestaande
+    installatie houdt het item, want de setup verwijdert niets.
 - De setup plaatst `NB_FMD_REGISTRATION_FUNCTIONS` en `NB_REGISTRATIE` in CONFIG
   (`config/data_deployment.json`), en `PL_FMD_DISCOVER_SOURCE` in elke CODE-workspace
   (`config/item_deployment.json`). `NB_REGISTRATIE` staat in `CUSTOMER_OWNED_ITEMS`.
