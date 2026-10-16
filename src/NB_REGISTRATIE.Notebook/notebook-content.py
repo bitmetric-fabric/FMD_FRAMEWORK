@@ -51,7 +51,7 @@
 # `exclude_rows` laat rijen met een bronvlag weg, bijvoorbeeld voor CDC-deletes: als Silver-regel
 # `{"function": "exclude_rows", "columns": "EVENT_CRUD", "parameters": {"values": ["delete"]}}`. Silver ziet de sleutel dan
 # als verdwenen en zet hem op `IsDeleted = 1, IsCurrent = 0`. Niet als Bronze-regel gebruiken. De lijst met functies in de
-# editor kent `exclude_rows` nog niet; kies daar "(eigen functie)" en vul de naam en de parameters als JSON in.
+# editor kent `exclude_rows` in de lijst met functies; vul bij `values` de waarden in, gescheiden door komma's.
 
 # CELL ********************
 
