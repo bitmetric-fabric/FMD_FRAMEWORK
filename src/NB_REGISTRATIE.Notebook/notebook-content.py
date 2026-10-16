@@ -12,46 +12,35 @@
 # MARKDOWN ********************
 
 # # Registratie
-# Customer-owned: run `NB_SETUP_FMD` places this notebook once and never overwrites it, so your
-# lists survive a re-run of the setup. Lives in the configuration workspace.
-# 
+# Startpunt voor het toevoegen en aanpassen van bronnen en tabellen. Customer-owned: run `NB_SETUP_FMD` places this
+# notebook once and never overwrites it. Lives in the configuration workspace. De registratie staat in de configdb;
+# deze notebook onderhoudt geen lijsten.
+#
 # **Werkwijze** (draaiboek §A.4a):
-# 1. Nieuwe bron met veel tabellen? Draai eerst `PL_FMD_DISCOVER_SOURCE` (in de CODE-workspace) met de
-#    connectie en de database. Gebruik daarna `print_entity_list(...)` hieronder om de regels voor
-#    `entities` te genereren, en plak ze in de cel.
-# 2. Vul `sources` en `entities` in, of pas een bestaande lijst aan.
-# 3. Draai eerst `register(..., dry_run=True)`: dat voert alle controles en de registratie uit en
-#    draait dan terug, en toont per entiteit of hij nieuw, gewijzigd of ongewijzigd is.
-# 4. Zonder verrassingen: `register(..., dry_run=False)`.
-# 5. Dezelfde lijst gebruik je in elke stap van een feature:
-#    - tijdens de feature in je eigen developer-workspace: `environments=["DEV_<NAAM>"]` (bijvoorbeeld
-#      `["DEV_MITCHELL"]`; de workspace `DEV_<NAAM>_<prefix>_INTEGRATION_DATA` moet al in de configdb
-#      staan, en de bronbinding is die van D);
-#    - na de merge: `["D"]`;
-#    - vlak voor een promotie: `["T"]`, en later `["P"]`.
+# 1. Staat de bronconnectie nog niet in de configdb? Registreer hem eenmalig met `register_connection(...)` (stap 1).
+#    De Fabric-connectie moet al bestaan; die wijzig je hier niet.
+# 2. Open de editor (stap 2), kies de omgeving en klik op **Laden uit de configdb**.
+# 3. Tab 1: bron kiezen of toevoegen. Tab 2: bij een nieuwe bron eerst **Ontdekking starten (pipeline)**; dat start
+#    `PL_FMD_DISCOVER_SOURCE` in de CODE-workspace, wacht tot hij klaar is en laadt de ontdekte tabellen. Daarna tabellen
+#    zoeken, selecteren, primary key, laadwijze en cleansing rules instellen.
+#    Tab 3: het overzicht van wat er wordt geregistreerd, **Controleren**, **Proefdraaien** en pas daarna **Registreren**.
+# 4. Dezelfde editor gebruik je in elke stap van een feature:
+#    - tijdens de feature in je eigen developer-workspace: omgeving `DEV_<NAAM>` (bijvoorbeeld `DEV_MITCHELL`; de
+#      workspace `DEV_<NAAM>_<prefix>_INTEGRATION_DATA` moet al in de configdb staan, en de bronbinding is die van D);
+#    - na de merge: `D`;
+#    - vlak voor een promotie: `T`, en later `P`.
 #
-# IsIncremental, IsActive en IsHistorized: 0 of 1 (geen True/False).
+# Alle wijzigingen blijven in het geheugen tot **Registreren**. Registreren kan pas na een proefdraai op precies deze
+# wijzigingen. De registratie zelf is `register()`, ongewijzigd: de editor bouwt alleen de lijsten die `register()` verwacht.
+# Na het registreren toont de editor het resultaat als `table("""...""")`: bewaar dat in het log of in git.
 #
-# **Velden** (de volledige uitleg staat in de docstring van `register`):
-# - `sources`: `Environment` is `'*'` (alle omgevingen) of D, T, A, P; een eigen regel wint van `'*'`.
-#   `Namespace` moet voor een Source in elke omgeving gelijk zijn. `LoadGroup` hoort bij de bron, dus
-#   omgevingen met dezelfde binding delen hem. `HistoryDays` (optioneel): een incrementele entiteit zonder
-#   watermark haalt de eerste keer alleen de laatste N dagen op.
-# - `entities`: `FileName` is standaard `<TargetSchema>_<TargetName>` en `FileType` `parquet`. `IsActive`: de
-#   lijst is de waarheid, zet een entiteit uit met `0` in de lijst en niet met de hand in de database.
-#   `IsHistorized` (standaard 0): 1 bewaart de historie in Silver (SCD2), leeg betekent 0.
-#
-# **Cleansing rules** (optioneel): `BronzeCleansingRules` en `SilverCleansingRules` per entiteit, een lijst
-# van `{"function": ..., "columns": "A;B", "parameters": {...}}`. Een entiteit zonder het veld houdt zijn
-# regels. Met het veld is de lijst de waarheid, en `[]` wist ze. Een ongeldige regel stopt de registratie; een
-# functie die niet ingebouwd is (`normalize_text`, `fill_nulls`, `parse_datetime`, `exclude_rows`) geeft een waarschuwing.
-# `exclude_rows` laat rijen met een bronvlag weg, bijvoorbeeld voor CDC-deletes: als `SilverCleansingRules`
-# `[{"function": "exclude_rows", "columns": "EVENT_CRUD", "parameters": {"values": ["delete"]}}]`. Silver ziet de
-# sleutel dan als verdwenen en zet hem op `IsDeleted = 1, IsCurrent = 0`. Niet als Bronze-regel gebruiken.
-# Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel: registreer
-# met `register(..., dry_run=False, requeue_silver=True)`; dat zet de entiteiten met een gewijzigde Silver-regel
-# terug in de wachtrij (`execution.sp_RequeueSilverLayerEntities`). Verwijder de Silver-tabel eerst als de regel
-# een type of de kolommen verandert. De dry run toont een hint zodra een Silver-regel verandert.
+# **Cleansing rules**: per laag kies je *ongewijzigd laten* (de bestaande regels blijven), *vervangen* (de lijst is de
+# waarheid) of *alles verwijderen*. Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen; voor de hele
+# tabel registreer je met `register(..., dry_run=False, requeue_silver=True)` (zie onderaan).
+# `exclude_rows` laat rijen met een bronvlag weg, bijvoorbeeld voor CDC-deletes: als Silver-regel
+# `{"function": "exclude_rows", "columns": "EVENT_CRUD", "parameters": {"values": ["delete"]}}`. Silver ziet de sleutel dan
+# als verdwenen en zet hem op `IsDeleted = 1, IsCurrent = 0`. Niet als Bronze-regel gebruiken. De lijst met functies in de
+# editor kent `exclude_rows` nog niet; kies daar "(eigen functie)" en vul de naam en de parameters als JSON in.
 
 # CELL ********************
 
@@ -66,11 +55,13 @@
 
 # MARKDOWN ********************
 
-# ## Ontdekken (optioneel, voor een bron met veel tabellen)
+# ## Stap 1: connectie registreren (eenmalig per connectie)
+# Het type is het FMD-type: `SQL` (Azure SQL), `AZURESQLMI`, `ORACLE`, `ADLS`, `ONELAKE`, `SFTP`, `FTP`, `ADF`,
+# `NOTEBOOK` of `SNOWFLAKE`. Opnieuw draaien is veilig. Haal het commentaarteken weg en vul de naam in.
 
 # CELL ********************
 
-# print_entity_list("CON_FMD_<SOURCE>", "<SourceDatabase>", schema="Sales", source_alias="ERP")
+# register_connection("CON_FMD_<SOURCE>", "SQL")
 
 # METADATA ********************
 
@@ -81,25 +72,12 @@
 
 # MARKDOWN ********************
 
-# ## Lijsten
+# ## Stap 2: de editor
+# Klik op **Laden uit de configdb**. Daarna werk je van links naar rechts door de drie tabs.
 
 # CELL ********************
 
-# Environment: '*' (alle omgevingen) of de short van één omgeving (D, T, A, P). Een eigen regel
-# wint van '*'. DataSourceName is de database voor ASQL en Snowflake.
-sources = [
-    {"Environment": "*", "Source": "ERP", "ConnectionName": "CON_FMD_<SOURCE>", "DataSourceName": "<SourceDatabase>",
-     "Namespace": "erp", "DataSourceType": "ASQL_01", "LoadGroup": "", "HistoryDays": None},
-]
-
-# Alleen Source, SourceSchema, SourceName en PrimaryKeys zijn verplicht. De rest krijgt een
-# standaardwaarde (TargetSchema/TargetName gelijk aan de bron, FileType parquet, IsActive 1).
-entities = [
-    {"Source": "ERP", "SourceSchema": "Sales", "SourceName": "Customer", "PrimaryKeys": "CustomerID"},
-    # Met cleansing rules:
-    # {"Source": "ERP", "SourceSchema": "Sales", "SourceName": "Store", "PrimaryKeys": "StoreID",
-    #  "SilverCleansingRules": [{"function": "normalize_text", "columns": "Name", "parameters": {"case": "upper"}}]},
-]
+registration_ui(domain="INTEGRATION", environment="D")
 
 # METADATA ********************
 
@@ -110,22 +88,20 @@ entities = [
 
 # MARKDOWN ********************
 
-# ## Proefdraaien en registreren
+# ## Zonder editor (geavanceerd)
+# De editor roept `register(sources, entities, domain, environments, dry_run, requeue_silver)` aan; je kunt dat ook
+# rechtstreeks doen. `table("""...""")` maakt de lijsten van een geplakte tabel (kolommen gescheiden door een tab of
+# `|`), en `print_entity_list(...)` print de ontdekte tabellen als tabel. De velden staan in de docstring van `register`.
+# Een Silver-regel voor de hele tabel opnieuw toepassen: `register(..., dry_run=False, requeue_silver=True)`; dat zet de
+# entiteiten met een gewijzigde Silver-regel terug in de wachtrij (`execution.sp_RequeueSilverLayerEntities`). Verwijder
+# de Silver-tabel eerst als de regel een type of de kolommen verandert (de editor kent `requeue_silver` niet).
+#
+# De ontdekking starten zonder de editor: `start_discovery(...)` (hieronder) start `PL_FMD_DISCOVER_SOURCE` in de
+# CODE-workspace van deze omgeving en wacht tot hij klaar is. Je hebt een rol nodig die items in die workspace mag uitvoeren.
 
 # CELL ********************
 
-register(sources, entities, domain="INTEGRATION", environments=["D"], dry_run=True)
-
-# METADATA ********************
-
-# META {
-# META   "language": "python",
-# META   "language_group": "synapse_pyspark"
-# META }
-
-# CELL ********************
-
-# register(sources, entities, domain="INTEGRATION", environments=["D"], dry_run=False)
+# start_discovery("CON_FMD_<SOURCE>", "<SourceDatabase>", schema_filter="", domain="INTEGRATION", environment="D")
 
 # METADATA ********************
 
