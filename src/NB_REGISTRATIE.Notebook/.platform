@@ -3,7 +3,7 @@
   "metadata": {
     "type": "Notebook",
     "displayName": "NB_REGISTRATIE",
-    "description": "Customer-owned: the setup places this once and never overwrites it. Registers sources and entities through NB_FMD_REGISTRATION_FUNCTIONS; see draaiboek paragraaf A.4a."
+    "description": "Customer-owned: the setup places this once and never overwrites it. Starting point for adding and changing sources: the registration editor and discovery, through NB_FMD_REGISTRATION_FUNCTIONS; see draaiboek paragraaf A.4a."
   },
   "config": {
     "version": "2.0",
