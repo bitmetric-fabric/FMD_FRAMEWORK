@@ -18,6 +18,7 @@
 -- as NB_FMD_DQ_CLEANSING reads them): a row without the field leaves the rules as they are; with the field the
 -- list is the truth, and [] or null clears them. A rule that is not valid is an error; a function that is not
 -- built in is only a warning in the dry run (it may be registered in NB_FMD_CUSTOM_DQ_CLEANSING).
+-- exclude_rows needs "columns" and a non-empty "parameters.values", or the layer would fail on every run.
 -- @DryRun: 1 runs every check and the registration, then rolls back and returns a preview
 -- (New / Changed / Unchanged per entity with what a Changed changes, plus active entities in this
 -- scope that the list omits)
@@ -247,6 +248,19 @@ BEGIN
            OR EXISTS (SELECT 1 FROM OPENJSON(x.[value]) k WHERE k.[key] = 'columns' AND k.[type] NOT IN (0, 1))
            OR EXISTS (SELECT 1 FROM OPENJSON(x.[value]) k WHERE k.[key] = 'parameters' AND k.[type] NOT IN (0, 5))
         UNION ALL
+        -- exclude_rows without a column or without a non-empty "values" would fail every run of the layer.
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]),
+               CONCAT(l.[Layer], N'CleansingRules[', CONVERT(NVARCHAR(10), x.[key]) COLLATE DATABASE_DEFAULT, N']: ',
+                      CASE WHEN ISNULL(JSON_VALUE(x.[value], '$.columns'), '') = '' THEN N'exclude_rows needs "columns"'
+                           ELSE N'exclude_rows needs a non-empty "values" list in "parameters"' END)
+        FROM @EntitiesT e
+        CROSS APPLY (VALUES ('Bronze', e.[BronzeRules]), ('Silver', e.[SilverRules])) l([Layer], [Rules])
+        CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(l.[Rules]), 1) = '[' THEN l.[Rules] END) x
+        WHERE x.[type] = 5 AND JSON_VALUE(x.[value], '$.function') = 'exclude_rows'
+          AND (ISNULL(JSON_VALUE(x.[value], '$.columns'), '') = ''
+               OR (ISNULL(JSON_VALUE(x.[value], '$.parameters.values'), '') = ''
+                   AND NOT EXISTS (SELECT 1 FROM OPENJSON(JSON_QUERY(x.[value], '$.parameters.values')) v WHERE ISNULL(v.[value], '') <> '')))
+        UNION ALL
         -- Metadata check: only when PL_FMD_DISCOVER_SOURCE has already read this SCHEMA. Scoped to
         -- SourceSchema, not just the connection+database: a scoped discovery (@SchemaFilter) must
         -- not block an already-working entity in a schema nobody has discovered (found in
@@ -354,7 +368,7 @@ BEGIN
              FROM (VALUES ('Bronze', e.[BronzeRules]), ('Silver', e.[SilverRules])) l([Layer], [Rules])
              CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(l.[Rules]), 1) = '[' THEN l.[Rules] END) x
              CROSS APPLY (SELECT JSON_VALUE(x.[value], '$.function') AS [Name]) f
-             WHERE f.[Name] IS NOT NULL AND f.[Name] NOT IN ('normalize_text', 'fill_nulls', 'parse_datetime')) AS [Unknown],
+             WHERE f.[Name] IS NOT NULL AND f.[Name] NOT IN ('normalize_text', 'fill_nulls', 'parse_datetime', 'exclude_rows')) AS [Unknown],
             CASE WHEN le.[LandingzoneEntityId] IS NOT NULL AND e.[SilverRulesSet] = 1 AND ISNULL(sle.[CleansingRules], '') <> ISNULL(e.[SilverRules], '')
                  THEN 'a changed Silver rule only reaches rows that change afterwards; to apply it to the whole table, run execution.sp_RequeueSilverLayerEntities (and drop the Silver table if the rule changes a type or the columns)' END AS [Rebuild]) wrn;
 

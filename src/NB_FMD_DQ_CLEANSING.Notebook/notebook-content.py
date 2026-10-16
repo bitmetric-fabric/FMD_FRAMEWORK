@@ -349,10 +349,44 @@ def parse_datetime(df: DataFrame, columns, args):
 
 # CELL ********************
 
+def exclude_rows(df: DataFrame, columns, args):
+    """
+    Drops the rows whose value in any of the columns is one of the given values.
+    Meant as a Silver rule for a source flag such as EVENT_CRUD = 'delete': Silver then sees the key as
+    absent and soft-deletes it (IsDeleted = 1, IsCurrent = 0). Do not use it as a Bronze rule: an incremental
+    Bronze merge would then leave the existing row in place instead of marking it.
+    Args:
+      - values: non-empty list of values to drop (compared trimmed and case-insensitive)
+    A NULL in a column keeps the row.
+    """
+    values = args.get('values')
+    if isinstance(values, str):
+        values = [values]
+    if not values:
+        raise ValueError("exclude_rows needs a non-empty 'values' list in parameters.")
+    if not columns:
+        raise ValueError("exclude_rows needs at least one column in 'columns'.")
+
+    values = [str(v).strip().lower() for v in values]
+    for c in columns:
+        hit = coalesce(lower(trim(col(c).cast('string'))).isin(values), lit(False))
+        df = df.filter(~hit)
+    return df
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
 # Register built-in cleansing functions
 register_cleansing_function("normalize_text", normalize_text)
 register_cleansing_function("fill_nulls", fill_nulls)
 register_cleansing_function("parse_datetime", parse_datetime)
+register_cleansing_function("exclude_rows", exclude_rows)
 
 # METADATA ********************
 

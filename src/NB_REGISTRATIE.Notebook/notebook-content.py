@@ -44,7 +44,10 @@
 # **Cleansing rules** (optioneel): `BronzeCleansingRules` en `SilverCleansingRules` per entiteit, een lijst
 # van `{"function": ..., "columns": "A;B", "parameters": {...}}`. Een entiteit zonder het veld houdt zijn
 # regels. Met het veld is de lijst de waarheid, en `[]` wist ze. Een ongeldige regel stopt de registratie; een
-# functie die niet ingebouwd is (`normalize_text`, `fill_nulls`, `parse_datetime`) geeft een waarschuwing.
+# functie die niet ingebouwd is (`normalize_text`, `fill_nulls`, `parse_datetime`, `exclude_rows`) geeft een waarschuwing.
+# `exclude_rows` laat rijen met een bronvlag weg, bijvoorbeeld voor CDC-deletes: als `SilverCleansingRules`
+# `[{"function": "exclude_rows", "columns": "EVENT_CRUD", "parameters": {"values": ["delete"]}}]`. Silver ziet de
+# sleutel dan als verdwenen en zet hem op `IsDeleted = 1, IsCurrent = 0`. Niet als Bronze-regel gebruiken.
 # Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel: registreer
 # met `register(..., dry_run=False, requeue_silver=True)`; dat zet de entiteiten met een gewijzigde Silver-regel
 # terug in de wachtrij (`execution.sp_RequeueSilverLayerEntities`). Verwijder de Silver-tabel eerst als de regel
