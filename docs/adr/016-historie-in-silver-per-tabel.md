@@ -70,3 +70,13 @@ treft die er nooit om vroeg. SCD2 is daarom een bewuste keuze per tabel, geen st
 ## Test
 
 Zie het testplan in de implementatiedocumentatie (FMD_TRIAL, trial-Dev).
+
+## Aanvulling 2026-10-16: delete-vlag uit de bron
+
+Een bron die een verwijdering als rij met een vlag levert (bijvoorbeeld `EVENT_CRUD = 'delete'`) en incrementeel laadt, laat de rij in Bronze staan, omdat een incrementele Bronze niet verwijdert. Silver ziet een delete alleen als een sleutel in Bronze ontbreekt, dus de rij bleef actief.
+
+- **Beslissing:** een ingebouwde cleansing-functie `exclude_rows` (`parameters.values`, hoofdletterongevoelig, NULL houdt de rij), bedoeld als **Silver**-regel. De rij valt vóór de hash en de merge weg. Silver ziet de sleutel als verdwenen en zet de bestaande rij op `IsDeleted = 1`, `IsCurrent = 0`, met en zonder historie, volgens de regels hierboven. De merge-code en de metadata veranderen niet.
+- **Als Bronze-regel werkt het niet:** de bestaande Bronze-rij blijft dan staan en de delete bereikt Silver niet.
+- **Gevolg:** de delete-rij zelf komt nooit in Silver; de afgesloten rij houdt de waarden van de laatste niet-delete-versie. Een sleutel die in Silver nog niet bestond (eerste load, of een eerste batch met een delete) komt er niet in. Silver bewaart de afgesloten rijen, dus consumenten filteren op `IsCurrent = 1`.
+- **Verworpen:** een aparte kolom per entiteit voor de vlag. Dat vraagt een schemawijziging en een nieuwe dacpac voor iets wat de bestaande cleansing-regel al doet. Alleen nodig als de delete-rij zelf in Silver moet komen.
+- **Niet opgelost:** meerdere events voor één sleutel in één batch laten Landing→Bronze falen op een dubbele PK.
