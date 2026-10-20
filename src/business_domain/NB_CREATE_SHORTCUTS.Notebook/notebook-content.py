@@ -19,8 +19,13 @@
 # # Notebook to create shortcuts in Gold
 # 
 # Don't forget to change the parameters in the **VAR_GOLD_SHORTCUTS_FMD** library
-# 
-# 
+#
+# With an empty **ShortcutNames** the notebook creates one schema shortcut per Silver schema (except `dbo`),
+# with the same name in Gold. Tables added to Silver later show up in Gold without a new run;
+# only a new Silver schema needs one. A Gold schema with the same name as a Silver schema must not exist yet.
+#
+# Fill **ShortcutNames** only for lakehouses without schemas, or to shortcut a selection of tables.
+#
 # More details: https://github.com/edkreuk/FMD_FRAMEWORK
 
 
@@ -40,9 +45,10 @@ import notebookutils
 
 #Shortcut location parameters
 
-# Each entry is a table name (uses SourceSchema / Shortcut_TargetSchema) or a (schema, table) pair.
+# Empty: one schema shortcut per Silver schema (see above).
+# Otherwise each entry is a table name (uses SourceSchema / Shortcut_TargetSchema) or a (schema, table) pair.
 # A pair uses that schema in both Gold and Silver, for sources that land in several Silver schemas.
-ShortcutNames=['Sales_BuyingGroups','Sales_CustomerCategories','Sales_InvoiceLines','Sales_Invoices','Sales_Orders','Sales_OrderLines','Sales_vCustomers','Warehouse_PackageTypes','Warehouse_StockItems' ]         #Tablenames of the to be created shortcuts, same name will be used for destination
+ShortcutNames=[]         #Tablenames of the to be created shortcuts, same name will be used for destination
 
 ShortcutSettings=notebookutils.variableLibrary.getLibrary("VAR_GOLD_SHORTCUTS_FMD")
 
@@ -90,6 +96,18 @@ def create_shortcut(path:str, name:str, target:dict, workspace_id:str ,lakehouse
 # CELL ********************
 
 failed = []
+if not ShortcutNames:
+    silver_tables = f"abfss://{ShortcutSettings.Shortcut_TargetWorkspaceId}@onelake.dfs.fabric.microsoft.com/{ShortcutSettings.Shortcut_TargetLakehouseId}/Tables"
+    schemas = [f.name.rstrip("/") for f in notebookutils.fs.ls(silver_tables) if f.isDir and f.name.rstrip("/") != "dbo"]
+    if not schemas:
+        raise RuntimeError(f"No Silver schemas found under {silver_tables}; for a lakehouse without schemas, fill ShortcutNames")
+    for schema in schemas:
+        oneLake_target = {"oneLake": {"workspaceId": ShortcutSettings.Shortcut_TargetWorkspaceId, "itemId": ShortcutSettings.Shortcut_TargetLakehouseId, "path": "Tables/"+schema}}
+        if not create_shortcut(path="Tables", name=schema, target=oneLake_target, workspace_id=ShortcutSettings.SourceWorkspaceId, lakehouse_id=ShortcutSettings.SourceLakehouseId, conflict_policy="CreateOrOverwrite"):
+            failed.append(schema)
+    if failed:
+        raise RuntimeError(f"{len(failed)} of {len(schemas)} schema shortcuts failed: {failed}")
+
 for entry in ShortcutNames:
     schema, ShortcutName = entry if isinstance(entry, (tuple, list)) else (None, entry)
     gold_schema = schema or ShortcutSettings.SourceSchema
