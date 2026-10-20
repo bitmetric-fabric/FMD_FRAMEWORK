@@ -382,11 +382,56 @@ def exclude_rows(df: DataFrame, columns, args):
 
 # CELL ********************
 
+def clamp_min_date(df: DataFrame, columns, args):
+    """
+    Replaces date/timestamp values that lie below a minimum (e.g. the 0001-01-01 placeholder of a source system)
+    with a replacement value. NULL stays NULL. Runs after the read, so a Spark datetime rebase of dates before
+    1582 has already happened by then.
+    Args:
+      - min: 'yyyy-MM-dd' (default '1900-01-01')
+      - replacement: 'yyyy-MM-dd' or timestamp string (default: min), cast to the column type
+      - inclusive: bool (default False: value < min is replaced; True: value <= min)
+    """
+    from datetime import datetime
+
+    min_value = args.get('min', '1900-01-01') or '1900-01-01'
+    replacement = args.get('replacement') or min_value
+    inclusive = args.get('inclusive', False)
+    if isinstance(inclusive, str):
+        inclusive = inclusive.strip().lower() in ('true', '1')
+
+    # Spark casts an unparsable string to NULL, which would wipe the data: validate up front.
+    datetime.strptime(str(min_value), '%Y-%m-%d')
+    datetime.fromisoformat(str(replacement))
+    if not columns:
+        raise ValueError("clamp_min_date needs at least one column in 'columns'.")
+
+    types = {f.name: f.dataType for f in df.schema.fields}
+    for c in columns:
+        if c not in types:
+            raise ValueError(f"clamp_min_date: column '{c}' does not exist.")
+        t = types[c].simpleString()
+        if t != 'date' and not t.startswith('timestamp'):
+            raise ValueError(f"clamp_min_date: column '{c}' is {t}, expected date or timestamp.")
+        low = col(c) <= lit(min_value).cast(t) if inclusive else col(c) < lit(min_value).cast(t)
+        df = df.withColumn(c, when(low, lit(replacement).cast(t)).otherwise(col(c)))
+    return df
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
 # Register built-in cleansing functions
 register_cleansing_function("normalize_text", normalize_text)
 register_cleansing_function("fill_nulls", fill_nulls)
 register_cleansing_function("parse_datetime", parse_datetime)
 register_cleansing_function("exclude_rows", exclude_rows)
+register_cleansing_function("clamp_min_date", clamp_min_date)
 
 # METADATA ********************
 
