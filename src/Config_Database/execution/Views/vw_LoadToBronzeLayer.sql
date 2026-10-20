@@ -18,7 +18,7 @@
     LZE.[IsIncremental],
     BLE.[PrimaryKeys],
     DS.[Namespace] AS [DataSourceNamespace],
-    DS.[LoadGroup] AS [LoadGroup],
+    COALESCE(NULLIF(LZE.[LoadGroup], ''), DS.[LoadGroup]) AS [LoadGroup],
     DS.[Name] AS [DataSourceName],
     LZE.[SourceSchema] AS [LandingzoneSourceSchema],
     LZE.[SourceName] AS [LandingzoneSourceName]

@@ -331,7 +331,8 @@ def register(sources, entities, domain, environments, dry_run=True, requeue_silv
     sources: a row binds a logical Source to a connection and database for one environment.
       Environment '*' applies to every environment without a row of its own (D, T, A, P; a DEV_
       run uses the D row). Namespace must be the same for a Source in every environment.
-      LoadGroup lives on the data source, so environments that share a binding share it.
+      LoadGroup here is the default of the data source, so environments that share a binding share it;
+      a table can set its own (entities, below).
       HistoryDays (optional): for an incremental entity without a watermark yet, the first load
       only fetches the last N days; an existing watermark is never changed.
     entities: Source, SourceSchema, SourceName and PrimaryKeys are required.
@@ -340,6 +341,12 @@ def register(sources, entities, domain, environments, dry_run=True, requeue_silv
       IsActive: the list is the truth, switch an entity off with 0 here, not by hand.
       IsHistorized (default 0): 1 keeps the history of changes in Silver (SCD2), ADR-016; empty
       means 0, also for an entity registered with 1 before. CustomNotebookName only for NOTEBOOK.
+      LoadGroup (optional): the group of this table; empty = the group of its source. Load one group with
+      PL_FMD_LOAD_ALL(LoadGroup=...). SourceColumns (optional): the source columns to load, comma separated,
+      empty = all; PrimaryKeys and the watermark column must be in it. SourceFilter (optional): a predicate
+      without WHERE, e.g. OrderDate >= '2024-01-01', added to the copy query and to the watermark query.
+      SourceColumns and SourceFilter only for ASQL_01, ASQL_02 and SNOWFLAKE_01. Like IsActive, the list is the
+      truth: an entity without these fields gets them emptied.
       An entity is found by data source + SourceSchema + SourceName; another SourceName is a new one.
     """
     driver, connstring, database = resolve_config_database()
@@ -458,13 +465,15 @@ _SQL_ENTITIES = """
 SELECT ds.[Namespace], ds.[Name] AS DataSourceName, ds.[Type] AS DataSourceType, c.[Name] AS ConnectionName,
        le.[SourceSchema], le.[SourceName], le.[FileName], le.[FileType], le.[IsIncremental], le.[IsIncrementalColumn],
        le.[IsActive], le.[CustomNotebookName], ble.[Schema] AS TargetSchema, ble.[Name] AS TargetName, ble.[PrimaryKeys],
-       ble.[CleansingRules] AS BronzeRules, sle.[CleansingRules] AS SilverRules, ISNULL(sle.[IsHistorized], 0) AS IsHistorized
+       ble.[CleansingRules] AS BronzeRules, sle.[CleansingRules] AS SilverRules, ISNULL(sle.[IsHistorized], 0) AS IsHistorized,
+       le.[LoadGroup] AS EntityLoadGroup, le.[SourceColumns], le.[SourceFilter], lv.[LoadValue] AS Watermark
 FROM [integration].[LandingzoneEntity] le
 JOIN [integration].[Lakehouse] lh ON lh.[LakehouseId] = le.[LakehouseId]
 JOIN [integration].[DataSource] ds ON ds.[DataSourceId] = le.[DataSourceId]
 JOIN [integration].[Connection] c ON c.[ConnectionId] = ds.[ConnectionId]
 LEFT JOIN [integration].[BronzeLayerEntity] ble ON ble.[LandingzoneEntityId] = le.[LandingzoneEntityId]
 LEFT JOIN [integration].[SilverLayerEntity] sle ON sle.[BronzeLayerEntityId] = ble.[BronzeLayerEntityId]
+LEFT JOIN [execution].[LandingzoneEntityLastLoadValue] lv ON lv.[LandingzoneEntityId] = le.[LandingzoneEntityId]
 WHERE lh.[WorkspaceGuid] = ?
 ORDER BY ds.[Namespace], le.[SourceSchema], le.[SourceName]
 """
@@ -524,6 +533,8 @@ def build_state(domain, environment, workspace, source_rows, entity_rows):
             'IsIncremental': int(bool(row['IsIncremental'])), 'IsIncrementalColumn': row['IsIncrementalColumn'] or '',
             'CustomNotebookName': row['CustomNotebookName'] or '', 'PrimaryKeys': row['PrimaryKeys'] or '',
             'IsActive': int(bool(row['IsActive'])), 'IsHistorized': int(bool(row['IsHistorized'])),
+            'LoadGroup': row.get('EntityLoadGroup') or '', 'SourceColumns': row.get('SourceColumns') or '',
+            'SourceFilter': row.get('SourceFilter') or '', 'Watermark': row.get('Watermark'),
             'BronzeRules': _rules(row['BronzeRules']), 'SilverRules': _rules(row['SilverRules']),
             'BronzeMode': 'keep', 'SilverMode': 'keep', 'Registered': True, 'Selected': False})
     return {'domain': domain, 'environment': environment, 'workspace': workspace, 'sources': sources, 'entities': entities}
@@ -546,7 +557,10 @@ def load_registration(domain, environment):
 
 
 ENTITY_FIELDS = ('TargetSchema', 'TargetName', 'FileName', 'FileType', 'IsIncremental', 'IsIncrementalColumn',
-                 'CustomNotebookName', 'PrimaryKeys', 'IsActive', 'IsHistorized')
+                 'CustomNotebookName', 'PrimaryKeys', 'IsActive', 'IsHistorized', 'LoadGroup', 'SourceColumns', 'SourceFilter')
+
+# The types whose copy query takes SourceColumns and SourceFilter. Keep in step with sp_RegisterEntities.
+SOURCE_FILTER_TYPES = ('ASQL_01', 'ASQL_02', 'SNOWFLAKE_01')
 
 
 def entity_key(entity):
@@ -560,7 +574,8 @@ def new_entity(source, schema, name, discovered=None):
             'TargetName': name, 'FileName': f'{schema}_{name}', 'FileType': default_type, 'IsIncremental': 0,
             'IsIncrementalColumn': '', 'CustomNotebookName': '',
             'PrimaryKeys': ((discovered or {}).get('PrimaryKeys') or '').replace(' ', ''),
-            'IsActive': 1, 'IsHistorized': 0, 'BronzeRules': [], 'SilverRules': [], 'BronzeMode': 'keep',
+            'IsActive': 1, 'IsHistorized': 0, 'LoadGroup': '', 'SourceColumns': '', 'SourceFilter': '', 'Watermark': None,
+            'BronzeRules': [], 'SilverRules': [], 'BronzeMode': 'keep',
             'SilverMode': 'keep', 'Registered': False, 'Selected': False}
 
 
@@ -672,7 +687,7 @@ def build_payload(state, original):
     entities = []
     for e in chosen:
         item = {k: e[k] for k in ('Source', 'SourceSchema', 'SourceName', *ENTITY_FIELDS)}
-        for field in ('IsIncrementalColumn', 'CustomNotebookName'):
+        for field in ('IsIncrementalColumn', 'CustomNotebookName', 'LoadGroup', 'SourceColumns', 'SourceFilter'):
             if not item[field]:
                 del item[field]
         for layer in ('Bronze', 'Silver'):
@@ -746,6 +761,31 @@ def validate_state(state, original, discovered=None):
             add(name, 'SourceName', 'warning', 'not found in the discovered tables (run PL_FMD_DISCOVER_SOURCE)')
         if e['IsIncremental'] == 1 and not e['IsIncrementalColumn']:
             add(name, 'IsIncrementalColumn', 'error', 'required when IsIncremental = 1')
+        if len(e['LoadGroup']) > 50:
+            add(name, 'LoadGroup', 'error', 'longer than 50 characters')
+        wanted = [c.strip() for c in e['SourceColumns'].split(',') if c.strip()]
+        if (wanted or e['SourceFilter']) and source['DataSourceType'] not in SOURCE_FILTER_TYPES:
+            add(name, 'SourceColumns' if wanted else 'SourceFilter', 'error', f"only supported for {', '.join(SOURCE_FILTER_TYPES)}")
+        before = next((o for o in original['entities'] if entity_key(o) == entity_key(e)), None)
+        if before is not None and before['SourceColumns'] != e['SourceColumns']:
+            add(name, 'SourceColumns', 'warning', 'taking columns away from a table that is already in Bronze makes the Bronze merge fail '
+                '(DELTA_MERGE_UNRESOLVED_EXPRESSION, tested 2026-10-20): drop the Bronze and Silver table first. Adding columns is not tested')
+        if ';' in e['SourceFilter']:
+            add(name, 'SourceFilter', 'error', 'must be one predicate: no semicolon')
+        elif e['SourceFilter']:
+            add(name, 'SourceFilter', 'warning', 'runs against the source at load time; the dry run does not test the predicate')
+        if wanted:
+            norm_c = (lambda x: x) if snowflake else (lambda x: x.lower())
+            have = {norm_c(c) for c in wanted}
+            for pk in [p.strip() for p in e['PrimaryKeys'].split(',') if p.strip()]:
+                if norm_c(pk) not in have:
+                    add(name, 'PrimaryKeys', 'error', f'column {pk} is not in SourceColumns')
+            if e['IsIncremental'] == 1 and e['IsIncrementalColumn'] and norm_c(e['IsIncrementalColumn']) not in have:
+                add(name, 'IsIncrementalColumn', 'error', f"column {e['IsIncrementalColumn']} is not in SourceColumns")
+            if columns:
+                known = {norm_c(c) for c in columns}
+                for c in [c for c in wanted if norm_c(c) not in known]:
+                    add(name, 'SourceColumns', 'error', f'column {c} not found by discovery')
         originals = {entity_key(o): o for o in original['entities']}
         for layer in ('Bronze', 'Silver'):
             mode, rules = e[f'{layer}Mode'], e[f'{layer}Rules']
@@ -761,7 +801,7 @@ def validate_state(state, original, discovered=None):
     return problems
 
 
-BULK_FIELDS = ('IsActive', 'IsHistorized')
+BULK_FIELDS = ('IsActive', 'IsHistorized', 'LoadGroup')
 
 
 def bulk_set(state, keys, field, value, apply=False):
@@ -769,10 +809,11 @@ def bulk_set(state, keys, field, value, apply=False):
     if field not in BULK_FIELDS:
         raise ValueError(f"Bulk change is only offered for {', '.join(BULK_FIELDS)}.")
     wanted = set(keys)
-    affected = [e for e in state['entities'] if entity_key(e) in wanted and e[field] != int(value)]
+    new = str(value).strip() if field == 'LoadGroup' else int(value)  # LoadGroup is text, the others 0 or 1
+    affected = [e for e in state['entities'] if entity_key(e) in wanted and e[field] != new]
     if apply:
         for e in affected:
-            e[field] = int(value)
+            e[field] = new
     return [entity_key(e) for e in affected]
 
 
@@ -796,7 +837,7 @@ def export_tables(sources, entities):
     src_order = ['Environment', 'Source', 'ConnectionName', 'DataSourceName', 'Namespace', 'DataSourceType', 'LoadGroup', 'HistoryDays']
     ent_order = ['Source', 'SourceSchema', 'SourceName', 'TargetSchema', 'TargetName', 'FileName', 'FileType', 'PrimaryKeys',
                  'IsIncremental', 'IsIncrementalColumn', 'CustomNotebookName', 'IsActive', 'IsHistorized',
-                 'BronzeCleansingRules', 'SilverCleansingRules']
+                 'LoadGroup', 'SourceColumns', 'SourceFilter', 'BronzeCleansingRules', 'SilverCleansingRules']
     return block('sources', sources, src_order) + '\n\n' + block('entities', entities, ent_order)
 
 # METADATA ********************
@@ -1004,12 +1045,27 @@ def overview_html(state, original):
         text = '<br>'.join(esc(_rule_text(r)) for r in found)
         return text if mode == 'replace' or as_registered else f'ongewijzigd:<br>{text}'
 
+    groups = {s['Source']: s['LoadGroup'] for s in state['sources']}
+
+    def load_group(e, old=False):
+        return esc(e['LoadGroup']) if e['LoadGroup'] else f"<i>van bron: {esc(groups.get(e['Source']) or '(leeg)')}</i>"
+
+    def source_columns(e, old=False):
+        cols = [c.strip() for c in e['SourceColumns'].split(',') if c.strip()]
+        return f"{len(cols)}: " + esc(', '.join(cols)) if cols else 'alle'
+
+    def source_filter(e, old=False):
+        return esc(e['SourceFilter']) or '-'
+
     # (header, text of an entity, the fields that mark it as changed)
     columns = [
         ('Doel', lambda e, old=False: esc(f"{e['TargetSchema']}.{e['TargetName']}"), ('TargetSchema', 'TargetName')),
         ('Bestand', lambda e, old=False: esc(f"{e['FileName']} ({e['FileType']})") + (f"<br>notebook {esc(e['CustomNotebookName'])}" if e['CustomNotebookName'] else ''),
          ('FileName', 'FileType', 'CustomNotebookName')),
         ('Laden', lambda e, old=False: load_mode(e), ('IsIncremental', 'IsIncrementalColumn')),
+        ('LoadGroup', load_group, ('LoadGroup',)),
+        ('Kolommen', source_columns, ('SourceColumns',)),
+        ('Filter', source_filter, ('SourceFilter',)),
         ('Primary key', lambda e, old=False: esc(e['PrimaryKeys'].replace(',', ', ')) or '<b style="color:#b00020">ontbreekt</b>', ('PrimaryKeys',)),
         ('Actief', lambda e, old=False: 'ja' if e['IsActive'] else 'nee', ('IsActive',)),
         ('Historie Silver', lambda e, old=False: 'ja' if e['IsHistorized'] else 'nee', ('IsHistorized',)),
@@ -1031,6 +1087,66 @@ def overview_html(state, original):
     head = ''.join(f'<th align=left>{h}</th>' for h in ['Tabel'] + [c[0] for c in columns])
     return (f'<table style="border-collapse:collapse;font-size:12px" cellpadding=4 border=1 bordercolor="#ddd"><tr>{head}</tr>{"".join(rows)}</table>'
             f'<small>Oranje: wijkt af van wat nu geregistreerd is.</small>')
+
+
+class ColumnPicker:
+    """
+    A multi-select of columns with a search box above it. The choice survives the search: a chosen column stays in
+    the list even when it does not match. `value` is the chosen columns in table order. on_change() runs after a
+    change by the user, not after load().
+    """
+
+    def __init__(self, label, rows=6, width='100%', on_change=None):
+        self.on_change, self.columns, self.chosen, self._loading = on_change, [], [], False
+        self.title = w.HTML(f'<b>{html.escape(label)}</b>')
+        self.search = w.Text(placeholder='zoek kolom', continuous_update=True, layout=w.Layout(width=width))
+        self.select = w.SelectMultiple(rows=rows, layout=w.Layout(width=width))
+        self.all_btn = w.Button(description='Alle zichtbare', layout=w.Layout(width='auto'), tooltip='Kiest alle kolommen die bij de zoekterm passen')
+        self.none_btn = w.Button(description='Wissen', layout=w.Layout(width='auto'))
+        self.widget = vbox([self.title, self.search, self.select, w.HBox([self.all_btn, self.none_btn])], width=width)
+        self.search.observe(lambda _: self._render(), names='value')
+        self.select.observe(self._picked, names='value')
+        self.all_btn.on_click(lambda _: self._set(set(self.chosen) | set(self._visible())))
+        self.none_btn.on_click(lambda _: self._set(set()))
+
+    @property
+    def value(self):
+        return tuple(self.chosen)
+
+    def load(self, columns, chosen, label=None):
+        """Sets the columns to choose from and what is chosen, without calling on_change. A chosen name that is not a column stays."""
+        self.columns = list(columns)
+        self.columns += [c for c in chosen if c not in self.columns]
+        self.chosen = [c for c in self.columns if c in chosen]
+        if label is not None:
+            self.title.value = f'<b>{html.escape(label)}</b>'
+        self.search.value = ''
+        self._render()
+
+    def _visible(self):
+        text = self.search.value.strip().lower()
+        return [c for c in self.columns if text in c.lower()]
+
+    def _render(self):
+        visible = self._visible()
+        options = [c for c in self.columns if c in self.chosen or c in visible]
+        self._loading = True
+        self.select.options = options
+        self.select.value = tuple(c for c in options if c in self.chosen)
+        self._loading = False
+
+    def _picked(self, change):
+        if self._loading:
+            return
+        self.chosen = [c for c in self.columns if c in change['new']]
+        if self.on_change:
+            self.on_change()
+
+    def _set(self, wanted):
+        self.chosen = [c for c in self.columns if c in wanted]
+        self._render()
+        if self.on_change:
+            self.on_change()
 
 
 class RuleEditor:
@@ -1106,9 +1222,8 @@ class RuleEditor:
         function = w.Dropdown(options=list(CLEANSING_FUNCTIONS) + [self.CUSTOM], value=rule['function'] if known else self.CUSTOM,
                               description='Functie', layout=w.Layout(width='320px'))
         chosen = [c for c in rule['columns'].split(';') if c]
-        options = self.columns + [c for c in chosen if c not in self.columns]
-        columns = w.SelectMultiple(options=options, value=tuple(chosen), description='Kolommen', rows=min(6, max(3, len(options))),
-                                   layout=w.Layout(width='320px'))
+        columns = ColumnPicker('Kolommen', rows=min(6, max(3, len(self.columns))), width='320px')
+        columns.load(self.columns, chosen)
         custom_name = w.Text(continuous_update=False, value=rule['function'] if not known else '', description='Naam', layout=w.Layout(width='320px'))
         custom_params = w.Textarea(continuous_update=False, value=json.dumps(rule['parameters']) if not known else '{}', description='Parameters (JSON)',
                                    layout=w.Layout(width='100%', max_width='520px', height='60px'))
@@ -1147,11 +1262,12 @@ class RuleEditor:
             self._changed()
 
         function.observe(function_changed, names='value')
-        for widget in [columns, custom_name, custom_params, *param_widgets.values()]:
+        columns.on_change = collect
+        for widget in [custom_name, custom_params, *param_widgets.values()]:
             widget.observe(collect, names='value')
         up.on_click(lambda _: self._move(i, -1)); down.on_click(lambda _: self._move(i, 1)); delete.on_click(lambda _: self._delete(i))
         head = w.HBox([w.HTML(f'<b>{i + 1}.</b>', layout=w.Layout(width='24px')), function, up, down, delete])
-        body = [head, columns]
+        body = [head, columns.widget]
         if function.value == self.CUSTOM:
             body += [custom_name, custom_params]
         else:
@@ -1313,6 +1429,7 @@ class RegistrationUI:
         self.confirm.value = False
         self._fill_sources_tab()
         self._fill_tables_tab()
+        self._focus(None)
         self._say(f"Geladen: werkruimte {self.state['workspace']}, {len(self.state['sources'])} bron(nen), "
                   f"{len(self.state['entities'])} geregistreerde tabel(len).")
         self.refresh()
@@ -1408,66 +1525,83 @@ class RegistrationUI:
 
     # ---- tab 2: tables -----------------------------------------------------------------------------
     def _build_tables_tab(self):
+        label = lambda: {'description_width': '130px'}  # a new dict each time; wide enough for "Watermarkkolom" and "Custom notebook"
         self.t_src = w.Dropdown(description='Bron', layout=w.Layout(width='320px'))
         self.t_discover = w.Button(layout=w.Layout(width='auto'), description='Ontdekte tabellen laden', icon='search',
                                    tooltip='Leest wat de laatste ontdekking in de configdb heeft gezet')
         self.t_schema = w.Text(description='Schemafilter', placeholder="leeg = alle schema's", layout=w.Layout(width='320px'), continuous_update=False)
         self.t_run = w.Button(layout=w.Layout(width='auto'), description='Ontdekking starten (pipeline)', icon='play',
                               tooltip='Start PL_FMD_DISCOVER_SOURCE in de CODE-workspace, wacht tot hij klaar is en laadt daarna de ontdekte tabellen')
-        self.t_filter = w.Text(description='Zoeken', placeholder='schema of tabelnaam', layout=w.Layout(width='320px'), continuous_update=False)
+        self.t_filter = w.Text(description='Zoeken', placeholder='schema, tabel of LoadGroup', layout=w.Layout(width='320px'), continuous_update=False)
+        self.t_incols = w.Checkbox(description='ook in kolomnamen', indent=False, layout=w.Layout(width='auto'),
+                                   tooltip="Zoekt ook in de kolommen van de ontdekte tabellen (eerst 'Ontdekte tabellen laden')")
         self.t_status = w.Dropdown(description='Status', options=['alle', 'nieuw', 'geselecteerd', 'geregistreerd', 'gewijzigd'], layout=w.Layout(width='220px'))
         self.t_list = w.SelectMultiple(rows=12, layout=w.Layout(width='100%'))
+        self.t_all = w.Button(layout=w.Layout(width='auto'), description='Alles in lijst selecteren', icon='list',
+                              tooltip='Selecteert alle tabellen die na het filter in de lijst staan')
         self.t_mark = w.Button(layout=w.Layout(width='auto'), description='Selecteren voor registratie', icon='check-square')
         self.t_unmark = w.Button(layout=w.Layout(width='auto'), description='Selectie weghalen', icon='square')
         self.b_field = w.Dropdown(description='Bulk', options=list(BULK_FIELDS), layout=w.Layout(width='220px'))
         self.b_value = w.Dropdown(options=[('aan (1)', 1), ('uit (0)', 0)], layout=w.Layout(width='100px'))
+        self.b_text = w.Text(placeholder='leeg = van de bron', layout=w.Layout(width='160px', display='none'), continuous_update=False)
         self.b_preview = w.Button(layout=w.Layout(width='auto'), description='Voorbeeld')
         self.b_apply = w.Button(layout=w.Layout(width='auto'), description='Toepassen op selectie', button_style='warning')
         self.b_out = Pane(height='40px', tall='140px', hide_empty=True)
-        self.d_table = w.Dropdown(description='Tabel', layout=w.Layout(width='100%'))
-        self.d_only = w.Checkbox(value=True, indent=False, layout=w.Layout(width='auto'),
-                                 description='Menu: alleen tabellen om te registreren of al geregistreerd')
         wide = lambda: w.Layout(width='100%')  # a new Layout each time: widgets must not share one; the right column sets the width
-        self.d_tschema = w.Text(description='Doelschema', layout=wide(), continuous_update=False)
-        self.d_tname = w.Text(description='Doeltabel', layout=wide(), continuous_update=False)
-        self.d_fname = w.Text(description='FileName', layout=wide(), continuous_update=False)
-        self.d_ftype = w.Combobox(continuous_update=False, description='FileType', options=['parquet', 'delta'], ensure_option=False, layout=wide())
-        self.d_inc = w.Checkbox(description='Incrementeel', indent=False)
-        self.d_inccol = w.Dropdown(description='Watermarkkolom', layout=wide())
+        self.d_head = w.HTML(self.NO_TABLE)
+        self.d_tschema = w.Text(description='Doelschema', layout=wide(), style=label(), continuous_update=False)
+        self.d_tname = w.Text(description='Doeltabel', layout=wide(), style=label(), continuous_update=False)
+        self.d_fname = w.Text(description='FileName', layout=wide(), style=label(), continuous_update=False)
+        self.d_ftype = w.Combobox(continuous_update=False, description='FileType', options=['parquet', 'delta'], ensure_option=False, layout=wide(), style=label())
+        self.d_lg = w.Text(description='LoadGroup', layout=wide(), style=label(), continuous_update=False)
         self.d_active = w.Checkbox(description='Actief', indent=False)
         self.d_hist = w.Checkbox(description='Historie in Silver', indent=False)
-        self.d_pk = w.SelectMultiple(description='Primary key', rows=6, layout=wide())
-        self.d_nb = w.Text(description='Custom notebook', layout=wide(), continuous_update=False)
+        self.d_inc = w.Checkbox(description='Incrementeel', indent=False)
+        # A Combobox: type to search the columns; a name that discovery does not know is still accepted (and reported by Controleren).
+        self.d_inccol = w.Combobox(continuous_update=False, description='Watermarkkolom', ensure_option=False, placeholder='kolom', layout=wide(), style=label())
+        self.d_wm = w.HTML()
+        self.d_cols = ColumnPicker('Kolommen om te laden (niets gekozen = alle)', rows=8, on_change=lambda: self._detail_changed(None))
+        self.d_filter = w.Textarea(description='Bronfilter', placeholder="bijv. OrderDate >= '2024-01-01'", layout=w.Layout(width='100%', height='56px'),
+                                   style=label(), continuous_update=False)
+        self.d_pk = ColumnPicker('Primary key', rows=6, on_change=lambda: self._detail_changed(None))
+        self.d_nb = w.Text(description='Custom notebook', layout=wide(), style=label(), continuous_update=False)
         self.d_reset = w.Button(layout=w.Layout(width='auto'), description='Deze tabel terugzetten', icon='undo')
-        self.d_widgets = [self.d_tschema, self.d_tname, self.d_fname, self.d_ftype, self.d_inc, self.d_inccol, self.d_active, self.d_hist, self.d_pk, self.d_nb]
+        self.d_widgets = [self.d_tschema, self.d_tname, self.d_fname, self.d_ftype, self.d_lg, self.d_inc, self.d_inccol, self.d_active, self.d_hist,
+                          self.d_filter, self.d_nb]
         self.bronze, self.silver = RuleEditor('Bronze', self._rules_changed), RuleEditor('Silver', self._rules_changed)
-        self.detail = vbox([self.d_table, self.d_only, self.d_tschema, self.d_tname, self.d_fname, self.d_ftype, self.d_inc, self.d_inccol, self.d_active,
-                              self.d_hist, self.d_pk, self.d_nb, self.d_reset, self.bronze.widget, self.silver.widget], width='100%')
+        # Hidden until a table is clicked in the list: there is nothing to edit before that.
+        self.detail = vbox([self.d_tschema, self.d_tname, self.d_fname, self.d_ftype, self.d_lg, self.d_active, self.d_hist, self.d_inc, self.d_inccol,
+                              self.d_wm, self.d_cols.widget, self.d_filter, self.d_pk.widget, self.d_nb, self.d_reset, self.bronze.widget, self.silver.widget],
+                             width='100%')
+        self.detail.layout.display = 'none'
         wrap = lambda *children: w.HBox(list(children), layout=w.Layout(flex_flow='row wrap'))
         top = vbox([wrap(self.t_src, self.t_discover), wrap(self.t_schema, self.t_run)])
-        filters = wrap(self.t_filter, self.t_status)
-        marks = wrap(self.t_mark, self.t_unmark)
-        bulk = wrap(self.b_field, self.b_value, self.b_preview, self.b_apply)
+        filters = wrap(self.t_filter, self.t_incols, self.t_status)
+        marks = wrap(self.t_all, self.t_mark, self.t_unmark)
+        bulk = wrap(self.b_field, self.b_value, self.b_text, self.b_preview, self.b_apply)
         # Two columns: pick on the left, edit on the right, so list and properties are in view together. The
         # columns wrap under each other when the cell is narrow.
         left = vbox([top, filters, self.t_list, marks, bulk, self.b_out.widget], flex='1 1 440px', min_width='0', margin='0 16px 0 0')
-        right = vbox([w.HTML('<b>Eigenschappen van één tabel</b>'), self.detail], flex='1 1 440px', min_width='0')
+        right = vbox([w.HTML('<b>Eigenschappen van één tabel</b>'), self.d_head, self.detail], flex='1 1 440px', min_width='0')
         self.tables_tab = w.HBox([left, right], layout=w.Layout(flex_flow='row wrap', width='100%', align_items='flex-start'))
         self.t_src.observe(lambda _: self._refresh_list(), names='value')
         self.t_filter.observe(lambda _: self._refresh_list(), names='value')
+        self.t_incols.observe(lambda _: self._refresh_list(), names='value')
         self.t_status.observe(lambda _: self._refresh_list(), names='value')
         self.t_list.observe(self._list_selected, names='value')
-        self.d_table.observe(lambda c: self._table_chosen(c['new']), names='value')
-        self.d_only.observe(lambda _: self._refresh_list(), names='value')
+        self.b_field.observe(lambda _: self._bulk_field(), names='value')
         for widget in self.d_widgets:
             widget.observe(self._detail_changed, names='value')
         self._guard(self.t_discover, self.discover)
         self._guard(self.t_run, self.run_discovery)
+        self._guard(self.t_all, self._select_all)
         self._guard(self.t_mark, lambda: self._mark(True))
         self._guard(self.t_unmark, lambda: self._mark(False))
         self._guard(self.b_preview, lambda: self._bulk(False))
         self._guard(self.b_apply, lambda: self._bulk(True))
         self._guard(self.d_reset, self._reset_entity)
+
+    NO_TABLE = '<i>Klik een tabel in de lijst om hem te bewerken.</i>'
 
     def _fill_tables_tab(self):
         self._loading = True
@@ -1481,9 +1615,19 @@ class RegistrationUI:
     def _original(self, key):
         return next((e for e in self.original['entities'] if entity_key(e) == key), None)
 
+    def _source_of(self, e):
+        return next((s for s in self.state['sources'] if s['Source'] == e['Source']), None)
+
+    def _group_of(self, e):
+        """The LoadGroup the table loads in: its own, otherwise the one of its source."""
+        source = self._source_of(e)
+        return e['LoadGroup'] or (source['LoadGroup'] if source else '')
+
     def _label(self, e):
         status = table_status(e, self.original)
-        return f"{'☑' if status == 'selected' else '·'} [{STATUS_NL[status]:<13}] {e['SourceSchema']}.{e['SourceName']}   (B:{len(e['BronzeRules'])} S:{len(e['SilverRules'])})"
+        group = self._group_of(e)
+        return (f"{'☑' if status == 'selected' else '·'} [{STATUS_NL[status]:<13}] {e['SourceSchema']}.{e['SourceName']}   "
+                f"(B:{len(e['BronzeRules'])} S:{len(e['SilverRules'])})" + (f"   groep: {group}" if group else ''))
 
     def _listed(self):
         if self.state is None:
@@ -1493,8 +1637,13 @@ class RegistrationUI:
         for e in sorted(self.state['entities'], key=lambda x: (x['SourceSchema'], x['SourceName'])):
             if e['Source'] != self.t_src.value:
                 continue
-            if text and text not in f"{e['SourceSchema']}.{e['SourceName']}".lower():
-                continue
+            if text:
+                haystack = f"{e['SourceSchema']}.{e['SourceName']} {self._group_of(e)}".lower()
+                found = self.discovered.get(e['Source'], {}).get((e['SourceSchema'], e['SourceName']))
+                if self.t_incols.value and found:
+                    haystack += ' ' + ' '.join(c['Name'] for c in found['Columns']).lower()
+                if text not in haystack:
+                    continue
             if status != 'alle' and STATUS_NL[table_status(e, self.original)] != status:
                 continue
             listed.append(e)
@@ -1510,17 +1659,12 @@ class RegistrationUI:
         if [tuple(o) for o in self.t_list.options] != entries:
             self.t_list.options = entries
             self.t_list.value = tuple(k for k in (entity_key(e) for e in listed) if k in keep)
-        current = self.d_table.value
-        # The menu follows what you work on, not the whole listing: a table that is only "new" appears once you click it.
-        focus = set(self.t_list.value) | {self.current}
-        shown = [e for e in listed if not self.d_only.value or table_status(e, self.original) != 'new' or entity_key(e) in focus]
-        options = [(f"{'☑ ' if table_status(e, self.original) in ('selected', 'changed') else ''}{e['SourceSchema']}.{e['SourceName']}", entity_key(e))
-                   for e in shown]
-        if list(self.d_table.options) != options:
-            self.d_table.options = options
-            if current in [entity_key(e) for e in shown]:
-                self.d_table.value = current
         self._loading = False
+
+    def _select_all(self):
+        self.t_list.value = tuple(o[1] for o in self.t_list.options)
+        self.b_out.clear()
+        self.b_out.print(f'{len(self.t_list.value)} tabel(len) in de lijst geselecteerd.')
 
     def run_discovery(self):
         """Starts the discovery pipeline for the chosen source, waits for it and then loads what it found."""
@@ -1552,6 +1696,8 @@ class RegistrationUI:
         newest = max(info['DiscoveredAt'] for info in found.values())
         self._say(f'{len(found)} tabel(len) ontdekt (laatste ontdekking {newest}); {added} nieuw in de lijst.')
         self.refresh()
+        if self.current:
+            self._show_entity(self.current)  # the columns of the table on screen are known now
 
     def _mark(self, selected):
         touched = 0
@@ -1564,29 +1710,54 @@ class RegistrationUI:
         self.b_out.print(f"{touched} tabel(len) {'geselecteerd voor registratie' if selected else 'niet meer geselecteerd'} (alleen nieuwe tabellen).")
         self.refresh()
 
+    def _bulk_field(self):
+        """LoadGroup is text; the other bulk fields are 0 or 1."""
+        text = self.b_field.value == 'LoadGroup'
+        self.b_text.layout.display = '' if text else 'none'
+        self.b_value.layout.display = 'none' if text else ''
+
     def _bulk(self, apply):
         keys = list(self.t_list.value)
         self.b_out.clear()
         if not keys:
             return self.b_out.print('Selecteer eerst tabellen in de lijst.')
-        affected = bulk_set(self.state, keys, self.b_field.value, self.b_value.value, apply=apply)
+        field = self.b_field.value
+        value = self.b_text.value if field == 'LoadGroup' else self.b_value.value
+        affected = bulk_set(self.state, keys, field, value, apply=apply)
         same = len(keys) - len(affected)
+        shown = (str(value).strip() or '(van de bron)') if field == 'LoadGroup' else value
         lines = [f"{'Toegepast op' if apply else 'Zou veranderen voor'} {len(affected)} tabel(len); {same} hadden deze waarde al."]
-        lines += [f'  {schema}.{name}: {self.b_field.value} -> {self.b_value.value}' for _, schema, name in affected[:40]]
+        lines += [f'  {schema}.{name}: {field} -> {shown}' for _, schema, name in affected[:40]]
         if len(affected) > 40:
             lines.append(f'  ... en {len(affected) - 40} meer')
         self.b_out.print('\n'.join(lines))
         if apply:
             self.refresh()
-            if self.d_table.value:
-                self._show_entity(self.d_table.value)
+            if self.current:
+                self._show_entity(self.current)
 
     def _list_selected(self, change):
+        """The properties column follows the table you click last; with several selected, the bulk action covers them all."""
         if self._loading:
             return
-        if len(change['new']) == 1:
-            self._refresh_list()  # puts the clicked table in the menu first
-            self.d_table.value = change['new'][0]
+        new, old = tuple(change['new']), tuple(change['old'])
+        added = [k for k in new if k not in old]
+        key = added[0] if len(added) == 1 else (self.current if self.current in new else (new[0] if new else None))
+        self._focus(key)
+        self._refresh_list()  # the labels of the tables edited so far
+
+    def _focus(self, key):
+        """Shows one table in the properties column; None hides the column."""
+        e = self._entity(key) if key else None
+        self.current = key if e else None
+        self.detail.layout.display = '' if e else 'none'
+        if e is None:
+            self.d_head.value = self.NO_TABLE
+            return
+        picked = len(self.t_list.value)
+        more = f' · {picked} tabellen geselecteerd: hier bewerk je alleen deze' if picked > 1 else ''
+        self.d_head.value = f"<b>{html.escape(e['SourceSchema'])}.{html.escape(e['SourceName'])}</b> · {html.escape(e['Source'])}{more}"
+        self._show_entity(key)
 
     def _columns(self, e):
         found = self.discovered.get(e['Source'], {}).get((e['SourceSchema'], e['SourceName']))
@@ -1600,32 +1771,48 @@ class RegistrationUI:
         before, self._loading = self._loading, True
         columns = self._columns(e)
         pks = [p.strip() for p in e['PrimaryKeys'].split(',') if p.strip()]
+        chosen = [c.strip() for c in e['SourceColumns'].split(',') if c.strip()]
         self.d_tschema.value, self.d_tname.value, self.d_fname.value, self.d_ftype.value = e['TargetSchema'], e['TargetName'], e['FileName'], e['FileType']
         self.d_inc.value, self.d_active.value, self.d_hist.value = bool(e['IsIncremental']), bool(e['IsActive']), bool(e['IsHistorized'])
-        self.d_pk.options = columns + [p for p in pks if p not in columns]
-        self.d_pk.value = tuple(pks)
-        self.d_inccol.options = [''] + columns + ([e['IsIncrementalColumn']] if e['IsIncrementalColumn'] and e['IsIncrementalColumn'] not in columns else [])
+        source = self._source_of(e)
+        self.d_lg.value = e['LoadGroup']
+        self.d_lg.placeholder = f"leeg = van de bron: {source['LoadGroup']}" if source and source['LoadGroup'] else 'leeg = van de bron'
+        self.d_inccol.options = columns
         self.d_inccol.value = e['IsIncrementalColumn']
+        if not e['Registered']:
+            self.d_wm.value = ''
+        elif e.get('Watermark'):
+            self.d_wm.value = f"<small>Huidige watermark: <code>{html.escape(str(e['Watermark']))}</code></small>"
+        else:
+            self.d_wm.value = '<small>Nog geen watermark.</small>'
+        note = '' if columns else ' (geen kolommen ontdekt: draai de ontdekking)'
+        self.d_pk.load(columns, pks, 'Primary key' + note)
+        self.d_cols.load(columns, chosen, 'Kolommen om te laden (niets gekozen = alle)' + note)
+        self.d_filter.value = e['SourceFilter']
         self.d_nb.value = e['CustomNotebookName']
-        source = next((s for s in self.state['sources'] if s['Source'] == e['Source']), None)
-        self.d_nb.layout.display = '' if source and source['DataSourceType'] == 'NOTEBOOK' else 'none'
-        self.d_pk.description = 'Primary key' + ('' if columns else ' (geen kolommen ontdekt)')
+        self._toggle_fields(source)
         self.bronze.load(e, columns)
         self.silver.load(e, columns)
         self._loading = before
 
-    def _table_chosen(self, key):
-        self._show_entity(key)
-        self._refresh_list()  # the labels of the tables edited so far
+    def _toggle_fields(self, source):
+        """Only the fields that apply: the watermark with Incrementeel, columns and filter for the types that take them, the notebook for NOTEBOOK."""
+        for widget in (self.d_inccol, self.d_wm):
+            widget.layout.display = '' if self.d_inc.value else 'none'
+        for widget in (self.d_cols.widget, self.d_filter):
+            widget.layout.display = '' if source and source['DataSourceType'] in SOURCE_FILTER_TYPES else 'none'
+        self.d_nb.layout.display = '' if source and source['DataSourceType'] == 'NOTEBOOK' else 'none'
 
     def _detail_changed(self, _):
         e = self._entity(self.current) if self.current and not self._loading else None
         if e is None:
             return
         e.update(TargetSchema=self.d_tschema.value.strip(), TargetName=self.d_tname.value.strip(), FileName=self.d_fname.value.strip(),
-                 FileType=self.d_ftype.value.strip(), IsIncremental=int(self.d_inc.value), IsIncrementalColumn=self.d_inccol.value or '',
+                 FileType=self.d_ftype.value.strip(), IsIncremental=int(self.d_inc.value), IsIncrementalColumn=(self.d_inccol.value or '').strip(),
                  IsActive=int(self.d_active.value), IsHistorized=int(self.d_hist.value), PrimaryKeys=','.join(self.d_pk.value),
-                 CustomNotebookName=self.d_nb.value.strip())
+                 CustomNotebookName=self.d_nb.value.strip(), LoadGroup=self.d_lg.value.strip(), SourceColumns=','.join(self.d_cols.value),
+                 SourceFilter=self.d_filter.value.strip())
+        self._toggle_fields(self._source_of(e))
         self.refresh(list_too=False)
 
     def _rules_changed(self, layer, mode, rules):

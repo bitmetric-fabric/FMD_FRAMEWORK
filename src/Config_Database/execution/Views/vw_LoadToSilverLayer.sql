@@ -26,7 +26,7 @@
   , CHAR(9),  '' )       -- (optional) remove TABs
   AS CleansingRules,
     DS.[Namespace] AS [DataSourceNamespace],
-    DS.[LoadGroup] AS [LoadGroup],
+    COALESCE(NULLIF(LZE.[LoadGroup], ''), DS.[LoadGroup]) AS [LoadGroup],
     SLE.[IsHistorized] AS [IsHistorized],
     DS.[Name] AS [DataSourceName],
     LZE.[SourceSchema] AS [LandingzoneSourceSchema],
