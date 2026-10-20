@@ -597,6 +597,10 @@ CLEANSING_FUNCTIONS = {
         {'name': 'formats', 'kind': 'list', 'default': ['yyyy-MM-dd']},
         {'name': 'into', 'kind': 'str', 'default': None},
         {'name': 'keep_original', 'kind': 'bool', 'default': True}],
+    'clamp_min_date': [
+        {'name': 'min', 'kind': 'date', 'default': '1900-01-01'},
+        {'name': 'replacement', 'kind': 'str', 'default': None},
+        {'name': 'inclusive', 'kind': 'bool', 'default': False}],
 }
 
 

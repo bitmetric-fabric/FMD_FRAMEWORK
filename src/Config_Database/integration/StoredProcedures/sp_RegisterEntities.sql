@@ -428,7 +428,7 @@ BEGIN
              FROM (VALUES ('Bronze', e.[BronzeRules]), ('Silver', e.[SilverRules])) l([Layer], [Rules])
              CROSS APPLY OPENJSON(CASE WHEN LEFT(LTRIM(l.[Rules]), 1) = '[' THEN l.[Rules] END) x
              CROSS APPLY (SELECT JSON_VALUE(x.[value], '$.function') AS [Name]) f
-             WHERE f.[Name] IS NOT NULL AND f.[Name] NOT IN ('normalize_text', 'fill_nulls', 'parse_datetime', 'exclude_rows')) AS [Unknown],
+             WHERE f.[Name] IS NOT NULL AND f.[Name] NOT IN ('normalize_text', 'fill_nulls', 'parse_datetime', 'exclude_rows', 'clamp_min_date')) AS [Unknown],
             CASE WHEN le.[LandingzoneEntityId] IS NOT NULL AND e.[SilverRulesSet] = 1 AND ISNULL(sle.[CleansingRules], '') <> ISNULL(e.[SilverRules], '')
                  THEN 'a changed Silver rule only reaches rows that change afterwards; to apply it to the whole table, run execution.sp_RequeueSilverLayerEntities (and drop the Silver table if the rule changes a type or the columns)' END AS [Rebuild],
             -- The filter and the column list only run against the source at load time; this procedure checks the names, not the predicate.
