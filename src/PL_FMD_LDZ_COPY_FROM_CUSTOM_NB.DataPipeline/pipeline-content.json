@@ -138,7 +138,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('NB_FMD_PROCESSING_LANDINGZONE_MAIN').output},    }",
+                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('NB_FMD_PROCESSING_LANDINGZONE_MAIN').output}}",
                       "type": "Expression"
                     },
                     "type": "String"

@@ -256,7 +256,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('CP_source_datalandingzone').output},    }",
+                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('CP_source_datalandingzone').output}}",
                       "type": "Expression"
                     },
                     "type": "String"

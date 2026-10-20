@@ -254,6 +254,35 @@ def landing_format(file_path, file_type):
         return "delta"
     return "parquet" if file_type == "delta" else file_type
 
+
+def delta_version(path):
+    """Latest commit version of the Delta table at path, or -1 when it does not exist yet."""
+    from delta.tables import DeltaTable
+    if not DeltaTable.isDeltaTable(spark, path):
+        return -1
+    return DeltaTable.forPath(spark, path).history(1).collect()[0]["version"]
+
+
+def delta_row_metrics(path, since_version):
+    """Row counts of the commits after since_version (WRITE or MERGE), from the Delta history; no extra scan.
+
+    Returns zeros when nothing was committed (a merge without changes may not commit). Keys: RowsWritten,
+    RowsInserted, RowsUpdated, RowsDeleted (the last three only filled for a MERGE).
+    """
+    from delta.tables import DeltaTable
+    metrics = {"RowsWritten": 0, "RowsInserted": 0, "RowsUpdated": 0, "RowsDeleted": 0}
+    for h in DeltaTable.forPath(spark, path).history().filter(f"version > {since_version}").collect():
+        m = h["operationMetrics"] or {}
+        if h["operation"] == "WRITE":
+            metrics["RowsWritten"] += int(m.get("numOutputRows", 0))
+            metrics["RowsInserted"] += int(m.get("numOutputRows", 0))
+        elif h["operation"] == "MERGE":
+            metrics["RowsInserted"] += int(m.get("numTargetRowsInserted", 0))
+            metrics["RowsUpdated"] += int(m.get("numTargetRowsUpdated", 0))
+            metrics["RowsDeleted"] += int(m.get("numTargetRowsDeleted", 0))
+            metrics["RowsWritten"] += int(m.get("numTargetRowsInserted", 0)) + int(m.get("numTargetRowsUpdated", 0))
+    return metrics
+
 # METADATA ********************
 
 # META {

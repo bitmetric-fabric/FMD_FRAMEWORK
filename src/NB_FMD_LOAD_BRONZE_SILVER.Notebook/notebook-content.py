@@ -383,6 +383,7 @@ if DeltaTable.isDeltaTable(spark, target_data_path):
 else:
     # Use first load when no data exists yet and then exit 
     dfDataChanged.write.format("delta").mode("overwrite").save(target_data_path)
+    row_metrics = delta_row_metrics(target_data_path, -1)
     end_audit_time = datetime.now()
     TotalRuntime = str((end_audit_time - start_audit_time)) 
 
@@ -393,6 +394,7 @@ else:
             "TargetSchema": TargetSchema,
             "TargetName" : TargetName,
             "EntityId" : SilverLayerEntityId,
+            **row_metrics,
             "StartTime" : str(start_audit_time),  # datetime is not JSON serializable
             "EndTime" : str(end_audit_time)
 
@@ -617,6 +619,7 @@ columns_to_insert = {column: f"updates.{column}" for column in dfDataOriginal.co
 
 # CELL ********************
 
+version_before = delta_version(target_data_path)
 try:
     deltaTable = DeltaTable.forPath(spark, f'{target_data_path}')
 
@@ -714,6 +717,7 @@ except Exception as e:
 
 # CELL ********************
 
+row_metrics = delta_row_metrics(target_data_path, version_before)
 TotalRuntime = str((datetime.now() - start_audit_time)) 
 end_audit_time =  str(datetime.now())
 start_audit_time =str(start_audit_time)
@@ -724,6 +728,7 @@ result_data = {
         "TargetSchema": TargetSchema,
         "TargetName" : TargetName,
         "EntityId" : SilverLayerEntityId,
+        **row_metrics,
         "StartTime" : start_audit_time,
         "EndTime" : end_audit_time
 

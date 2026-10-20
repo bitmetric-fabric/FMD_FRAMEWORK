@@ -296,7 +296,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{if(equals(item().TargetFileType,'delta'),activity('CP_COPY_TO_LANDINGZONE').output,activity('SC_COPY_INTO_LANDINGZONE').output)},    }",
+                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{if(equals(item().TargetFileType,'delta'),activity('CP_COPY_TO_LANDINGZONE').output,activity('SC_COPY_INTO_LANDINGZONE').output)}}",
                       "type": "Expression"
                     },
                     "type": "String"

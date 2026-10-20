@@ -160,7 +160,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"End\",   \"CopyOutput\" :0,}",
+                      "value": "{    \"Action\" : \"End\",   \"CopyOutput\" :0}",
                       "type": "Expression"
                     },
                     "type": "String"
