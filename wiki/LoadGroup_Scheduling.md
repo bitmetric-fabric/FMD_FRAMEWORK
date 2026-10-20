@@ -229,3 +229,23 @@ so a run on its own loads the DATA workspace of its own environment.
 - [FMD Business Domain Deployment Guide](../FMD_BUSINESS_DOMAIN_DEPLOYMENT.md)
 - [Job Scheduler — Create Item Schedule (REST API)](https://learn.microsoft.com/en-us/rest/api/fabric/core/job-scheduler/create-item-schedule)
 - [FMD Framework documentation](https://erwindekreuk.com/fmd-framework/)
+
+---
+
+## LoadGroup per table
+
+A table can carry its own `LoadGroup` (`integration.LandingzoneEntity.LoadGroup`, `NULL` by default). The group a table
+loads in is its own, otherwise the one of its source. The three views expose that effective value as `LoadGroup`, so
+the pipelines and the `@LoadGroup` filter of `sp_GetBronzelayerEntity` / `sp_GetSilverlayerEntity` need no change.
+
+This replaces listing tables in the `Entities` parameter to load part of a source: put those tables in a group, and
+give the schedule that group. Set it in the registration editor (`NB_REGISTRATIE`, tab 2: field *LoadGroup*, or the
+*Bulk* action for a selection) or with the `LoadGroup` field of an entity in `register(...)`.
+
+- A run for `LoadGroup = 'X'` picks up the tables in group X, **not** the other tables of a source whose own group is X
+  if they have a group of their own.
+- A run without a group still loads everything.
+- Registration is the truth: a table that is registered again without the field goes back to the group of its source.
+
+Per table you can also load a subset of the columns (`SourceColumns`) and add a row filter (`SourceFilter`), for
+ASQL_01, ASQL_02 and SNOWFLAKE_01. See ADR-020.

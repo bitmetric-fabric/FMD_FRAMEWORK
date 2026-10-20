@@ -29,6 +29,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [016](016-historie-in-silver-per-tabel.md) | Historie in Silver per tabel instelbaar | Accepted, herzien 2026-10-13 (standaard uit) |
 | [017](017-schedules-in-config-workspace.md) | Schedules op een plan-pipeline in de CONFIG-workspace | Proposed |
 | [018](018-registratie-via-notebook.md) | Bronnen registreren via een notebook, niet via `sqlcmd` | Proposed |
+| [020](020-loadgroup-kolommen-filter-per-tabel.md) | LoadGroup, kolommen en bronfilter per tabel | Proposed |
 
 ## Openstaande triggers
 

@@ -15,7 +15,7 @@
 # Startpunt voor het toevoegen en aanpassen van bronnen en tabellen. Customer-owned: run `NB_SETUP_FMD` places this
 # notebook once and never overwrites it. Lives in the configuration workspace. De registratie staat in de configdb;
 # deze notebook onderhoudt geen lijsten.
-#
+# 
 # **Werkwijze** (draaiboek §A.4a):
 # 1. Staat de bronconnectie nog niet in de configdb? Registreer hem eenmalig met `register_connection(...)` (stap 1).
 #    De Fabric-connectie moet al bestaan; die wijzig je hier niet.
@@ -29,11 +29,22 @@
 #      workspace `DEV_<NAAM>_<prefix>_INTEGRATION_DATA` moet al in de configdb staan, en de bronbinding is die van D);
 #    - na de merge: `D`;
 #    - vlak voor een promotie: `T`, en later `P`.
-#
+# 
 # Alle wijzigingen blijven in het geheugen tot **Registreren**. Registreren kan pas na een proefdraai op precies deze
 # wijzigingen. De registratie zelf is `register()`, ongewijzigd: de editor bouwt alleen de lijsten die `register()` verwacht.
 # Na het registreren toont de editor het resultaat als `table("""...""")`: bewaar dat in het log of in git.
-#
+# 
+# **LoadGroup, kolommen en filter** (tab 2, per tabel): met een eigen *LoadGroup* laadt een tabel in die groep in plaats van in
+# die van haar bron, zodat een schedule een deel van een bron kan laden. Leeg betekent de groep van de bron. Met *Kolommen om
+# te laden* laad je een deel van de kolommen (niets gekozen = alle; de primary key en de watermarkkolom moeten erbij zitten), en
+# met *Bronfilter* een predicaat zonder `WHERE`, bijvoorbeeld `OrderDate >= '2024-01-01'`. Kolommen en filter bestaan voor
+# ASQL_01, ASQL_02 en SNOWFLAKE_01. Een filter wijzigen verwijdert niets in Bronze en Silver, en de proefdraai voert het
+# filter niet uit: een fout in het predicaat zie je pas bij de load (ADR-020). Bij Snowflake volgen de kolomnamen in het
+# filter de Snowflake-regels: zonder aanhalingstekens zijn het hoofdletters. Kolommen **weghalen** bij een tabel die al in
+# Bronze staat laat de Bronze-merge falen (getest 2026-10-20): verwijder dan eerst de Bronze- en Silver-tabel. *Alles in lijst selecteren* selecteert de
+# tabellen die na het zoekfilter in de lijst staan; de bulkactie (ook voor LoadGroup) geldt voor die selectie. Zoeken kan
+# ook in kolomnamen.
+# 
 # **Cleansing rules**: per laag kies je *ongewijzigd laten* (de bestaande regels blijven), *vervangen* (de lijst is de
 # waarheid) of *alles verwijderen*. Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen; voor de hele
 # tabel registreer je met `register(..., dry_run=False, requeue_silver=True)` (zie onderaan).
@@ -95,7 +106,7 @@ registration_ui(domain="INTEGRATION", environment="D")
 # Een Silver-regel voor de hele tabel opnieuw toepassen: `register(..., dry_run=False, requeue_silver=True)`; dat zet de
 # entiteiten met een gewijzigde Silver-regel terug in de wachtrij (`execution.sp_RequeueSilverLayerEntities`). Verwijder
 # de Silver-tabel eerst als de regel een type of de kolommen verandert (de editor kent `requeue_silver` niet).
-#
+# 
 # De ontdekking starten zonder de editor: `start_discovery(...)` (hieronder) start `PL_FMD_DISCOVER_SOURCE` in de
 # CODE-workspace van deze omgeving en wacht tot hij klaar is. Je hebt een rol nodig die items in die workspace mag uitvoeren.
 

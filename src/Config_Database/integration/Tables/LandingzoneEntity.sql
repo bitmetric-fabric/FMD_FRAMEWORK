@@ -12,6 +12,9 @@ CREATE TABLE [integration].[LandingzoneEntity] (
     [IsActive]            BIT             DEFAULT ((1)) NOT NULL,
     [SourceCustomSelect]  NVARCHAR (4000) NULL,
     [CustomNotebookName]  VARCHAR (200)   NULL,
+    [LoadGroup]           VARCHAR (50)    NULL,
+    [SourceColumns]       NVARCHAR (MAX)  NULL,
+    [SourceFilter]        NVARCHAR (4000) NULL,
     CONSTRAINT [PK_integration_LandingzoneEntity] PRIMARY KEY CLUSTERED ([LandingzoneEntityId] ASC),
     CONSTRAINT [UC_integration_LandingzoneEntity] UNIQUE NONCLUSTERED ([SourceSchema] ASC, [SourceName] ASC, [DataSourceId] ASC, [LakehouseId] ASC)
 );

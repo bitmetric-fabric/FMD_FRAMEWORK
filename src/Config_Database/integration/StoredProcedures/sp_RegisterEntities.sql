@@ -19,6 +19,12 @@
 -- list is the truth, and [] or null clears them. A rule that is not valid is an error; a function that is not
 -- built in is only a warning in the dry run (it may be registered in NB_FMD_CUSTOM_DQ_CLEANSING).
 -- exclude_rows needs "columns" and a non-empty "parameters.values", or the layer would fail on every run.
+-- LoadGroup / SourceColumns / SourceFilter (optional, per entity; a row without the field leaves it empty, like IsActive
+-- does for its default): LoadGroup overrides the one of the data source for this table; SourceColumns is a comma separated
+-- list of the source columns to load (empty = all); SourceFilter is a predicate without WHERE, added to the copy query.
+-- SourceColumns and SourceFilter only exist for ASQL_01, ASQL_02 and SNOWFLAKE_01: the types whose copy pipeline runs
+-- SourceDataRetrieval, with a watermark query (LastLoadValue) that takes the same filter. SQLMI_01 is left out: its
+-- LastLoadValue in vw_LoadSourceToLandingzone is the stored value, not a query.
 -- @DryRun: 1 runs every check and the registration, then rolls back and returns a preview
 -- (New / Changed / Unchanged per entity with what a Changed changes, plus active entities in this
 -- scope that the list omits)
@@ -107,10 +113,12 @@ BEGIN
                              [TargetSchema] NVARCHAR(100), [TargetName] NVARCHAR(200), [FileName] NVARCHAR(200), [FileType] NVARCHAR(20),
                              [IsIncremental] BIT, [IsIncrementalColumn] NVARCHAR(50), [CustomNotebookName] VARCHAR(200),
                              [PrimaryKeys] NVARCHAR(200), [IsActive] BIT, [IsHistorized] BIT,
+                             [LoadGroup] VARCHAR(200), [SourceColumns] NVARCHAR(MAX), [SourceFilter] NVARCHAR(4000),
                              [BronzeRulesSet] BIT, [BronzeRules] NVARCHAR(MAX), [BronzeRulesText] NVARCHAR(MAX),
                              [SilverRulesSet] BIT, [SilverRules] NVARCHAR(MAX), [SilverRulesText] NVARCHAR(MAX));
     INSERT INTO @EntitiesT ([Source], [SourceSchema], [SourceName], [TargetSchema], [TargetName], [FileName], [FileType],
                             [IsIncremental], [IsIncrementalColumn], [CustomNotebookName], [PrimaryKeys], [IsActive], [IsHistorized],
+                            [LoadGroup], [SourceColumns], [SourceFilter],
                             [BronzeRulesSet], [BronzeRules], [BronzeRulesText], [SilverRulesSet], [SilverRules], [SilverRulesText])
     SELECT
         e.[Source], e.[SourceSchema], e.[SourceName],
@@ -122,6 +130,7 @@ BEGIN
         e.[IsIncrementalColumn], e.[CustomNotebookName], e.[PrimaryKeys],
         ISNULL(e.[IsActive], 1) AS [IsActive],
         e.[IsHistorized],
+        NULLIF(LTRIM(RTRIM(e.[LoadGroup])), ''), NULLIF(LTRIM(RTRIM(e.[SourceColumns])), ''), NULLIF(LTRIM(RTRIM(e.[SourceFilter])), ''),
         JSON_PATH_EXISTS(r.[value], '$.BronzeCleansingRules'),
         CASE WHEN REPLACE(REPLACE(REPLACE(e.[BronzeRules], ' ', ''), CHAR(13), ''), CHAR(10), '') = '[]' THEN NULL ELSE e.[BronzeRules] END,
         e.[BronzeRulesText],
@@ -144,6 +153,9 @@ BEGIN
             [PrimaryKeys]         NVARCHAR(200) '$.PrimaryKeys',
             [IsActive]            BIT           '$.IsActive',
             [IsHistorized]        BIT           '$.IsHistorized',
+            [LoadGroup]           VARCHAR(200)  '$.LoadGroup',
+            [SourceColumns]       NVARCHAR(MAX) '$.SourceColumns',
+            [SourceFilter]        NVARCHAR(4000) '$.SourceFilter',
             [BronzeRules]         NVARCHAR(MAX) '$.BronzeCleansingRules' AS JSON,
             [BronzeRulesText]     NVARCHAR(MAX) '$.BronzeCleansingRules',
             [SilverRules]         NVARCHAR(MAX) '$.SilverCleansingRules' AS JSON,
@@ -165,7 +177,7 @@ BEGIN
         CROSS APPLY OPENJSON(e.[value]) k
         WHERE k.[key] NOT IN ('Source', 'SourceSchema', 'SourceName', 'TargetSchema', 'TargetName', 'FileName', 'FileType',
                               'IsIncremental', 'IsIncrementalColumn', 'CustomNotebookName', 'PrimaryKeys', 'IsActive', 'IsHistorized',
-                              'BronzeCleansingRules', 'SilverCleansingRules')
+                              'LoadGroup', 'SourceColumns', 'SourceFilter', 'BronzeCleansingRules', 'SilverCleansingRules')
     ) f;
     IF @KeyError IS NOT NULL THROW 50003, @KeyError, 1;
 
@@ -225,6 +237,34 @@ BEGIN
         UNION ALL
         SELECT CONCAT(MIN([SourceSchema]), '.', MIN([SourceName])), N'listed twice'
         FROM @EntitiesT GROUP BY [Source], [SourceSchema], [SourceName] HAVING COUNT(*) > 1
+        UNION ALL
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'LoadGroup is longer than 50 characters'
+        FROM @EntitiesT e WHERE LEN(e.[LoadGroup]) > 50
+        UNION ALL
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns and SourceFilter are only supported for ASQL_01, ASQL_02 and SNOWFLAKE_01'
+        FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
+        WHERE (e.[SourceColumns] IS NOT NULL OR e.[SourceFilter] IS NOT NULL) AND b.[DataSourceType] NOT IN ('ASQL_01', 'ASQL_02', 'SNOWFLAKE_01')
+        UNION ALL
+        -- A statement terminator would let a filter run a second statement against the source.
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceFilter must be one predicate: no semicolon'
+        FROM @EntitiesT e WHERE CHARINDEX(';', ISNULL(e.[SourceFilter], '')) > 0
+        UNION ALL
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'PrimaryKeys column ' + LTRIM(RTRIM(pk.[value])) + N' is not in SourceColumns'
+        FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
+        CROSS APPLY STRING_SPLIT(ISNULL(e.[PrimaryKeys], ''), ',') pk
+        WHERE e.[SourceColumns] IS NOT NULL AND LTRIM(RTRIM(pk.[value])) <> ''
+          AND NOT EXISTS (SELECT 1 FROM STRING_SPLIT(e.[SourceColumns], ',') sc
+                          WHERE (CASE WHEN b.[DataSourceType] = 'SNOWFLAKE_01'
+                                      THEN IIF(LTRIM(RTRIM(sc.[value])) COLLATE Latin1_General_100_CS_AS = LTRIM(RTRIM(pk.[value])) COLLATE Latin1_General_100_CS_AS, 1, 0)
+                                      ELSE IIF(LTRIM(RTRIM(sc.[value])) = LTRIM(RTRIM(pk.[value])), 1, 0) END) = 1)
+        UNION ALL
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'IsIncrementalColumn ' + e.[IsIncrementalColumn] + N' is not in SourceColumns'
+        FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
+        WHERE e.[SourceColumns] IS NOT NULL AND e.[IsIncremental] = 1 AND ISNULL(e.[IsIncrementalColumn], '') <> ''
+          AND NOT EXISTS (SELECT 1 FROM STRING_SPLIT(e.[SourceColumns], ',') sc
+                          WHERE (CASE WHEN b.[DataSourceType] = 'SNOWFLAKE_01'
+                                      THEN IIF(LTRIM(RTRIM(sc.[value])) COLLATE Latin1_General_100_CS_AS = e.[IsIncrementalColumn] COLLATE Latin1_General_100_CS_AS, 1, 0)
+                                      ELSE IIF(LTRIM(RTRIM(sc.[value])) = e.[IsIncrementalColumn], 1, 0) END) = 1)
         UNION ALL
         -- Cleansing rules: a JSON array of objects, as handle_cleansing_functions reads them.
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), CONCAT(l.[Layer], N'CleansingRules must be a JSON array of rules, not a string or an object')
@@ -295,6 +335,20 @@ BEGIN
                           ELSE IIF(col.[Name] = LTRIM(RTRIM(pk.[value])), 1, 0)
                      END) = 1)
         UNION ALL
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns column ' + LTRIM(RTRIM(sc.[value])) + N' not found by PL_FMD_DISCOVER_SOURCE'
+        FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
+        JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]
+        JOIN [integration].[DiscoveredEntity] de ON de.[ConnectionId] = c.[ConnectionId] AND de.[DataSourceName] = b.[DataSourceName]
+            AND de.[SourceSchema] = e.[SourceSchema] AND de.[SourceName] = e.[SourceName]
+        CROSS APPLY STRING_SPLIT(ISNULL(e.[SourceColumns], ''), ',') sc
+        WHERE LTRIM(RTRIM(sc.[value])) <> ''
+          AND NOT EXISTS (
+              SELECT 1 FROM OPENJSON(de.[Columns]) WITH ([Name] NVARCHAR(200) '$.Name') col
+              WHERE (CASE WHEN b.[DataSourceType] = 'SNOWFLAKE_01'
+                          THEN IIF(col.[Name] COLLATE Latin1_General_100_CS_AS = LTRIM(RTRIM(sc.[value])) COLLATE Latin1_General_100_CS_AS, 1, 0)
+                          ELSE IIF(col.[Name] = LTRIM(RTRIM(sc.[value])), 1, 0)
+                     END) = 1)
+        UNION ALL
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'IsIncrementalColumn ' + e.[IsIncrementalColumn] + N' not found by PL_FMD_DISCOVER_SOURCE'
         FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
         JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]
@@ -332,7 +386,7 @@ BEGIN
                  ELSE 'Unchanged'
             END,
             CASE WHEN le.[LandingzoneEntityId] IS NOT NULL THEN chg.[Changes] END,
-            NULLIF(CONCAT_WS('; ', wrn.[Unknown], wrn.[Rebuild]), '')
+            NULLIF(CONCAT_WS('; ', wrn.[Unknown], wrn.[Rebuild], wrn.[Source]), '')
         FROM @EntitiesT e
         JOIN @Bound b ON b.[Source] = e.[Source]
         JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]
@@ -356,6 +410,12 @@ BEGIN
                  THEN CONCAT('IsIncrementalColumn ', ISNULL(le.[IsIncrementalColumn], '(none)'), ' -> ', ISNULL(e.[IsIncrementalColumn], '(none)')) END,
             CASE WHEN ble.[PrimaryKeys] <> e.[PrimaryKeys] THEN CONCAT('PrimaryKeys ', ble.[PrimaryKeys], ' -> ', e.[PrimaryKeys]) END,
             CASE WHEN le.[IsActive] <> e.[IsActive] THEN CONCAT('IsActive ', le.[IsActive], ' -> ', e.[IsActive]) END,
+            CASE WHEN ISNULL(le.[LoadGroup], '') <> ISNULL(e.[LoadGroup], '')
+                 THEN CONCAT('LoadGroup ', ISNULL(le.[LoadGroup], '(from source)'), ' -> ', ISNULL(e.[LoadGroup], '(from source)')) END,
+            CASE WHEN ISNULL(le.[SourceColumns], '') <> ISNULL(e.[SourceColumns], '')
+                 THEN CONCAT('SourceColumns ', ISNULL(le.[SourceColumns], '(all)'), ' -> ', ISNULL(e.[SourceColumns], '(all)')) END,
+            CASE WHEN ISNULL(le.[SourceFilter], '') <> ISNULL(e.[SourceFilter], '')
+                 THEN CONCAT('SourceFilter ', ISNULL(le.[SourceFilter], '(none)'), ' -> ', ISNULL(e.[SourceFilter], '(none)')) END,
             CASE WHEN ISNULL(sle.[IsHistorized], 0) <> ISNULL(e.[IsHistorized], 0)
                  THEN CONCAT('IsHistorized ', ISNULL(sle.[IsHistorized], 0), ' -> ', ISNULL(e.[IsHistorized], 0)) END,
             CASE WHEN e.[BronzeRulesSet] = 1 AND ISNULL(ble.[CleansingRules], '') <> ISNULL(e.[BronzeRules], '') THEN 'BronzeCleansingRules changed' END,
@@ -370,7 +430,14 @@ BEGIN
              CROSS APPLY (SELECT JSON_VALUE(x.[value], '$.function') AS [Name]) f
              WHERE f.[Name] IS NOT NULL AND f.[Name] NOT IN ('normalize_text', 'fill_nulls', 'parse_datetime', 'exclude_rows')) AS [Unknown],
             CASE WHEN le.[LandingzoneEntityId] IS NOT NULL AND e.[SilverRulesSet] = 1 AND ISNULL(sle.[CleansingRules], '') <> ISNULL(e.[SilverRules], '')
-                 THEN 'a changed Silver rule only reaches rows that change afterwards; to apply it to the whole table, run execution.sp_RequeueSilverLayerEntities (and drop the Silver table if the rule changes a type or the columns)' END AS [Rebuild]) wrn;
+                 THEN 'a changed Silver rule only reaches rows that change afterwards; to apply it to the whole table, run execution.sp_RequeueSilverLayerEntities (and drop the Silver table if the rule changes a type or the columns)' END AS [Rebuild],
+            -- The filter and the column list only run against the source at load time; this procedure checks the names, not the predicate.
+            CONCAT_WS('; ',
+                CASE WHEN le.[LandingzoneEntityId] IS NOT NULL AND ISNULL(le.[SourceColumns], '') <> ISNULL(e.[SourceColumns], '')
+                     THEN 'SourceColumns changes the columns the next load writes to the landing zone. Taking columns away from a table that is already in Bronze makes the Bronze merge fail (DELTA_MERGE_UNRESOLVED_EXPRESSION, tested in FMD_TRIAL 2026-10-20): drop the Bronze and Silver table first. Adding columns is not tested' END,
+                CASE WHEN le.[LandingzoneEntityId] IS NOT NULL AND ISNULL(le.[SourceFilter], '') <> ISNULL(e.[SourceFilter], '')
+                     THEN 'SourceFilter only applies to rows loaded from now on; rows already in Bronze and Silver stay' END,
+                CASE WHEN e.[SourceFilter] IS NOT NULL THEN 'SourceFilter is not run by the dry run; a wrong predicate shows up at the load' END) AS [Source]) wrn;
 
         -- Active in this workspace's scope, but not in this list: this run would leave them as is.
         INSERT INTO @Orphans
@@ -390,7 +457,7 @@ BEGIN
     DECLARE @Nr INT = 1, @Max INT = (SELECT MAX([Nr]) FROM @EntitiesT), @ConnectionId INT, @DataSourceId INT, @EntityId BIGINT;
     DECLARE @CN NVARCHAR(200), @DSN NVARCHAR(100), @NS VARCHAR(100), @DST VARCHAR(30), @LG VARCHAR(50), @HD INT, @SS NVARCHAR(100),
             @SN NVARCHAR(200), @TS NVARCHAR(100), @TN NVARCHAR(200), @FN NVARCHAR(200), @FT NVARCHAR(20), @Inc BIT,
-            @IncCol NVARCHAR(50), @NB VARCHAR(200), @PK NVARCHAR(200), @Act BIT, @Hist BIT, @Desc NVARCHAR(200),
+            @IncCol NVARCHAR(50), @NB VARCHAR(200), @PK NVARCHAR(200), @Act BIT, @Hist BIT, @Desc NVARCHAR(200), @LGE VARCHAR(50), @SC NVARCHAR(MAX), @SF NVARCHAR(4000),
             @BrSet BIT, @BrRules NVARCHAR(MAX), @SiSet BIT, @SiRules NVARCHAR(MAX);
 
     -- A savepoint, not a plain BEGIN/ROLLBACK: a caller with autocommit off (pyodbc's default, so
@@ -406,6 +473,7 @@ BEGIN
                    @HD=b.[HistoryDays], @SS=e.[SourceSchema], @SN=e.[SourceName], @TS=e.[TargetSchema], @TN=e.[TargetName],
                    @FN=e.[FileName], @FT=e.[FileType], @Inc=e.[IsIncremental], @IncCol=e.[IsIncrementalColumn],
                    @NB=e.[CustomNotebookName], @PK=e.[PrimaryKeys], @Act=e.[IsActive], @Hist=e.[IsHistorized],
+                   @LGE=e.[LoadGroup], @SC=e.[SourceColumns], @SF=e.[SourceFilter],
                    @BrSet=e.[BronzeRulesSet], @BrRules=e.[BronzeRules], @SiSet=e.[SilverRulesSet], @SiRules=e.[SilverRules]
             FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source] WHERE e.[Nr] = @Nr;
 
@@ -430,7 +498,8 @@ BEGIN
                              WHERE l.[WorkspaceGuid] = @WsGuid AND le.[DataSourceId] = @DataSourceId
                                AND le.[SourceSchema] = @SS AND le.[SourceName] = @SN);
 
-            UPDATE [integration].[LandingzoneEntity] SET [IsActive] = @Act WHERE [LandingzoneEntityId] = @EntityId;
+            UPDATE [integration].[LandingzoneEntity] SET [IsActive] = @Act, [LoadGroup] = @LGE, [SourceColumns] = @SC, [SourceFilter] = @SF
+            WHERE [LandingzoneEntityId] = @EntityId;
 
             UPDATE sle SET sle.[IsHistorized] = ISNULL(@Hist, 0)
             FROM [integration].[SilverLayerEntity] sle
@@ -474,7 +543,7 @@ BEGIN
         RETURN;
     END
 
-    SELECT e.[Source], b.[DataSourceName], e.[SourceSchema], e.[SourceName], le.[LandingzoneEntityId], le.[IsActive], ds.[LoadGroup],
+    SELECT e.[Source], b.[DataSourceName], e.[SourceSchema], e.[SourceName], le.[LandingzoneEntityId], le.[IsActive], COALESCE(NULLIF(le.[LoadGroup], ''), ds.[LoadGroup]) AS [LoadGroup],
            ISNULL(e.[IsHistorized], 0) AS [IsHistorized], lv.[LoadValue] AS [Watermark], CASE WHEN v.[EntityId] IS NULL THEN 'no' ELSE 'yes' END AS [InLoadView]
     FROM @EntitiesT e
     JOIN @Bound b ON b.[Source] = e.[Source]
