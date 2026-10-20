@@ -99,6 +99,9 @@ spark:
 # NB_CREATE_SHORTCUTS legt shortcuts van de Gold-lakehouse naar de Silver-lakehouse.
 # De workspace- en lakehouse-ID's worden na deployment opgezocht en ingevuld; alleen
 # de schemanamen zijn een keuze. Leeg laten als je lakehouses zonder schema's gebruikt.
+# Met een lege ShortcutNames in het notebook (de standaard) maakt het per Silver-schema
+# één schema-shortcut; deze schemanamen gelden dan niet, en nieuwe Silver-tabellen
+# verschijnen vanzelf in Gold.
 shortcuts:
   source_schema: ''   # schema in de Gold-lakehouse
   target_schema: ''   # schema in de Silver-lakehouse
