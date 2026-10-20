@@ -534,6 +534,7 @@ if DeltaTable.isDeltaTable(spark, target_data_path):
 else:
     # Use first load when no data exists yet and then exit 
     dfDataChanged.write.format("delta").mode("overwrite").save(target_data_path)
+    row_metrics = delta_row_metrics(target_data_path, -1)
     TotalRuntime = str((datetime.now() - start_audit_time)) 
     end_audit_time =  str(datetime.now())
     start_audit_time =str(start_audit_time)
@@ -547,6 +548,7 @@ else:
             "SourceFileName" : SourceFileName,
             "LandingzoneEntityId" : LandingzoneEntityId,
             "EntityId" : BronzeLayerEntityId,
+            **row_metrics,
             "StartTime" : start_audit_time,
             "EndTime" : end_audit_time
 
@@ -572,6 +574,7 @@ else:
 # CELL ********************
 
 #merge table
+version_before = delta_version(target_data_path)
 try:
     deltaTable = DeltaTable.forPath(spark, f'{target_data_path}')
     if IsIncremental in [False, 'false', 'False']:
@@ -613,6 +616,7 @@ except Exception as e:
 
 # CELL ********************
 
+row_metrics = delta_row_metrics(target_data_path, version_before)
 TotalRuntime = str((datetime.now() - start_audit_time)) 
 end_audit_time =  str(datetime.now())
 start_audit_time =str(start_audit_time)
@@ -626,6 +630,7 @@ result_data = {
         "SourceFileName" : SourceFileName,
         "LandingzoneEntityId" : LandingzoneEntityId,
         "EntityId" : BronzeLayerEntityId,
+        **row_metrics,
         "StartTime" : start_audit_time,
         "EndTime" : end_audit_time
 

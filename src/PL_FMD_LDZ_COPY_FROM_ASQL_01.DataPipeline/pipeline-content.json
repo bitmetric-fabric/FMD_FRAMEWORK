@@ -267,7 +267,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('CP_source_datalandingzone').output},    }",
+                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('CP_source_datalandingzone').output}}",
                       "type": "Expression"
                     },
                     "type": "String"
@@ -1390,7 +1390,7 @@
                 "storedProcedureParameters": {
                   "LogData": {
                     "value": {
-                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('CP_source_datalandingzone_ASQL_02').output},    }",
+                      "value": "{    \"Action\" : \"End\",    \"CopyOutput\" : @{activity('CP_source_datalandingzone_ASQL_02').output}}",
                       "type": "Expression"
                     },
                     "type": "String"
