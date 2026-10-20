@@ -594,9 +594,15 @@ CLEANSING_FUNCTIONS = {
         {'name': 'defaults', 'kind': 'json', 'default': None}],
     'parse_datetime': [
         {'name': 'target_type', 'kind': 'choice', 'options': ['date', 'timestamp'], 'default': 'date'},
-        {'name': 'formats', 'kind': 'list', 'default': ['yyyy-MM-dd']},
+        {'name': 'formats', 'kind': 'list', 'default': ['yyyy-MM-dd'], 'hint': 'yyyy-MM-dd, dd/MM/yyyy'},
         {'name': 'into', 'kind': 'str', 'default': None},
         {'name': 'keep_original', 'kind': 'bool', 'default': True}],
+    'exclude_rows': [
+        {'name': 'values', 'kind': 'list', 'default': None, 'required': True, 'hint': 'delete, D'}],
+    'clamp_min_date': [
+        {'name': 'min', 'kind': 'date', 'default': '1900-01-01'},
+        {'name': 'replacement', 'kind': 'str', 'default': None},
+        {'name': 'inclusive', 'kind': 'bool', 'default': False}],
 }
 
 
@@ -620,6 +626,7 @@ def validate_rule(rule, columns=None):
     if spec is None:
         return problems + [('warning', f'{function} is not built in; fine if NB_FMD_CUSTOM_DQ_CLEANSING registers it')]
     known = {p['name']: p for p in spec}
+    problems += [('error', f'{function}.{p["name"]} is required') for p in spec if p.get('required') and p['name'] not in params]
     for name, value in params.items():
         p = known.get(name)
         if p is None:
@@ -1285,7 +1292,7 @@ class RuleEditor:
         if p['kind'] == 'bool':
             return w.Dropdown(options=[('(standaard)', None), ('ja', True), ('nee', False)], value=value if isinstance(value, bool) else None, description=label)
         if p['kind'] == 'list':
-            return w.Text(continuous_update=False, value=', '.join(value) if isinstance(value, list) else ('' if value is None else str(value)), description=label, placeholder='yyyy-MM-dd, dd/MM/yyyy')
+            return w.Text(continuous_update=False, value=', '.join(value) if isinstance(value, list) else ('' if value is None else str(value)), description=label, placeholder=p.get('hint', ''))
         if p['kind'] == 'json':
             return w.Text(continuous_update=False, value=json.dumps(value) if isinstance(value, dict) else ('' if value is None else str(value)), description=label, placeholder='{"Kolom": 0}')
         return w.Text(continuous_update=False, value='' if value is None else str(value), description=label)
