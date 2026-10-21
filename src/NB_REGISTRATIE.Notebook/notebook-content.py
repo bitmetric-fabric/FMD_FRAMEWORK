@@ -4,7 +4,8 @@
 
 # META {
 # META   "kernel_info": {
-# META     "name": "synapse_pyspark"
+# META     "name": "jupyter",
+# META     "jupyter_kernel_name": "python3.12"
 # META   },
 # META   "dependencies": {}
 # META }
@@ -61,7 +62,7 @@
 
 # META {
 # META   "language": "python",
-# META   "language_group": "synapse_pyspark"
+# META   "language_group": "jupyter_python"
 # META }
 
 # MARKDOWN ********************
@@ -78,7 +79,7 @@
 
 # META {
 # META   "language": "python",
-# META   "language_group": "synapse_pyspark"
+# META   "language_group": "jupyter_python"
 # META }
 
 # MARKDOWN ********************
@@ -94,7 +95,7 @@ registration_ui(domain="INTEGRATION", environment="D")
 
 # META {
 # META   "language": "python",
-# META   "language_group": "synapse_pyspark"
+# META   "language_group": "jupyter_python"
 # META }
 
 # MARKDOWN ********************
@@ -118,5 +119,5 @@ registration_ui(domain="INTEGRATION", environment="D")
 
 # META {
 # META   "language": "python",
-# META   "language_group": "synapse_pyspark"
+# META   "language_group": "jupyter_python"
 # META }
