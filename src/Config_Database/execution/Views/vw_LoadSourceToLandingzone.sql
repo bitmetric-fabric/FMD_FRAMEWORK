@@ -81,15 +81,23 @@ CROSS APPLY (SELECT '"' + REPLACE(DS.[Name], '"', '""') + '"."'
     + REPLACE(LZE.[SourceName], '"', '""') + '"' AS [SourceObject]) SF
 -- Kolomlijst en filter van deze tabel. Kolommen: SourceColumns, gescheiden door komma's, in die volgorde; leeg = '*'.
 -- Een naam wordt geciteerd zoals de bron dat wil (SQL: [naam]; Snowflake: "naam", hoofdlettergevoelig). Een filter is een predicaat zonder WHERE.
+-- Snowflake: 'naam::TYPE' geeft "naam"::TYPE AS "naam", voor een type dat Delta niet kent (TIME). TYPE is alleen [A-Za-z0-9_]; een andere
+-- tekst na '::' blijft deel van de naam, zodat Snowflake de kolom afwijst in plaats van de tekst uit te voeren.
 CROSS APPLY (SELECT
     ISNULL(CASE WHEN ISNULL(LTRIM(RTRIM(LZE.[SourceColumns])), '') = '' THEN NULL ELSE (
         SELECT STRING_AGG(q.[Name], ', ') WITHIN GROUP (ORDER BY q.[Nr])
         FROM (SELECT CAST(j.[key] AS INT) AS [Nr],
-                     CASE WHEN C.[Type] = 'SNOWFLAKE'
-                          THEN '"' + REPLACE(LTRIM(RTRIM(j.[value])), '"', '""') + '"'
-                          ELSE QUOTENAME(LTRIM(RTRIM(j.[value]))) END AS [Name]
+                     CASE WHEN C.[Type] <> 'SNOWFLAKE' THEN QUOTENAME(p.[Raw])
+                          WHEN p.[Base] <> '' AND p.[CastType] <> '' AND p.[CastType] COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^A-Za-z0-9_]%'
+                          THEN '"' + REPLACE(p.[Base], '"', '""') + '"::' + p.[CastType] + ' AS "' + REPLACE(p.[Base], '"', '""') + '"'
+                          ELSE '"' + REPLACE(p.[Raw], '"', '""') + '"' END AS [Name]
               FROM OPENJSON('["' + REPLACE(REPLACE(REPLACE(LZE.[SourceColumns], CHAR(92), CHAR(92) + CHAR(92)), '"', CHAR(92) + '"'), ',', '","') + '"]') j
-              WHERE LTRIM(RTRIM(j.[value])) <> '') q) END, '*') AS [Columns],
+              CROSS APPLY (SELECT LTRIM(RTRIM(j.[value])) AS [Raw]) r
+              CROSS APPLY (SELECT CHARINDEX('::', r.[Raw]) AS [Pos]) x
+              CROSS APPLY (SELECT r.[Raw] AS [Raw],
+                                  CASE WHEN x.[Pos] > 0 THEN RTRIM(LEFT(r.[Raw], x.[Pos] - 1)) ELSE r.[Raw] END AS [Base],
+                                  CASE WHEN x.[Pos] > 0 THEN LTRIM(SUBSTRING(r.[Raw], x.[Pos] + 2, 4000)) ELSE '' END AS [CastType]) p
+              WHERE r.[Raw] <> '') q) END, '*') AS [Columns],
     CASE WHEN ISNULL(LTRIM(RTRIM(LZE.[SourceFilter])), '') = '' THEN NULL
          ELSE '(' + LTRIM(RTRIM(LZE.[SourceFilter])) + ')' END AS [Filter]) QF
 WHERE 1 = 1

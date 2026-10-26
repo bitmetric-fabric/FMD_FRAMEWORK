@@ -116,11 +116,11 @@ orders_item = next(e for e in entities if e["SourceName"] == "Orders")
 check(not any(k in orders_item for k in ("LoadGroup", "SourceColumns", "SourceFilter")), "payload: een leeg veld blijft weg (de procedure maakt het leeg)")
 
 
-def problems(e_updates, source_type="ASQL_01", discovered=None, columns=None):
+def problems(e_updates, source_type="ASQL_01", discovered=None, columns=None, types=None):
     s = scope["build_state"]("TEST", "D", "WS", [{**sources_rows[0], "DataSourceType": source_type}], [row("Orders", DataSourceType=source_type)])
     o = copy.deepcopy(s)
     s["entities"][0].update(e_updates)
-    found = {"ERP": {("dbo", "Orders"): {"Columns": [{"Name": c, "Type": "int"} for c in columns], "PrimaryKeys": "ID"}}} if columns else {}
+    found = {"ERP": {("dbo", "Orders"): {"Columns": [{"Name": c, "Type": (types or {}).get(c, "int")} for c in columns], "PrimaryKeys": "ID"}}} if columns else {}
     return [(p["field"], p["level"]) for p in scope["validate_state"](s, o, found)]
 
 
@@ -136,6 +136,32 @@ check(("SourceColumns", "error") in problems({"SourceColumns": "ID,Nope"}, colum
 check(not [p for p in problems({"SourceColumns": "ID,Amount", "LoadGroup": "dag"}, columns=["ID", "Amount"]) if p[1] == "error"], "validate: een geldige combinatie geeft geen fout")
 check(("PrimaryKeys", "error") in problems({"SourceColumns": "id", "PrimaryKeys": "ID"}, source_type="SNOWFLAKE_01"), "validate: Snowflake is hoofdlettergevoelig")
 check(("SourceColumns", "warning") in problems({"SourceColumns": "ID,Amount"}), "validate: kolommen wijzigen bij een geregistreerde tabel waarschuwt (Bronze-merge)")
+
+# ---- a cast per column (Snowflake, TIME) --------------------------------------------------------------
+SF, TIME = "SNOWFLAKE_01", {"TIJD": "TIME", "GEWIJZIGD": "TIMESTAMP_NTZ"}
+cols = ["ID", "TIJD", "GEWIJZIGD"]
+errors = lambda *a, **kw: [p for p in problems(*a, **kw) if p[1] == "error"]
+check(scope["split_column"]("TIJD::VARCHAR") == ("TIJD", "VARCHAR") and scope["split_column"](" TIJD :: VARCHAR ") == ("TIJD", "VARCHAR"), "split_column: naam en type, spaties eraf")
+check(scope["split_column"]("TIJD") == ("TIJD", None) and scope["split_column"]("TIJD::") == ("TIJD", "") and scope["split_column"]("::X") == ("", "X"), "split_column: zonder cast, lege cast, lege naam")
+check(not errors({"SourceColumns": "ID,TIJD::VARCHAR", "PrimaryKeys": "ID,TIJD", "FileType": "delta"}, SF, columns=cols, types=TIME), "cast: TIJD::VARCHAR met TIJD in de key geeft geen fout")
+check(("PrimaryKeys", "error") in problems({"SourceColumns": "ID,TIJD::VARCHAR", "PrimaryKeys": "ID,NOPE"}, SF, columns=cols, types=TIME), "cast: een key die niet in de lijst staat blijft een fout (de cast telt niet als naam)")
+check(("SourceColumns", "error") in problems({"SourceColumns": "ID,Nope::VARCHAR"}, SF, columns=cols), "cast: een onbekende kolom met cast is een fout")
+check(("SourceColumns", "error") in problems({"SourceColumns": "ID::VARCHAR"}), "cast: niet voor ASQL_01")
+for bad in ("TIJD::VARCHAR(10)", "TIJD::", "::VARCHAR", 'TIJD::X" FROM y--', "TIJD::NUMBER(12,2)"):
+    check(("SourceColumns", "error") in problems({"SourceColumns": f"ID,{bad}"}, SF), f"cast: {bad!r} wordt geweigerd")
+check(("SourceColumns", "error") in problems({"SourceColumns": "ID,GEWIJZIGD::VARCHAR", "IsIncremental": 1, "IsIncrementalColumn": "GEWIJZIGD"}, SF, columns=cols, types=TIME), "cast: niet op de watermarkkolom")
+check(("SourceColumns", "error") in problems({"FileType": "delta"}, SF, columns=cols, types=TIME), "TIME zonder cast, alle kolommen, delta: fout")
+check(("SourceColumns", "error") in problems({"SourceColumns": "ID,TIJD", "FileType": "delta"}, SF, columns=cols, types=TIME), "TIME zonder cast, in de lijst, delta: fout")
+check(("SourceColumns", "warning") in problems({"SourceColumns": "ID,TIJD", "FileType": "parquet"}, SF, columns=cols, types=TIME)
+      and ("SourceColumns", "error") not in problems({"SourceColumns": "ID,TIJD", "FileType": "parquet"}, SF, columns=cols, types=TIME), "TIME zonder cast bij parquet: waarschuwing (niet getest), geen fout")
+check(not [p for p in problems({"SourceColumns": "ID,GEWIJZIGD", "FileType": "delta"}, SF, columns=cols, types=TIME) if p[0] == "SourceColumns" and p[1] == "error"], "TIME-kolom buiten de lijst: geen melding")
+check(("SourceColumns", "error") not in problems({"SourceColumns": "ID,TIJD::VARCHAR", "FileType": "delta"}, SF, columns=cols, types=TIME), "TIME met cast: geen TIME-melding")
+check(("SourceColumns", "error") not in problems({"FileType": "delta"}, "ASQL_01", columns=cols, types=TIME), "TIME-controle geldt alleen voor Snowflake")
+warnings = lambda updates: [p for p in problems(updates, SF, columns=cols, types=TIME) if p == ("SourceColumns", "warning")]
+check(len(warnings({"SourceColumns": "ID,GEWIJZIGD"})) == 1 and len(warnings({"SourceColumns": "ID,GEWIJZIGD::VARCHAR"})) == 2, "cast toevoegen aan een geregistreerde tabel geeft een extra waarschuwing (kolomtype verandert)")
+check(scope["join_columns"](["ID", "TIJD"], "ID,TIJD::VARCHAR") == "ID,TIJD::VARCHAR", "join_columns: de cast blijft bij het opslaan van de kolomkeuze")
+check(scope["join_columns"](["ID"], "ID,TIJD::VARCHAR") == "ID" and scope["join_columns"](["ID", "TIJD"], "ID") == "ID,TIJD", "join_columns: een kolom die uit de keuze gaat verliest zijn cast; een nieuwe kolom krijgt er geen")
+check(scope["join_columns"]([], "") == "" and scope["join_columns"](("A", "B"), "B::DATE , A") == "A,B::DATE", "join_columns: leeg, tuple, spaties in de vorige tekst")
 
 # ---- bulk ---------------------------------------------------------------------------------------------
 keys = [scope["entity_key"](e) for e in state["entities"]]
@@ -269,6 +295,12 @@ check(landing.count("QF.[Filter]") >= 5 and "QF.[Columns]" in landing, "vw_LoadS
 # CONCAT_WS of only NULLs is '', not NULL: without the NULLIF the first load of an incremental table (no watermark, no filter)
 # gets a WHERE without a condition.
 check(landing.count("NULLIF(CONCAT_WS(' AND ',") == 2, "vw_LoadSourceToLandingzone: geen WHERE zonder voorwaarde (eerste load van een incrementele tabel)")
+
+# A cast per column: the view builds "name"::TYPE AS "name" for Snowflake only, with TYPE restricted to a bare word; the procedure
+# and the notebook refuse the rest. The SQL itself ran against SQL Server 2022 (ADR-020, aanvulling 2026-10-26).
+check("::' + p.[CastType] + ' AS \"'" in landing and "NOT LIKE '%[^A-Za-z0-9_]%'" in landing and "CHARINDEX('::'" in landing, "vw_LoadSourceToLandingzone: cast per kolom, type beperkt tot een kaal woord")
+check("a cast (name::TYPE) is only supported for SNOWFLAKE_01" in proc and "LIKE '%[^A-Za-z0-9_]%'" in proc, "sp_RegisterEntities: weigert een cast buiten Snowflake en een ander type dan een kaal woord")
+check(proc.count("CHARINDEX('::', sc.[value])") >= 8, "sp_RegisterEntities: key-, watermark- en ontdekkingscontrole vergelijken de naam voor '::'")
 
 print("\nALLES OK" if not failures else f"\n{failures} FOUT(EN)")
 sys.exit(1 if failures else 0)

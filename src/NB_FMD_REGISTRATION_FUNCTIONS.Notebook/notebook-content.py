@@ -347,7 +347,9 @@ def register(sources, entities, domain, environments, dry_run=True, requeue_silv
       means 0, also for an entity registered with 1 before. CustomNotebookName only for NOTEBOOK.
       LoadGroup (optional): the group of this table; empty = the group of its source. Load one group with
       PL_FMD_LOAD_ALL(LoadGroup=...). SourceColumns (optional): the source columns to load, comma separated,
-      empty = all; PrimaryKeys and the watermark column must be in it. SourceFilter (optional): a predicate
+      empty = all; PrimaryKeys and the watermark column must be in it. For SNOWFLAKE_01 a column can be cast
+      with name::TYPE (TYPE letters, digits, underscore): TIJD::VARCHAR, needed for a TIME column, which Delta
+      cannot hold. SourceFilter (optional): a predicate
       without WHERE, e.g. OrderDate >= '2024-01-01', added to the copy query and to the watermark query.
       SourceColumns and SourceFilter only for ASQL_01, ASQL_02 and SNOWFLAKE_01. Like IsActive, the list is the
       truth: an entity without these fields gets them emptied.
@@ -567,6 +569,18 @@ ENTITY_FIELDS = ('TargetSchema', 'TargetName', 'FileName', 'FileType', 'IsIncrem
 SOURCE_FILTER_TYPES = ('ASQL_01', 'ASQL_02', 'SNOWFLAKE_01')
 
 
+def split_column(item):
+    """One SourceColumns item: 'TIJD::VARCHAR' -> ('TIJD', 'VARCHAR'), a plain name -> (name, None). Same split as vw_LoadSourceToLandingzone."""
+    name, sep, cast = item.partition('::')
+    return name.strip(), cast.strip() if sep else None
+
+
+def join_columns(names, previous):
+    """The SourceColumns text for the picked names. The picker knows names only: a name that had a cast in the previous text keeps it."""
+    casts = {n: t for n, t in map(split_column, previous.split(',')) if t is not None}
+    return ','.join(f'{n}::{casts[n]}' if n in casts else n for n in names)
+
+
 def entity_key(entity):
     return (entity['Source'], entity['SourceSchema'], entity['SourceName'])
 
@@ -774,13 +788,31 @@ def validate_state(state, original, discovered=None):
             add(name, 'IsIncrementalColumn', 'error', 'required when IsIncremental = 1')
         if len(e['LoadGroup']) > 50:
             add(name, 'LoadGroup', 'error', 'longer than 50 characters')
-        wanted = [c.strip() for c in e['SourceColumns'].split(',') if c.strip()]
+        parsed = [split_column(c) for c in e['SourceColumns'].split(',') if c.strip()]
+        wanted = [n for n, _ in parsed]
+        casts = {n: t for n, t in parsed if t is not None}
         if (wanted or e['SourceFilter']) and source['DataSourceType'] not in SOURCE_FILTER_TYPES:
             add(name, 'SourceColumns' if wanted else 'SourceFilter', 'error', f"only supported for {', '.join(SOURCE_FILTER_TYPES)}")
+        for n, t in casts.items():
+            if not snowflake:
+                add(name, 'SourceColumns', 'error', f'column {n}: a cast (name::TYPE) is only supported for SNOWFLAKE_01')
+            elif not n or not re.fullmatch(r'[A-Za-z0-9_]+', t):
+                add(name, 'SourceColumns', 'error', f'column {n}::{t}: use name::TYPE with TYPE letters, digits or underscore only, e.g. TIJD::VARCHAR')
+            elif e['IsIncremental'] == 1 and n == e['IsIncrementalColumn']:
+                add(name, 'SourceColumns', 'error', f'column {n} is the IsIncrementalColumn: no cast, the watermark query reads the column as it is')
+        if snowflake and columns:
+            # Delta has no TIME type: the Copy activity to a delta landing fails on it (DeltaNotSupportedInterimDataType, found 2026-10-26).
+            for n, ctype in columns.items():
+                if ctype.upper() == 'TIME' and (not wanted or n in wanted) and not casts.get(n):
+                    add(name, 'SourceColumns', 'error' if e['FileType'] == 'delta' else 'warning',
+                        f'column {n} is type TIME, which Delta cannot hold (parquet landing: not tested): list the columns in SourceColumns and write {n}::VARCHAR')
         before = next((o for o in original['entities'] if entity_key(o) == entity_key(e)), None)
         if before is not None and before['SourceColumns'] != e['SourceColumns']:
             add(name, 'SourceColumns', 'warning', 'taking columns away from a table that is already in Bronze makes the Bronze merge fail '
                 '(DELTA_MERGE_UNRESOLVED_EXPRESSION, tested 2026-10-20): drop the Bronze and Silver table first. Adding columns is not tested')
+            if casts != {n: t for n, t in map(split_column, before['SourceColumns'].split(',')) if t is not None}:
+                add(name, 'SourceColumns', 'warning', 'a cast changes the type of the column in the landing zone; for a table already in Bronze '
+                    'the merge can fail on the type change (not tested)')
         if ';' in e['SourceFilter']:
             add(name, 'SourceFilter', 'error', 'must be one predicate: no semicolon')
         elif e['SourceFilter']:
@@ -1895,7 +1927,7 @@ class RegistrationUI:
         before, self._loading = self._loading, True
         columns = self._columns(e)
         pks = [p.strip() for p in e['PrimaryKeys'].split(',') if p.strip()]
-        chosen = [c.strip() for c in e['SourceColumns'].split(',') if c.strip()]
+        chosen = [split_column(c)[0] for c in e['SourceColumns'].split(',') if c.strip()]  # the picker knows names; casts are kept by _detail_changed
         self.d_tschema.value, self.d_tname.value, self.d_fname.value, self.d_ftype.value = e['TargetSchema'], e['TargetName'], e['FileName'], e['FileType']
         self.d_inc.value, self.d_active.value, self.d_hist.value = bool(e['IsIncremental']), bool(e['IsActive']), bool(e['IsHistorized'])
         source = self._source_of(e)
@@ -1934,7 +1966,7 @@ class RegistrationUI:
         e.update(TargetSchema=self.d_tschema.value.strip(), TargetName=self.d_tname.value.strip(), FileName=self.d_fname.value.strip(),
                  FileType=self.d_ftype.value.strip(), IsIncremental=int(self.d_inc.value), IsIncrementalColumn=(self.d_inccol.value or '').strip(),
                  IsActive=int(self.d_active.value), IsHistorized=int(self.d_hist.value), PrimaryKeys=','.join(self.d_pk.value),
-                 CustomNotebookName=self.d_nb.value.strip(), LoadGroup=self.d_lg.value.strip(), SourceColumns=','.join(self.d_cols.value),
+                 CustomNotebookName=self.d_nb.value.strip(), LoadGroup=self.d_lg.value.strip(), SourceColumns=join_columns(self.d_cols.value, e['SourceColumns']),
                  SourceFilter=self.d_filter.value.strip())
         self._toggle_fields(self._source_of(e))
         self.refresh(list_too=False)
