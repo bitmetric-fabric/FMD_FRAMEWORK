@@ -30,6 +30,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [017](017-schedules-in-config-workspace.md) | Schedules op een plan-pipeline in de CONFIG-workspace | Proposed |
 | [018](018-registratie-via-notebook.md) | Bronnen registreren via een notebook, niet via `sqlcmd` | Proposed |
 | [020](020-loadgroup-kolommen-filter-per-tabel.md) | LoadGroup, kolommen en bronfilter per tabel | Proposed |
+| [021](021-odata-als-brontype.md) | OData als brontype, met een eigen pipelinepaar | Proposed |
 
 ## Openstaande triggers
 

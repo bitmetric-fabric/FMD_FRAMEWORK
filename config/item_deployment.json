@@ -120,6 +120,16 @@
         "type": "DataPipeline"
     },
     {
+        "name": "PL_FMD_LDZ_COPY_FROM_ODATA_01.DataPipeline",
+        "id": "b186d064-d5b2-4592-b7a4-6db77fe06d8a",
+        "type": "DataPipeline"
+    },
+    {
+        "name": "PL_FMD_LDZ_COMMAND_ODATA.DataPipeline",
+        "id": "9014460b-1410-46c8-9f18-7027620cdc2b",
+        "type": "DataPipeline"
+    },
+    {
         "name": "PL_FMD_MAINTENANCE.DataPipeline",
         "id": "1c32755b-03db-43e5-b79e-52e81c79c1bc",
         "type": "DataPipeline"

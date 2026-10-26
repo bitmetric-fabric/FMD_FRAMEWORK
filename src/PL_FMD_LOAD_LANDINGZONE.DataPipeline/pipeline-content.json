@@ -497,6 +497,54 @@
                         "dependsOn": []
                       }
                     ]
+                  },
+                  {
+                    "value": "ODATA",
+                    "activities": [
+                      {
+                        "type": "InvokePipeline",
+                        "typeProperties": {
+                          "parameters": {
+                            "ConnectionType": {
+                              "value": "@toUpper(item().ConnectionType)",
+                              "type": "Expression"
+                            },
+                            "Data_WorkspaceGuid": {
+                              "value": "@if(empty(pipeline().parameters.Data_WorkspaceGuid), pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_data_workspace_guid, pipeline().parameters.Data_WorkspaceGuid)",
+                              "type": "Expression"
+                            },
+                            "LoadGroup": {
+                              "value": "@pipeline().parameters.LoadGroup",
+                              "type": "Expression"
+                            },
+                            "DataSourceName": {
+                              "value": "@pipeline().parameters.DataSourceName",
+                              "type": "Expression"
+                            },
+                            "Entities": {
+                              "value": "@pipeline().parameters.Entities",
+                              "type": "Expression"
+                            }
+                          },
+                          "waitOnCompletion": true,
+                          "workspaceId": "00000000-0000-0000-0000-000000000000",
+                          "pipelineId": "9014460b-1410-46c8-9f18-7027620cdc2b",
+                          "operationType": "InvokeFabricPipeline"
+                        },
+                        "externalReferences": {
+                          "connection": "6d8146c6-a438-47df-94e2-540c552eb6d7"
+                        },
+                        "policy": {
+                          "timeout": "0.12:00:00",
+                          "retry": 0,
+                          "retryIntervalInSeconds": 30,
+                          "secureInput": false,
+                          "secureOutput": false
+                        },
+                        "name": "PL_FMD_LDZ_COMMAND_ODATA",
+                        "dependsOn": []
+                      }
+                    ]
                   }
                 ],
                 "defaultActivities": [
