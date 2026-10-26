@@ -39,7 +39,7 @@
 # die van haar bron, zodat een schedule een deel van een bron kan laden. Leeg betekent de groep van de bron. Met *Kolommen om
 # te laden* laad je een deel van de kolommen (niets gekozen = alle; de primary key en de watermarkkolom moeten erbij zitten), en
 # met *Bronfilter* een predicaat zonder `WHERE`, bijvoorbeeld `OrderDate >= '2024-01-01'`. Kolommen en filter bestaan voor
-# ASQL_01, ASQL_02 en SNOWFLAKE_01. Een filter wijzigen verwijdert niets in Bronze en Silver, en de proefdraai voert het
+# ASQL_01, ASQL_02, SNOWFLAKE_01 en ODATA_01. Een filter wijzigen verwijdert niets in Bronze en Silver, en de proefdraai voert het
 # filter niet uit: een fout in het predicaat zie je pas bij de load (ADR-020). Bij Snowflake volgen de kolomnamen in het
 # filter de Snowflake-regels: zonder aanhalingstekens zijn het hoofdletters. Kolommen **weghalen** bij een tabel die al in
 # Bronze staat laat de Bronze-merge falen (getest 2026-10-20): verwijder dan eerst de Bronze- en Silver-tabel. *Alles in lijst selecteren* selecteert de
@@ -69,7 +69,7 @@
 
 # ## Stap 1: connectie registreren (eenmalig per connectie)
 # Het type is het FMD-type: `SQL` (Azure SQL), `AZURESQLMI`, `ORACLE`, `ADLS`, `ONELAKE`, `SFTP`, `FTP`, `ADF`,
-# `NOTEBOOK` of `SNOWFLAKE`. Opnieuw draaien is veilig. Haal het commentaarteken weg en vul de naam in.
+# `NOTEBOOK`, `SNOWFLAKE` of `ODATA`. Opnieuw draaien is veilig. Haal het commentaarteken weg en vul de naam in.
 
 # CELL ********************
 

@@ -135,6 +135,8 @@ check(("LoadGroup", "error") in problems({"LoadGroup": "x" * 51}), "validate: Lo
 check(("SourceColumns", "error") in problems({"SourceColumns": "ID,Nope"}, columns=["ID", "Amount"]), "validate: kolom die de ontdekking niet kent")
 check(not [p for p in problems({"SourceColumns": "ID,Amount", "LoadGroup": "dag"}, columns=["ID", "Amount"]) if p[1] == "error"], "validate: een geldige combinatie geeft geen fout")
 check(("PrimaryKeys", "error") in problems({"SourceColumns": "id", "PrimaryKeys": "ID"}, source_type="SNOWFLAKE_01"), "validate: Snowflake is hoofdlettergevoelig")
+check(("SourceColumns", "error") not in problems({"SourceColumns": "ID"}, source_type="ODATA_01"), "validate: kolommen wel voor OData")
+check(("SourceFilter", "error") not in problems({"SourceFilter": "Amount gt 0"}, source_type="ODATA_01"), "validate: filter wel voor OData")
 check(("SourceColumns", "warning") in problems({"SourceColumns": "ID,Amount"}), "validate: kolommen wijzigen bij een geregistreerde tabel waarschuwt (Bronze-merge)")
 
 # ---- a cast per column (Snowflake, TIME) --------------------------------------------------------------

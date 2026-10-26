@@ -41,6 +41,14 @@
                 THEN 'MAX("' + REPLACE(LZE.[IsIncrementalColumn], '"', '""') + '")::TIMESTAMP_NTZ, ''YYYY-MM-DD HH24:MI:SS.FF3'') AS "LastLoadValue" FROM ' + SF.[SourceObject] + ISNULL(' WHERE ' + QF.[Filter], '')
                 ELSE 'CURRENT_TIMESTAMP()::TIMESTAMP_NTZ, ''YYYY-MM-DD HH24:MI:SS.FF3'') AS "LastLoadValue"'
             END
+        -- OData: een kolom is niet te hernoemen, dus de query selecteert de watermarkkolom zelf en de pipeline leest die op naam.
+        -- Een volledige load (of een entiteit zonder watermarkkolom) krijgt alleen $top=1: de pipeline neemt dan de laadtijd.
+        WHEN C.[Type] = 'ODATA' THEN
+            CONCAT_WS('&',
+                CASE WHEN LZE.[IsIncremental] = 1 AND ISNULL(LZE.[IsIncrementalColumn], '') <> ''
+                    THEN '$select=' + LZE.[IsIncrementalColumn] + '&$orderby=' + LZE.[IsIncrementalColumn] + ' desc' END,
+                '$filter=' + QF.[Filter],
+                '$top=1')
         ELSE
             LZELV.[LoadValue]
     END,
@@ -52,6 +60,19 @@
                 CASE WHEN LZE.[IsIncremental] = 1 AND ISNULL(LZE.[IsIncrementalColumn], '') <> '' AND LZELV.[LoadValue] IS NOT NULL THEN
                     '"' + REPLACE(LZE.[IsIncrementalColumn], '"', '""') + '" > ''' + REPLACE(LZELV.[LoadValue], '''', '''''') + ''''
                 END, QF.[Filter]), ''), '')
+        -- OData: $select (SourceColumns) en $filter (SourceFilter, plus de incrementele voorwaarde met 'and'); leeg = de hele entiteit.
+        -- 'ge' en niet 'gt': een rij met precies de watermarkwaarde die na de vorige run wijzigt, zou anders blijven liggen.
+        -- Een dubbele rij is onschuldig: Bronze en Silver mergen op de PrimaryKeys. De watermarkwaarde staat zonder aanhalingstekens
+        -- in de URL en komt uit de bron, dus alleen tekens van een ISO-datum of getal worden meegenomen. Een '+' (tijdzone) wordt
+        -- %2B: in een query betekent een kale '+' een spatie.
+        WHEN C.[Type] = 'ODATA' THEN
+            CONCAT_WS('&',
+                CASE WHEN QF.[Columns] <> '*' THEN '$select=' + REPLACE(QF.[Columns], ', ', ',') END,
+                '$filter=' + NULLIF(CONCAT_WS(' and ',
+                    CASE WHEN LZE.[IsIncremental] = 1 AND ISNULL(LZE.[IsIncrementalColumn], '') <> ''
+                              AND LZELV.[LoadValue] IS NOT NULL AND LZELV.[LoadValue] NOT LIKE '%[^0-9TZ:.+-]%' THEN
+                        LZE.[IsIncrementalColumn] + ' ge ' + REPLACE(LZELV.[LoadValue], '+', '%2B')
+                    END, QF.[Filter]), ''))
         WHEN LZE.[IsIncremental] = 1 THEN
             'SELECT ' + QF.[Columns] + ' FROM ' + QUOTENAME(ISNULL(CASE WHEN LZE.[SourceSchema] != '' THEN LZE.[SourceSchema] END, 'Unknown')) + '.' + QUOTENAME(LZE.[SourceName]) + 
             ISNULL(' WHERE ' + NULLIF(CONCAT_WS(' AND ',
@@ -80,14 +101,15 @@ CROSS APPLY (SELECT '"' + REPLACE(DS.[Name], '"', '""') + '"."'
     + REPLACE(ISNULL(CASE WHEN LZE.[SourceSchema] != '' THEN LZE.[SourceSchema] END, 'Unknown'), '"', '""') + '"."'
     + REPLACE(LZE.[SourceName], '"', '""') + '"' AS [SourceObject]) SF
 -- Kolomlijst en filter van deze tabel. Kolommen: SourceColumns, gescheiden door komma's, in die volgorde; leeg = '*'.
--- Een naam wordt geciteerd zoals de bron dat wil (SQL: [naam]; Snowflake: "naam", hoofdlettergevoelig). Een filter is een predicaat zonder WHERE.
+-- Een naam wordt geciteerd zoals de bron dat wil (SQL: [naam]; Snowflake: "naam", hoofdlettergevoelig; OData: zonder quotes). Een filter is een predicaat zonder WHERE.
 -- Snowflake: 'naam::TYPE' geeft "naam"::TYPE AS "naam", voor een type dat Delta niet kent (TIME). TYPE is alleen [A-Za-z0-9_]; een andere
 -- tekst na '::' blijft deel van de naam, zodat Snowflake de kolom afwijst in plaats van de tekst uit te voeren.
 CROSS APPLY (SELECT
     ISNULL(CASE WHEN ISNULL(LTRIM(RTRIM(LZE.[SourceColumns])), '') = '' THEN NULL ELSE (
         SELECT STRING_AGG(q.[Name], ', ') WITHIN GROUP (ORDER BY q.[Nr])
         FROM (SELECT CAST(j.[key] AS INT) AS [Nr],
-                     CASE WHEN C.[Type] <> 'SNOWFLAKE' THEN QUOTENAME(p.[Raw])
+                     CASE WHEN C.[Type] = 'ODATA' THEN p.[Raw]
+                          WHEN C.[Type] <> 'SNOWFLAKE' THEN QUOTENAME(p.[Raw])
                           WHEN p.[Base] <> '' AND p.[CastType] <> '' AND p.[CastType] COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^A-Za-z0-9_]%'
                           THEN '"' + REPLACE(p.[Base], '"', '""') + '"::' + p.[CastType] + ' AS "' + REPLACE(p.[Base], '"', '""') + '"'
                           ELSE '"' + REPLACE(p.[Raw], '"', '""') + '"' END AS [Name]

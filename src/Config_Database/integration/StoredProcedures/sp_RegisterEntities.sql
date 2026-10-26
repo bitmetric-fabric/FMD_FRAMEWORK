@@ -24,7 +24,7 @@
 -- list of the source columns to load (empty = all), for SNOWFLAKE_01 optionally with a cast per column: TIJD::VARCHAR loads
 -- "TIJD"::VARCHAR AS "TIJD" (Delta has no TIME type, so a TIME column cannot be loaded as is); SourceFilter is a predicate
 -- without WHERE, added to the copy query.
--- SourceColumns and SourceFilter only exist for ASQL_01, ASQL_02 and SNOWFLAKE_01: the types whose copy pipeline runs
+-- SourceColumns and SourceFilter only exist for ASQL_01, ASQL_02, SNOWFLAKE_01 and ODATA_01: the types whose copy pipeline runs
 -- SourceDataRetrieval, with a watermark query (LastLoadValue) that takes the same filter. SQLMI_01 is left out: its
 -- LastLoadValue in vw_LoadSourceToLandingzone is the stored value, not a query.
 -- @DryRun: 1 runs every check and the registration, then rolls back and returns a preview
@@ -221,7 +221,7 @@ BEGIN
                           JOIN (VALUES ('SQL', 'ASQL_01'), ('SQL', 'ASQL_02'), ('AZURESQLMI', 'SQLMI_01'), ('ORACLE', 'ORACLE_01'),
                                        ('ADLS', 'ADLS_01'), ('ONELAKE', 'ONELAKE_TABLES_01'), ('ONELAKE', 'ONELAKE_FILES_01'),
                                        ('SFTP', 'SFTP_01'), ('FTP', 'FTP_01'), ('ADF', 'ADF'), ('NOTEBOOK', 'NOTEBOOK'),
-                                       ('SNOWFLAKE', 'SNOWFLAKE_01')) t([ConnectionType], [DataSourceType])
+                                       ('SNOWFLAKE', 'SNOWFLAKE_01'), ('ODATA', 'ODATA_01')) t([ConnectionType], [DataSourceType])
                             ON t.[ConnectionType] = c.[Type]
                           WHERE c.[Name] = b.[ConnectionName] AND t.[DataSourceType] = b.[DataSourceType])
         UNION ALL
@@ -243,9 +243,9 @@ BEGIN
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'LoadGroup is longer than 50 characters'
         FROM @EntitiesT e WHERE LEN(e.[LoadGroup]) > 50
         UNION ALL
-        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns and SourceFilter are only supported for ASQL_01, ASQL_02 and SNOWFLAKE_01'
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns and SourceFilter are only supported for ASQL_01, ASQL_02, SNOWFLAKE_01 and ODATA_01'
         FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
-        WHERE (e.[SourceColumns] IS NOT NULL OR e.[SourceFilter] IS NOT NULL) AND b.[DataSourceType] NOT IN ('ASQL_01', 'ASQL_02', 'SNOWFLAKE_01')
+        WHERE (e.[SourceColumns] IS NOT NULL OR e.[SourceFilter] IS NOT NULL) AND b.[DataSourceType] NOT IN ('ASQL_01', 'ASQL_02', 'SNOWFLAKE_01', 'ODATA_01')
         UNION ALL
         -- A statement terminator would let a filter run a second statement against the source.
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceFilter must be one predicate: no semicolon'
