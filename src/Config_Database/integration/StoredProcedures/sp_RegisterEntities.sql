@@ -21,7 +21,9 @@
 -- exclude_rows needs "columns" and a non-empty "parameters.values", or the layer would fail on every run.
 -- LoadGroup / SourceColumns / SourceFilter (optional, per entity; a row without the field leaves it empty, like IsActive
 -- does for its default): LoadGroup overrides the one of the data source for this table; SourceColumns is a comma separated
--- list of the source columns to load (empty = all); SourceFilter is a predicate without WHERE, added to the copy query.
+-- list of the source columns to load (empty = all), for SNOWFLAKE_01 optionally with a cast per column: TIJD::VARCHAR loads
+-- "TIJD"::VARCHAR AS "TIJD" (Delta has no TIME type, so a TIME column cannot be loaded as is); SourceFilter is a predicate
+-- without WHERE, added to the copy query.
 -- SourceColumns and SourceFilter only exist for ASQL_01, ASQL_02 and SNOWFLAKE_01: the types whose copy pipeline runs
 -- SourceDataRetrieval, with a watermark query (LastLoadValue) that takes the same filter. SQLMI_01 is left out: its
 -- LastLoadValue in vw_LoadSourceToLandingzone is the stored value, not a query.
@@ -254,17 +256,35 @@ BEGIN
         CROSS APPLY STRING_SPLIT(ISNULL(e.[PrimaryKeys], ''), ',') pk
         WHERE e.[SourceColumns] IS NOT NULL AND LTRIM(RTRIM(pk.[value])) <> ''
           AND NOT EXISTS (SELECT 1 FROM STRING_SPLIT(e.[SourceColumns], ',') sc
+                          CROSS APPLY (SELECT LTRIM(RTRIM(CASE WHEN CHARINDEX('::', sc.[value]) > 0 THEN LEFT(sc.[value], CHARINDEX('::', sc.[value]) - 1) ELSE sc.[value] END)) AS [Base]) n
                           WHERE (CASE WHEN b.[DataSourceType] = 'SNOWFLAKE_01'
-                                      THEN IIF(LTRIM(RTRIM(sc.[value])) COLLATE Latin1_General_100_CS_AS = LTRIM(RTRIM(pk.[value])) COLLATE Latin1_General_100_CS_AS, 1, 0)
-                                      ELSE IIF(LTRIM(RTRIM(sc.[value])) = LTRIM(RTRIM(pk.[value])), 1, 0) END) = 1)
+                                      THEN IIF(n.[Base] COLLATE Latin1_General_100_CS_AS = LTRIM(RTRIM(pk.[value])) COLLATE Latin1_General_100_CS_AS, 1, 0)
+                                      ELSE IIF(n.[Base] = LTRIM(RTRIM(pk.[value])), 1, 0) END) = 1)
         UNION ALL
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'IsIncrementalColumn ' + e.[IsIncrementalColumn] + N' is not in SourceColumns'
         FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
         WHERE e.[SourceColumns] IS NOT NULL AND e.[IsIncremental] = 1 AND ISNULL(e.[IsIncrementalColumn], '') <> ''
           AND NOT EXISTS (SELECT 1 FROM STRING_SPLIT(e.[SourceColumns], ',') sc
+                          CROSS APPLY (SELECT LTRIM(RTRIM(CASE WHEN CHARINDEX('::', sc.[value]) > 0 THEN LEFT(sc.[value], CHARINDEX('::', sc.[value]) - 1) ELSE sc.[value] END)) AS [Base]) n
                           WHERE (CASE WHEN b.[DataSourceType] = 'SNOWFLAKE_01'
-                                      THEN IIF(LTRIM(RTRIM(sc.[value])) COLLATE Latin1_General_100_CS_AS = e.[IsIncrementalColumn] COLLATE Latin1_General_100_CS_AS, 1, 0)
-                                      ELSE IIF(LTRIM(RTRIM(sc.[value])) = e.[IsIncrementalColumn], 1, 0) END) = 1)
+                                      THEN IIF(n.[Base] COLLATE Latin1_General_100_CS_AS = e.[IsIncrementalColumn] COLLATE Latin1_General_100_CS_AS, 1, 0)
+                                      ELSE IIF(n.[Base] = e.[IsIncrementalColumn], 1, 0) END) = 1)
+        UNION ALL
+        -- 'name::TYPE' casts the column in the Snowflake query (a TIME column cannot be written to Delta). The type is a bare
+        -- word: it ends up in the copy query, and the comma separates columns, so no (n) or (p,s).
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns column ' + LTRIM(RTRIM(sc.[value])) + N': a cast (name::TYPE) is only supported for SNOWFLAKE_01'
+        FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
+        CROSS APPLY STRING_SPLIT(ISNULL(e.[SourceColumns], ''), ',') sc
+        WHERE CHARINDEX('::', sc.[value]) > 0 AND b.[DataSourceType] <> 'SNOWFLAKE_01'
+        UNION ALL
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns column ' + LTRIM(RTRIM(sc.[value])) + N': use name::TYPE with TYPE letters, digits or underscore only, e.g. TIJD::VARCHAR'
+        FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
+        CROSS APPLY STRING_SPLIT(ISNULL(e.[SourceColumns], ''), ',') sc
+        CROSS APPLY (SELECT CHARINDEX('::', sc.[value]) AS [Pos]) x
+        WHERE x.[Pos] > 0 AND b.[DataSourceType] = 'SNOWFLAKE_01'
+          AND (LTRIM(RTRIM(LEFT(sc.[value], x.[Pos] - 1))) = ''
+               OR LTRIM(RTRIM(SUBSTRING(sc.[value], x.[Pos] + 2, 4000))) = ''
+               OR LTRIM(RTRIM(SUBSTRING(sc.[value], x.[Pos] + 2, 4000))) COLLATE Latin1_General_100_BIN2 LIKE '%[^A-Za-z0-9_]%')
         UNION ALL
         -- Cleansing rules: a JSON array of objects, as handle_cleansing_functions reads them.
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), CONCAT(l.[Layer], N'CleansingRules must be a JSON array of rules, not a string or an object')
@@ -335,18 +355,19 @@ BEGIN
                           ELSE IIF(col.[Name] = LTRIM(RTRIM(pk.[value])), 1, 0)
                      END) = 1)
         UNION ALL
-        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns column ' + LTRIM(RTRIM(sc.[value])) + N' not found by PL_FMD_DISCOVER_SOURCE'
+        SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'SourceColumns column ' + n.[Base] + N' not found by PL_FMD_DISCOVER_SOURCE'
         FROM @EntitiesT e JOIN @Bound b ON b.[Source] = e.[Source]
         JOIN [integration].[Connection] c ON c.[Name] = b.[ConnectionName]
         JOIN [integration].[DiscoveredEntity] de ON de.[ConnectionId] = c.[ConnectionId] AND de.[DataSourceName] = b.[DataSourceName]
             AND de.[SourceSchema] = e.[SourceSchema] AND de.[SourceName] = e.[SourceName]
         CROSS APPLY STRING_SPLIT(ISNULL(e.[SourceColumns], ''), ',') sc
-        WHERE LTRIM(RTRIM(sc.[value])) <> ''
+        CROSS APPLY (SELECT LTRIM(RTRIM(CASE WHEN CHARINDEX('::', sc.[value]) > 0 THEN LEFT(sc.[value], CHARINDEX('::', sc.[value]) - 1) ELSE sc.[value] END)) AS [Base]) n
+        WHERE LTRIM(RTRIM(sc.[value])) <> '' AND n.[Base] <> ''
           AND NOT EXISTS (
               SELECT 1 FROM OPENJSON(de.[Columns]) WITH ([Name] NVARCHAR(200) '$.Name') col
               WHERE (CASE WHEN b.[DataSourceType] = 'SNOWFLAKE_01'
-                          THEN IIF(col.[Name] COLLATE Latin1_General_100_CS_AS = LTRIM(RTRIM(sc.[value])) COLLATE Latin1_General_100_CS_AS, 1, 0)
-                          ELSE IIF(col.[Name] = LTRIM(RTRIM(sc.[value])), 1, 0)
+                          THEN IIF(col.[Name] COLLATE Latin1_General_100_CS_AS = n.[Base] COLLATE Latin1_General_100_CS_AS, 1, 0)
+                          ELSE IIF(col.[Name] = n.[Base], 1, 0)
                      END) = 1)
         UNION ALL
         SELECT CONCAT(e.[SourceSchema], '.', e.[SourceName]), N'IsIncrementalColumn ' + e.[IsIncrementalColumn] + N' not found by PL_FMD_DISCOVER_SOURCE'

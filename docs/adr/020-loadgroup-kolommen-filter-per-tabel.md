@@ -70,3 +70,41 @@ Datum: 2026-10-20
   - in FMD_TRIAL, D, SNOWFLAKE_01 (`TPCH.NATION`): Landing slaagt met kolommen en filter, Bronze faalt (zie boven).
   - **Niet getest:** kolommen erbij, Snowflake met een nieuwe tabel door Bronze en Silver, een promotie naar T of P, en de
     editor in de Fabric-frontend.
+
+## Aanvulling 2026-10-26: een cast per kolom (Snowflake)
+
+**Reden.** Een Snowflake-tabel met een `TIME`-kolom laadt niet: de Copy-activiteit naar de Delta-landing faalt met
+`DeltaNotSupportedInterimDataType`, omdat Delta geen `TIME` kent. Bij een klanttabel zat die kolom in de key, dus weglaten
+kon niet, en een view in de bron vraagt een object in de omgeving van de klant.
+
+**Beslissing.** Bij `SNOWFLAKE_01` mag een item in `SourceColumns` de vorm `naam::TYPE` hebben. De view maakt er
+`"naam"::TYPE AS "naam"` van, zodat de kolomnaam gelijk blijft: de key, de cleansing-regels en Bronze en Silver merken niets.
+`TIJD::VARCHAR` geeft `HH24:MI:SS` als tekst.
+
+- `TYPE` bestaat alleen uit letters, cijfers en `_`. Geen `(n)` of `(p,s)`: de komma scheidt kolommen, en het type komt in de query.
+  Een cast met iets anders achter `::` weigert `sp_RegisterEntities`. De view laat zo'n tekst, als hij toch in de tabel staat,
+  deel van de naam blijven, zodat Snowflake de kolom afwijst in plaats van de tekst uit te voeren.
+- Alleen `SNOWFLAKE_01`; bij ASQL_01 en ASQL_02 een fout.
+- De controles (key in de lijst, watermark in de lijst, kolom in de ontdekking) vergelijken de naam voor `::`.
+- Geen cast op de watermarkkolom: de watermarkquery leest de kolom zoals hij is. Die kolom is `DATE` of `TIMESTAMP`, en Delta kent die.
+- De dry run meldt een ontdekte `TIME`-kolom die zonder cast geladen wordt: als fout bij een `delta`-landing, als waarschuwing bij
+  `parquet` (daar is `TIME` niet getest).
+- De editor haalt de cast bij het laden van een tabel van de kolomkeuze en zet hem bij het opslaan terug, zodat hij niet verdwijnt.
+  Een cast voeg je toe in de registratielijst.
+
+**Gevolgen.**
+- Een kolom met `::` in de naam kan niet meer gekozen worden. Niet verwacht in Snowflake-bronnen; niet gecontroleerd.
+- `TIME::VARCHAR` volgt `TIME_OUTPUT_FORMAT` van de Snowflake-sessie en laat standaard de fracties weg. Staat `TIME` in de key
+  met fracties van een seconde, dan kan de key na de cast dubbel zijn. Controleer dat vooraf in de bron.
+- Een cast toevoegen of wijzigen bij een tabel die al in Bronze staat verandert het kolomtype in het landingbestand. Of de
+  Bronze-merge dat aankan is niet getest.
+- **Getest op 2026-10-26:**
+  - lokaal, op SQL Server 2022 in Docker: de registratie en de view (10 gevallen), en de editor en dry run met `scripts/test_registration_editor.py`;
+  - in FMD_TRIAL, D, SNOWFLAKE_01, met een testtabel `FMD_BRON.TSTTIME.WERKLYST_TEST` (`ID NUMBER`, `TIJD TIME`, key `ID,TIJD`, vier rijen):
+    zonder cast faalt de landing met `DeltaNotSupportedInterimDataType` (`interim data type TimeSpan`, kolom `TIJD`, run `bbd8091b`);
+    met `TIJD::VARCHAR` slagen Landing, Bronze en Silver (run `7d51748b`): vier rijen met vier unieke keys, `TIJD` als `varchar`
+    (`08:00:00`, `13:30:15`, `08:00:00`, `23:59:59`);
+  - een cast samen met `SourceFilter = TIJD > '9:00:00'` (run `269cb88d`): de landing leest twee rijen. Snowflake vergelijkt in de
+    `WHERE` dus de `TIME`-kolom en niet de alias (een tekstvergelijking had nul rijen gegeven).
+  - **Niet getest:** `parquet` met `TIME`, een cast bij een tabel die al in Bronze staat, een `TIME`-kolom met fracties van een
+    seconde, de editor in de Fabric-frontend.
