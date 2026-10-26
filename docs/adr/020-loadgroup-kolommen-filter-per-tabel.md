@@ -98,3 +98,13 @@ kon niet, en een view in de bron vraagt een object in de omgeving van de klant.
   met fracties van een seconde, dan kan de key na de cast dubbel zijn. Controleer dat vooraf in de bron.
 - Een cast toevoegen of wijzigen bij een tabel die al in Bronze staat verandert het kolomtype in het landingbestand. Of de
   Bronze-merge dat aankan is niet getest.
+- **Getest op 2026-10-26:**
+  - lokaal, op SQL Server 2022 in Docker: de registratie en de view (10 gevallen), en de editor en dry run met `scripts/test_registration_editor.py`;
+  - in FMD_TRIAL, D, SNOWFLAKE_01, met een testtabel `FMD_BRON.TSTTIME.WERKLYST_TEST` (`ID NUMBER`, `TIJD TIME`, key `ID,TIJD`, vier rijen):
+    zonder cast faalt de landing met `DeltaNotSupportedInterimDataType` (`interim data type TimeSpan`, kolom `TIJD`, run `bbd8091b`);
+    met `TIJD::VARCHAR` slagen Landing, Bronze en Silver (run `7d51748b`): vier rijen met vier unieke keys, `TIJD` als `varchar`
+    (`08:00:00`, `13:30:15`, `08:00:00`, `23:59:59`);
+  - een cast samen met `SourceFilter = TIJD > '9:00:00'` (run `269cb88d`): de landing leest twee rijen. Snowflake vergelijkt in de
+    `WHERE` dus de `TIME`-kolom en niet de alias (een tekstvergelijking had nul rijen gegeven).
+  - **Niet getest:** `parquet` met `TIME`, een cast bij een tabel die al in Bronze staat, een `TIME`-kolom met fracties van een
+    seconde, de editor in de Fabric-frontend.
