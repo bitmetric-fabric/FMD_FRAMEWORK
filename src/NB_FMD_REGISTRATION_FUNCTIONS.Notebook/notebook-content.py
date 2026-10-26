@@ -857,6 +857,118 @@ def export_tables(sources, entities):
 
 # CELL ********************
 
+# Copy the registration of one environment to others (D -> T, P). The data selection fields differ per
+# environment on purpose: the entity rows are per DATA workspace, so a filter in T does not touch D or P.
+SELECTION_FIELDS = ('SourceFilter', 'SourceColumns', 'IsActive', 'LoadGroup')
+
+
+def plan_copy(source, target, environment, sources=None, only_active=True, update=False, history_days=None, overrides=None):
+    """
+    What copy_registration would register in `target` (a load_registration state), as
+    {'sources', 'entities', 'problems', 'skipped'}. No database access.
+
+    Tables of `source` that are not in `target` are copied as they are. A table that is already there is left alone
+    unless update is set (then the target follows the source, except for SELECTION_FIELDS, which stay as they are in
+    the target) or it has an override (then only the override fields change). `overrides` is
+    {'*': {...}, 'Schema.Table': {...}} for this environment: SELECTION_FIELDS only, a table row beats '*'.
+    """
+    overrides = overrides or {}
+    problems, skipped = [], []
+
+    def problem(table_name, field, message):
+        problems.append({'table': table_name, 'field': field, 'level': 'error', 'message': message})
+
+    names = {f"{e['SourceSchema']}.{e['SourceName']}" for e in source['entities']}
+    for key, fields in overrides.items():
+        if key != '*' and key not in names:
+            problem(key, 'overrides', f'not a table of {source["environment"]}')
+        for field in fields:
+            if field not in SELECTION_FIELDS:
+                problem(key, field, f"only {', '.join(SELECTION_FIELDS)} can differ per environment")
+    unknown = set(sources or ()) - {s['Source'] for s in source['sources']}
+    if unknown:
+        problem(', '.join(sorted(unknown)), 'sources', f'not a source of {source["environment"]}')
+
+    present = {entity_key(e): e for e in target['entities']}
+    chosen = []
+    for e in source['entities']:
+        if (sources and e['Source'] not in sources) or (only_active and not e['IsActive']):
+            continue
+        name = f"{e['SourceSchema']}.{e['SourceName']}"
+        change = {**overrides.get('*', {}), **overrides.get(name, {})}
+        existing = present.get(entity_key(e))
+        if existing is None:
+            item = {**e, **change, 'BronzeMode': 'replace' if e['BronzeRules'] else 'keep',
+                    'SilverMode': 'replace' if e['SilverRules'] else 'keep'}
+        elif update:
+            keep = {f: existing[f] for f in SELECTION_FIELDS}
+            item = {**e, **keep, **change,
+                    'BronzeMode': 'replace' if e['BronzeRules'] else ('clear' if existing['BronzeRules'] else 'keep'),
+                    'SilverMode': 'replace' if e['SilverRules'] else ('clear' if existing['SilverRules'] else 'keep')}
+        elif any(existing[f] != v for f, v in change.items()):
+            item = {**existing, **change, 'BronzeMode': 'keep', 'SilverMode': 'keep'}
+        else:
+            skipped.append(name)
+            continue
+        chosen.append({**item, 'Registered': False, 'Selected': True, 'Watermark': None})
+
+    used = {e['Source'] for e in chosen}
+    chosen_sources = [{**s, 'HistoryDays': history_days} for s in source['sources'] if s['Source'] in used]
+    state = {'domain': target['domain'], 'environment': environment, 'workspace': target['workspace'],
+             'sources': chosen_sources, 'entities': chosen}
+    nothing_before = {'sources': [dict(s) for s in chosen_sources], 'entities': []}
+    problems += validate_state(state, nothing_before)
+    payload_sources, payload_entities = build_payload(state, nothing_before)
+    return {'sources': payload_sources, 'entities': payload_entities, 'problems': problems, 'skipped': skipped}
+
+
+def copy_registration(domain, to_environments, from_environment='D', sources=None, only_active=True, update=False,
+                      history_days=None, overrides=None, dry_run=True):
+    """
+    Registers what is registered in `from_environment` also in `to_environments` (e.g. ["T", "P"]), through
+    register(), so the dry run shows New/Changed/Unchanged per table. Nothing is written when any environment has an
+    error. Watermarks are never copied.
+
+    sources: only these source aliases (the namespace in upper case); only_active: leave out the tables that are off
+    in the source environment; update: also bring registered tables in line with the source (their SELECTION_FIELDS
+    stay as they are in the target); history_days: start watermark for incremental tables that have none yet;
+    overrides: {"T": {"*": {"IsActive": 0}, "Sales.Orders": {"IsActive": 1, "SourceFilter": "OrderDate >= '2025-01-01'"}}}.
+    """
+    stray = set(overrides or {}) - set(to_environments)
+    if stray:
+        raise ValueError(f"overrides for {sorted(stray)}, which is not one of {list(to_environments)}")
+    if from_environment in to_environments:
+        raise ValueError(f"{from_environment} is both the source and a target")
+    source = load_registration(domain, from_environment)
+    plans = {env: plan_copy(source, load_registration(domain, env), env, sources, only_active, update, history_days,
+                            (overrides or {}).get(env)) for env in to_environments}
+    failed = False
+    for env, plan in plans.items():
+        errors = [p for p in plan['problems'] if p['level'] == 'error']
+        failed |= bool(errors)
+        print(f"\n=== {domain} / {from_environment} -> {env}: {len(plan['entities'])} table(s) to register, "
+              f"{len(plan['skipped'])} already registered ===")
+        for p in plan['problems']:
+            print(f"  {p['level'].upper():<7} {p['table']}: {p['field']}: {p['message']}")
+    if failed:
+        raise ValueError("Nothing registered: fix the errors above.")
+    for env, plan in plans.items():
+        if not plan['entities']:
+            print(f"\n{env}: nothing to register.")
+            continue
+        register(plan['sources'], plan['entities'], domain, [env], dry_run=dry_run)
+        if not dry_run:
+            print("\nRecord of what was registered:\n" + export_tables(plan['sources'], plan['entities']))
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "jupyter_python"
+# META }
+
+# CELL ********************
+
 DISCOVERY_PIPELINE = 'PL_FMD_DISCOVER_SOURCE'
 _JOB_FINISHED = ('Completed', 'Failed', 'Cancelled', 'Deduped')
 

@@ -82,6 +82,7 @@ w = types.SimpleNamespace(HTML=FakeWidget, Text=FakeWidget, SelectMultiple=FakeW
 scope = {"json": json, "re": re, "html": html, "copy": copy, "io": io, "contextlib": contextlib, "traceback": traceback, "w": w}
 exec(compile(cell_with("def build_state"), "registration logic", "exec"), scope)
 exec(compile(cell_with("class ColumnPicker"), "registration ui", "exec"), scope)
+exec(compile(cell_with("def plan_copy"), "registration copy", "exec"), scope)
 
 # ---- state, payload, validation -----------------------------------------------------------------------
 print("=== logica ===")
@@ -165,6 +166,68 @@ text = scope["export_tables"](
 check(all(c in text.split("entities")[1].split("\n")[1] for c in ("LoadGroup", "SourceColumns", "SourceFilter")), "export_tables: de nieuwe kolommen")
 new = scope["new_entity"]({"Source": "ERP", "DataSourceType": "ASQL_01"}, "dbo", "T")
 check(new["LoadGroup"] == "" and new["SourceColumns"] == "" and new["SourceFilter"] == "" and new["Watermark"] is None, "new_entity: lege standaard")
+
+# ---- copy D -> T/P -------------------------------------------------------------------------------------
+print("=== kopie van D naar T en P ===")
+plan_copy = scope["plan_copy"]
+rules = '[{"function": "exclude_rows", "columns": "OP", "parameters": {"values": ["delete"]}}]'
+d_state = scope["build_state"]("TEST", "D", "WS D", sources_rows, [
+    row("Orders", IsIncremental=1, IsIncrementalColumn="ModifiedAt", SilverRules=rules, SourceFilter="Amount > 0", Watermark="2024-06-01"),
+    row("Customers", EntityLoadGroup="dag"), row("Old", IsActive=0), row("Wide", SourceColumns="ID,Amount")])
+d_state["environment"] = "D"
+
+
+def target(*rows):
+    return scope["build_state"]("TEST", "T", "WS T", sources_rows, list(rows))
+
+
+def names(plan):
+    return sorted(e["SourceName"] for e in plan["entities"])
+
+
+plan = plan_copy(d_state, target(), "T")
+check(names(plan) == ["Customers", "Orders", "Wide"], "kopie naar een lege omgeving: alleen de actieve tabellen")
+check(not [p for p in plan["problems"] if p["level"] == "error"], "kopie: een geldige set geeft geen fout")
+orders_t = next(e for e in plan["entities"] if e["SourceName"] == "Orders")
+check(orders_t["SourceFilter"] == "Amount > 0" and orders_t["IsIncremental"] == 1 and orders_t["PrimaryKeys"] == "ID", "kopie: de instellingen van D gaan mee")
+check(orders_t["SilverCleansingRules"] and "BronzeCleansingRules" not in orders_t, "kopie: Silver-regels gaan mee, een lege Bronze-lijst laat het veld weg")
+check(not any("Watermark" in e for e in plan["entities"]), "kopie: een watermark gaat nooit mee")
+check(plan["sources"] and plan["sources"][0]["Environment"] == "*" and "HistoryDays" not in plan["sources"][0], "kopie: bron met Environment '*', geen HistoryDays zonder history_days")
+check(names(plan_copy(d_state, target(), "T", only_active=False)) == ["Customers", "Old", "Orders", "Wide"], "only_active=False: ook uitgezette tabellen")
+check(names(plan_copy(d_state, target(), "T", sources=["NOPE"])) == [] and plan_copy(d_state, target(), "T", sources=["NOPE"])["problems"], "sources met een onbekende alias: fout, niets geregistreerd")
+check(plan_copy(d_state, target(), "T", history_days=30)["sources"][0]["HistoryDays"] == 30, "history_days komt op de bron")
+
+existing = target(row("Orders", SourceFilter="Amount > 100", EntityLoadGroup="nacht", PrimaryKeys="ID,Line"))
+plan = plan_copy(d_state, existing, "T")
+check(names(plan) == ["Customers", "Wide"] and plan["skipped"] == ["dbo.Orders"], "zonder update: een bestaande tabel blijft ongemoeid")
+plan = plan_copy(d_state, existing, "T", update=True)
+orders_u = next(e for e in plan["entities"] if e["SourceName"] == "Orders")
+check(orders_u["PrimaryKeys"] == "ID" and orders_u["SourceFilter"] == "Amount > 100" and orders_u["LoadGroup"] == "nacht",
+      "update: D volgt voor de rest, maar filter en LoadGroup van het doel blijven staan")
+check(any(e["SourceName"] == "Customers" for e in plan["entities"]), "update: nieuwe tabellen gaan ook mee")
+
+# overrides: selection per environment
+ov = {"*": {"IsActive": 0}, "dbo.Orders": {"IsActive": 1, "SourceFilter": "ModifiedAt >= '2025-01-01'"}}
+plan = plan_copy(d_state, target(), "T", overrides=ov)
+by = {e["SourceName"]: e for e in plan["entities"]}
+check(by["Orders"]["IsActive"] == 1 and by["Orders"]["SourceFilter"] == "ModifiedAt >= '2025-01-01'", "override: een tabelregel gaat voor '*'")
+check(by["Customers"]["IsActive"] == 0 and by["Wide"]["IsActive"] == 0, "override '*': standaard voor alle andere tabellen")
+check(by["Wide"]["SourceColumns"] == "ID,Amount", "override: wat niet genoemd is blijft zoals in D")
+check(d_state["entities"][0]["SourceFilter"] == "Amount > 0", "override: D zelf verandert niet")
+plan = plan_copy(d_state, existing, "T", overrides={"dbo.Orders": {"SourceFilter": "Amount > 5"}})
+check(names(plan) == ["Customers", "Orders", "Wide"], "override op een bestaande tabel: gaat ook zonder update mee")
+orders_o = next(e for e in plan["entities"] if e["SourceName"] == "Orders")
+check(orders_o["SourceFilter"] == "Amount > 5" and orders_o["PrimaryKeys"] == "ID,Line" and orders_o["LoadGroup"] == "nacht", "override op een bestaande tabel: alleen dat veld verandert")
+check("BronzeCleansingRules" not in orders_o and "SilverCleansingRules" not in orders_o, "override op een bestaande tabel: regels blijven zoals ze zijn")
+plan = plan_copy(d_state, existing, "T", overrides={"dbo.Orders": {"SourceFilter": "Amount > 100"}})
+check("Orders" not in names(plan) and "dbo.Orders" in plan["skipped"], "override met dezelfde waarde als het doel: niets te doen (herhalen is veilig)")
+for bad, text in (({"dbo.Nope": {"IsActive": 1}}, "onbekende tabel"), ({"*": {"PrimaryKeys": "X"}}, "veld buiten de dataselectie"),
+                  ({"dbo.Orders": {"SourceFilter": "1=1; DROP TABLE x"}}, "puntkomma in het filter"),
+                  ({"dbo.Orders": {"SourceColumns": "Amount"}}, "PK buiten SourceColumns"), ({"*": {"IsActive": 2}}, "IsActive 2")):
+    check(any(p["level"] == "error" for p in plan_copy(d_state, target(), "T", overrides=bad)["problems"]), f"override: {text} is een fout")
+other = scope["build_state"]("TEST", "D", "WS", [{**sources_rows[0], "DataSourceType": "ORACLE_01"}], [row("Orders", DataSourceType="ORACLE_01")])
+other["environment"] = "D"
+check(any(p["level"] == "error" for p in plan_copy(other, target(), "T", overrides={"*": {"SourceFilter": "ID > 1"}})["problems"]), "override: filter voor een brontype dat het niet kent is een fout")
 
 # ---- ColumnPicker -------------------------------------------------------------------------------------
 print("=== ColumnPicker ===")
