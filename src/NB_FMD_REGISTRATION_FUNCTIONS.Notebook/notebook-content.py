@@ -314,7 +314,7 @@ def register_connection(name, type, is_active=True):
 
 # CELL ********************
 
-def register(sources, entities, domain, environments, dry_run=True, requeue_silver=False):
+def register(sources, entities, domain, environments, dry_run=True, requeue_silver=False, show_orphans=True):
     """
     Registers `sources` and `entities` into one domain's DATA workspace, once per environment in
     `environments`: "D", "T", "A", "P", or "DEV_<NAME>" for a developer's own DATA workspace
@@ -328,6 +328,9 @@ def register(sources, entities, domain, environments, dry_run=True, requeue_silv
     change afterwards. With True, the entities whose Silver rule this run changes are put back in the
     queue (execution.sp_RequeueSilverLayerEntities), so the next PL_FMD_LOAD_SILVER rebuilds them from
     Bronze. A change of a type or of the columns also needs the Silver table dropped first.
+
+    show_orphans (dry run): list the active tables of this workspace that are not in the lists. copy_registration
+    turns it off: its lists only hold what it copies, so every other table would show up as one.
 
     sources: a row binds a logical Source to a connection and database for one environment.
       Environment '*' applies to every environment without a row of its own (D, T, A, P; a DEV_
@@ -386,7 +389,7 @@ def register(sources, entities, domain, environments, dry_run=True, requeue_silv
                       "entities from Bronze, register with dry_run=False, requeue_silver=True (drop the "
                       "Silver table first if the rule changes a type or the columns).")
             orphans = sets[-1]
-            if orphans:
+            if orphans and show_orphans:
                 print("Active in this workspace but not in this list (left as is):")
                 for row in orphans:
                     print(f"  {row['DataSourceName']}: {row['SourceSchema']}.{row['SourceName']}")
@@ -917,7 +920,8 @@ def plan_copy(source, target, environment, sources=None, only_active=True, updat
     state = {'domain': target['domain'], 'environment': environment, 'workspace': target['workspace'],
              'sources': chosen_sources, 'entities': chosen}
     nothing_before = {'sources': [dict(s) for s in chosen_sources], 'entities': []}
-    problems += validate_state(state, nothing_before)
+    # A copy has no discovery to check against: that warning would repeat for every table.
+    problems += [p for p in validate_state(state, nothing_before) if 'discovered tables' not in p['message']]
     payload_sources, payload_entities = build_payload(state, nothing_before)
     return {'sources': payload_sources, 'entities': payload_entities, 'problems': problems, 'skipped': skipped}
 
@@ -956,7 +960,7 @@ def copy_registration(domain, to_environments, from_environment='D', sources=Non
         if not plan['entities']:
             print(f"\n{env}: nothing to register.")
             continue
-        register(plan['sources'], plan['entities'], domain, [env], dry_run=dry_run)
+        register(plan['sources'], plan['entities'], domain, [env], dry_run=dry_run, show_orphans=False)
         if not dry_run:
             print("\nRecord of what was registered:\n" + export_tables(plan['sources'], plan['entities']))
 

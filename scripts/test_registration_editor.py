@@ -190,6 +190,7 @@ check(names(plan) == ["Customers", "Orders", "Wide"], "kopie naar een lege omgev
 check(not [p for p in plan["problems"] if p["level"] == "error"], "kopie: een geldige set geeft geen fout")
 orders_t = next(e for e in plan["entities"] if e["SourceName"] == "Orders")
 check(orders_t["SourceFilter"] == "Amount > 0" and orders_t["IsIncremental"] == 1 and orders_t["PrimaryKeys"] == "ID", "kopie: de instellingen van D gaan mee")
+check(not any("discovered" in p["message"] for p in plan["problems"]), "kopie: geen waarschuwing over ontbrekende ontdekking")
 check(orders_t["SilverCleansingRules"] and "BronzeCleansingRules" not in orders_t, "kopie: Silver-regels gaan mee, een lege Bronze-lijst laat het veld weg")
 check(not any("Watermark" in e for e in plan["entities"]), "kopie: een watermark gaat nooit mee")
 check(plan["sources"] and plan["sources"][0]["Environment"] == "*" and "HistoryDays" not in plan["sources"][0], "kopie: bron met Environment '*', geen HistoryDays zonder history_days")
