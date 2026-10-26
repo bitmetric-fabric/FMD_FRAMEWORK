@@ -361,3 +361,15 @@ testen; de framework-bestanden verwijzen nog naar de oorspronkelijke GUID.
   - een echte run voor `AdventureWorks` (`Sales.Currency`): "Demoklant" bleef staan, en de checksum
     was onveranderd;
   - een nieuwe bron, binnen een teruggedraaide transactie, kreeg de standaardtekst.
+
+## Aanvulling 2026-10-26: registratie kopiëren van D naar T en P
+
+`copy_registration` (in `NB_FMD_REGISTRATION_FUNCTIONS`) leest de registratie van D met `load_registration` en geeft
+die via `build_payload` en `register()` aan T en P. Geen nieuwe procedure en geen dacpac: de configdb is gedeeld, de
+`DataSource`-rijen zijn dat ook, en de entiteiten zijn al per DATA-workspace.
+- Standaard alleen tabellen die in het doel nog niet bestaan; `update=True` laat D volgen, behalve de dataselectie.
+- Een watermark gaat nooit mee.
+- De dataselectie (`SourceFilter`, `SourceColumns`, `IsActive`, `LoadGroup`) kan per omgeving afwijken via `overrides`,
+  gecontroleerd met `validate_state`. Fouten stoppen de kopie voordat er iets geschreven wordt.
+- Bewust geen knop in de editor: de editor blijft de plek voor een wijziging in een omgeving, de kopie is een
+  aanroep in `NB_REGISTRATIE`.

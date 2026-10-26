@@ -121,3 +121,34 @@ registration_ui(domain="INTEGRATION", environment="D")
 # META   "language": "python",
 # META   "language_group": "jupyter_python"
 # META }
+
+# MARKDOWN ********************
+
+# ## Van D naar T en P
+# `copy_registration` registreert wat in D staat ook in T en P, in een keer, via `register()`: de proefdraai toont per
+# tabel `New`, `Changed` of `Unchanged`, en er wordt niets geschreven zolang een omgeving een fout heeft.
+# - **Standaard alleen nieuwe tabellen**: wat in T of P al staat blijft ongemoeid. `update=True` brengt ook bestaande
+#   tabellen in lijn met D, behalve hun dataselectie (filter, kolommen, LoadGroup, actief): die staat per omgeving.
+# - **Alleen actieve tabellen** uit D (`only_active=False` neemt ook uitgezette mee); `sources=["AW"]` beperkt tot bronnen.
+# - **Dataselectie per omgeving** met `overrides`: `"*"` geldt voor alle tabellen, `"Schema.Tabel"` voor een tabel (die gaat voor
+#   `"*"`). Alleen `SourceFilter`, `SourceColumns`, `IsActive` en `LoadGroup`. Een override op een tabel die in het doel al
+#   staat past alleen dat veld aan. Een filter of kolomkeuze wijzigen verwijdert niets uit Bronze en Silver (ADR-020), en de
+#   proefdraai voert het filter niet uit.
+# - Een watermark wordt nooit gekopieerd. `history_days=30` zet een start-watermark voor nieuwe incrementele tabellen.
+# - Na een echte run print de functie het resultaat als `table("""...""")`: bewaar dat in het log.
+
+# CELL ********************
+
+# copy_registration("INTEGRATION", ["T", "P"])    # proefdraai: schrijft niets
+# copy_registration("INTEGRATION", ["T", "P"], overrides={
+#     "T": {"*": {"IsActive": 0},                                   # in T alleen wat hieronder staat laden
+#           "Sales.SalesOrderHeader": {"IsActive": 1, "SourceFilter": "OrderDate >= '2025-01-01'"}},
+# })
+# copy_registration("INTEGRATION", ["T", "P"], dry_run=False)     # na een goede proefdraai
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "jupyter_python"
+# META }
