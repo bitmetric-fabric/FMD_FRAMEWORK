@@ -78,7 +78,7 @@ start_audit_time = datetime.now()
 
 ###############################Target Parameters###############################
 EntityId = ""
-EntityLayer = "LandingZone"
+EntityLayer = "Landingzone"
 DataSourceName = ""
 TargetFilePath = ""
 TargetFileName = ""

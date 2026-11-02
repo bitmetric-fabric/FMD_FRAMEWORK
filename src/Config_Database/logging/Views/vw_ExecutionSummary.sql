@@ -52,7 +52,9 @@ Runs AS (
 )
 SELECT R.[PipelineRunGuid],
        R.[PipelineParentRunGuid],
-       R.[EntityLayer],
+       -- The collation is case-insensitive, so a custom notebook that logs 'LandingZone' is grouped with 'Landingzone';
+       -- return one fixed spelling instead of whichever one the group happened to hold.
+       CASE WHEN R.[EntityLayer] = 'Landingzone' THEN 'Landingzone' ELSE R.[EntityLayer] END AS [EntityLayer],
        R.[EntityId],
        COALESCE(LZ.[SourceSchema], BR.[Schema], SI.[Schema]) AS [EntitySchema],
        COALESCE(LZ.[SourceName], BR.[Name], SI.[Name]) AS [EntityName],
