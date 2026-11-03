@@ -3,7 +3,7 @@
     python3 scripts/test_schedule_pipeline.py
 
 De twee functies worden echt uit het notebook gehaald en uitgevoerd met stubs voor Fabric. Gecontroleerd:
-  1. de definitie: een Switch op Target, LOAD -> orchestratie met LoadGroup, MAINTENANCE -> maintenance,
+  1. de definitie: een Switch op Target, LOAD -> orchestratie met LoadGroup en DataSourceName, MAINTENANCE -> maintenance,
      alles anders -> Fail, met de IDs en de connectie die erin gaan;
   2. een bestaande pipeline wordt niet overschreven (geen POST);
   3. een nieuwe pipeline gaat in de CONFIG-workspace en in de map SchedulePipelines;
@@ -90,11 +90,13 @@ check(switch["type"] == "Switch" and switch["typeProperties"]["on"]["value"] == 
 check(set(cases) == {"LOAD", "MAINTENANCE"}, "precies twee cases: LOAD en MAINTENANCE")
 check((load["typeProperties"]["workspaceId"], load["typeProperties"]["pipelineId"]) == ("code-ws-id", "orch-id"), "LOAD: orchestratie in CODE")
 check(load["typeProperties"]["parameters"]["LoadGroup"]["value"] == "@pipeline().parameters.LoadGroup", "LOAD: LoadGroup gaat mee")
+check(load["typeProperties"]["parameters"]["DataSourceName"]["value"] == "@pipeline().parameters.DataSourceName", "LOAD: DataSourceName gaat mee")
 check((maintenance["typeProperties"]["workspaceId"], maintenance["typeProperties"]["pipelineId"]) == ("code-ws-id", "maint-id"), "MAINTENANCE: maintenance in CODE")
 check(all(a["typeProperties"]["waitOnCompletion"] and a["externalReferences"]["connection"] == CONNECTION for a in (load, maintenance)),
       "beide wachten op het resultaat, met de connectie van de orchestratie")
 check(default["type"] == "Fail" and default["typeProperties"]["errorCode"] == "UnknownTarget", "onbekende Target faalt")
-check(definition["parameters"]["Target"]["defaultValue"] == "LOAD" and definition["parameters"]["LoadGroup"]["defaultValue"] == "", "defaults: LOAD en leeg")
+check(definition["parameters"]["Target"]["defaultValue"] == "LOAD" and definition["parameters"]["LoadGroup"]["defaultValue"] == ""
+      and definition["parameters"]["DataSourceName"]["defaultValue"] == "", "defaults: LOAD en leeg (LoadGroup en DataSourceName)")
 check(definition["concurrency"] == 1, "concurrency 1: twee runs van dezelfde omgeving lopen niet door elkaar")
 
 print("=== bestaande pipeline blijft staan ===")

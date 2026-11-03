@@ -6,6 +6,11 @@ Datum: 2026-10-11
 *Bijgewerkt 2026-10-12:* `PL_FMD_ORCHESTRATION_TEMPLATE` heet nu `PL_FMD_ORCHESTRATION`, en
 `PL_FMD_LOAD_GOLD_TEMPLATE` heet `PL_FMD_LOAD_GOLD`. De context en de test hieronder gebruiken de oude namen.
 
+*Bijgewerkt 2026-11-03:* de plan-pipeline heeft ook de parameter `DataSourceName` (standaard leeg). Hij gaat via
+`PL_FMD_ORCHESTRATION` naar `PL_FMD_LOAD_ALL`, zodat één schedule één bron kan laden (een bron met meerdere
+LoadGroups, ADR-020). `Entities` blijft er bewust uit: een schedule somt geen tabellen op. Een bestaande
+plan-pipeline wordt door de setup niet bijgewerkt (zie hieronder); voeg de parameter met de hand toe.
+
 ## Context
 
 Een schedule hoort bij de definitie van een item (`.schedules`). Staat hij op `PL_FMD_ORCHESTRATION_TEMPLATE`
@@ -27,8 +32,9 @@ De tijden en de `LoadGroup`'s verschillen per omgeving, dus ze horen niet in iet
 
 - Per omgeving één **`PL_FMD_SCHEDULE_<short>`** in de CONFIG-workspace (`PL_FMD_SCHEDULE_D`, `_T`, `_P`), in
   de map `SchedulePipelines`. CONFIG zit in geen enkele deployment pipeline.
-- De pipeline heeft de parameters `Target` (`LOAD` of `MAINTENANCE`, standaard `LOAD`) en `LoadGroup`. Een
-  Switch op `Target` roept `PL_FMD_ORCHESTRATION` (met `LoadGroup`) of `PL_FMD_MAINTENANCE` aan in de
+- De pipeline heeft de parameters `Target` (`LOAD` of `MAINTENANCE`, standaard `LOAD`), `LoadGroup` en
+  `DataSourceName`. Een
+  Switch op `Target` roept `PL_FMD_ORCHESTRATION` (met `LoadGroup` en `DataSourceName`) of `PL_FMD_MAINTENANCE` aan in de
   CODE-workspace van die omgeving, en wacht op het resultaat. Elke andere waarde laat de pipeline falen
   (`UnknownTarget`). `concurrency` is 1.
 - **De schedules en de Failure notifications staan op deze pipeline.** Nachtelijk, intraday en maintenance
