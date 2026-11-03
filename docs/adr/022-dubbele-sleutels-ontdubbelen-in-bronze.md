@@ -55,4 +55,10 @@ Datum: 2026-11-03
 - **Getest op 2026-11-03:** lokaal met pyspark 3.5.1 in Docker (`scripts/test_deduplicate_keys.py`): validatie, een
   dump-paar dat alleen in een filler verschilt, een paar dat in een bedrijfsveld verschilt, twee events voor één sleutel
   met `last` en `first`, `NULL` in de volgordekolom, een gelijke winnaar bij een andere invoervolgorde, en geen
-  dubbelen. **Niet getest:** in Fabric (FMD_TRIAL) en bij de klant.
+  dubbelen.
+- **Getest in FMD_TRIAL, D, 2026-11-03** (`TPCH.NATION` met PK `N_REGIONKEY`, dus 20 dubbele rijen; testplan T-D17):
+  zonder regel faalt Bronze nog (run `f57940b1`); met regel en `N_NATIONKEY` als volgorde 5 rijen met per regio de hoogste
+  sleutel, `RowsDeduplicated` 20 en `KeysDeduplicated` 5 (eerste load `0da74d8c`); Silver slaagt (`8b66b342`); hetzelfde
+  bestand nog eens via de merge geeft 0 wijzigingen (`00aff5db`); een tabel zonder regel loopt ongewijzigd door
+  (`TPCH.CUSTOMER`, `b6ad2371`). **Niet getest:** `keep = first` in Fabric, een incrementele tabel met meerdere events per
+  sleutel, een grote tabel, en de klantomgeving.
