@@ -382,6 +382,62 @@ def exclude_rows(df: DataFrame, columns, args):
 
 # CELL ********************
 
+# Rows dropped by deduplicate_keys in this run; NB_FMD_LOAD_LANDING_BRONZE adds them to the audit log.
+cleansing_dedup_stats = {'RowsDeduplicated': 0, 'KeysDeduplicated': 0}
+
+def deduplicate_keys(df: DataFrame, columns, args):
+    """
+    Keeps one row per primary key when the source delivers a key more than once (ADR-022).
+    A Bronze rule: it needs HashedPKColumn, which Bronze adds before the cleansing.
+    The rows are ordered by the columns; keep 'last' takes the highest value, 'first' the lowest. Rows with
+    the same order (a full dump has one EVENT_TIMESTAMP) are ordered by a hash of all their values, so a
+    reload keeps the same row. NULL in an order column sorts as the lowest value.
+    There is no limit: a primary key that is too short drops rows silently, only the count is logged.
+    Args:
+      - keep: 'last' (default) or 'first'
+    """
+    keep = args.get('keep', 'last') or 'last'
+    if keep not in ('last', 'first'):
+        raise ValueError("deduplicate_keys: 'keep' must be 'last' or 'first'.")
+    if not columns:
+        raise ValueError("deduplicate_keys needs at least one order column in 'columns'.")
+    if 'HashedPKColumn' not in df.columns:
+        raise ValueError("deduplicate_keys needs HashedPKColumn: use it as a Bronze rule.")
+    missing = [c for c in columns if c not in df.columns]
+    if missing:
+        raise ValueError(f"deduplicate_keys: column(s) {', '.join(missing)} do not exist.")
+
+    from pyspark.sql.functions import md5, concat_ws, row_number, sum as sum_, count as count_
+    from pyspark.sql.window import Window
+
+    dup_keys = df.groupBy('HashedPKColumn').count().where('count > 1')
+    stats = dup_keys.agg(sum_(col('count') - 1).alias('rows'), count_(lit(1)).alias('keys')).collect()[0]
+    if not stats['keys']:
+        return df
+
+    cleansing_dedup_stats['RowsDeduplicated'] += int(stats['rows'])
+    cleansing_dedup_stats['KeysDeduplicated'] += int(stats['keys'])
+    print(f"deduplicate_keys: dropped {stats['rows']} row(s) for {stats['keys']} duplicated key(s)")
+
+    tie = md5(concat_ws('||', *[col(c).cast('string') for c in df.columns]))
+    order = [col(c).desc_nulls_last() if keep == 'last' else col(c).asc_nulls_first() for c in columns]
+    window = Window.partitionBy('HashedPKColumn').orderBy(*order, tie.desc())
+    dup_keys = dup_keys.select('HashedPKColumn')
+    kept = (df.join(dup_keys, 'HashedPKColumn')
+              .withColumn('_dedup_rn', row_number().over(window))
+              .where(col('_dedup_rn') == 1)
+              .drop('_dedup_rn'))
+    return df.join(dup_keys, 'HashedPKColumn', 'left_anti').unionByName(kept)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# CELL ********************
+
 def clamp_min_date(df: DataFrame, columns, args):
     """
     Replaces date/timestamp values that lie below a minimum (e.g. the 0001-01-01 placeholder of a source system)
@@ -432,6 +488,7 @@ register_cleansing_function("fill_nulls", fill_nulls)
 register_cleansing_function("parse_datetime", parse_datetime)
 register_cleansing_function("exclude_rows", exclude_rows)
 register_cleansing_function("clamp_min_date", clamp_min_date)
+register_cleansing_function("deduplicate_keys", deduplicate_keys)
 
 # METADATA ********************
 

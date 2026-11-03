@@ -79,4 +79,4 @@ Een bron die een verwijdering als rij met een vlag levert (bijvoorbeeld `EVENT_C
 - **Als Bronze-regel werkt het niet:** de bestaande Bronze-rij blijft dan staan en de delete bereikt Silver niet.
 - **Gevolg:** de delete-rij zelf komt nooit in Silver; de afgesloten rij houdt de waarden van de laatste niet-delete-versie. Een sleutel die in Silver nog niet bestond (eerste load, of een eerste batch met een delete) komt er niet in. Silver bewaart de afgesloten rijen, dus consumenten filteren op `IsCurrent = 1`.
 - **Verworpen:** een aparte kolom per entiteit voor de vlag. Dat vraagt een schemawijziging en een nieuwe dacpac voor iets wat de bestaande cleansing-regel al doet. Alleen nodig als de delete-rij zelf in Silver moet komen.
-- **Niet opgelost:** meerdere events voor één sleutel in één batch laten Landing→Bronze falen op een dubbele PK.
+- **Niet opgelost:** meerdere events voor één sleutel in één batch laten Landing→Bronze falen op een dubbele PK. Opgelost in ADR-022 met de Bronze-regel `deduplicate_keys` (2026-11-03).

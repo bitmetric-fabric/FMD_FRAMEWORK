@@ -31,6 +31,7 @@ zelf beoordelen of een afwijking verdedigbaar is.
 | [018](018-registratie-via-notebook.md) | Bronnen registreren via een notebook, niet via `sqlcmd` | Proposed |
 | [020](020-loadgroup-kolommen-filter-per-tabel.md) | LoadGroup, kolommen en bronfilter per tabel | Proposed |
 | [021](021-odata-als-brontype.md) | OData als brontype, met een eigen pipelinepaar | Proposed |
+| [022](022-dubbele-sleutels-ontdubbelen-in-bronze.md) | Dubbele sleutels ontdubbelen in Bronze | Proposed |
 
 ## Openstaande triggers
 
