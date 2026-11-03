@@ -425,23 +425,6 @@ dfDataChanged = (dfDataChanged
 
 # MARKDOWN ********************
 
-# ## Check for Duplicates
-
-# CELL ********************
-
-dup_count = dfDataChanged.groupBy('HashedPKColumn').count().where('count > 1').limit(1).collect()
-if dup_count:
-    fail(f'Source file contains duplicated rows for PK: {", ".join(key_columns)}')
-
-# METADATA ********************
-
-# META {
-# META   "language": "python",
-# META   "language_group": "synapse_pyspark"
-# META }
-
-# MARKDOWN ********************
-
 # ## Perform Cleansing
 
 # CELL ********************
@@ -487,6 +470,24 @@ if rules_str != None :
 # CELL ********************
 
 dfDataChanged=handle_cleansing_functions(dfDataChanged,cleansing_rules)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "synapse_pyspark"
+# META }
+
+# MARKDOWN ********************
+
+# ## Check for Duplicates
+
+# CELL ********************
+
+# After the cleansing, so that a deduplicate_keys or exclude_rows rule can resolve a duplicated key (ADR-022).
+dup_count = dfDataChanged.groupBy('HashedPKColumn').count().where('count > 1').limit(1).collect()
+if dup_count:
+    fail(f'Source file contains duplicated rows for PK: {", ".join(key_columns)}')
 
 # METADATA ********************
 
@@ -549,6 +550,7 @@ else:
             "LandingzoneEntityId" : LandingzoneEntityId,
             "EntityId" : BronzeLayerEntityId,
             **row_metrics,
+            **cleansing_dedup_stats,
             "StartTime" : start_audit_time,
             "EndTime" : end_audit_time
 
@@ -631,6 +633,7 @@ result_data = {
         "LandingzoneEntityId" : LandingzoneEntityId,
         "EntityId" : BronzeLayerEntityId,
         **row_metrics,
+        **cleansing_dedup_stats,
         "StartTime" : start_audit_time,
         "EndTime" : end_audit_time
 

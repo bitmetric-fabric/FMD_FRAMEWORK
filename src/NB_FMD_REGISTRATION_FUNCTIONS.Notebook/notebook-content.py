@@ -621,6 +621,8 @@ CLEANSING_FUNCTIONS = {
         {'name': 'min', 'kind': 'date', 'default': '1900-01-01'},
         {'name': 'replacement', 'kind': 'str', 'default': None},
         {'name': 'inclusive', 'kind': 'bool', 'default': False}],
+    'deduplicate_keys': [
+        {'name': 'keep', 'kind': 'choice', 'options': ['last', 'first'], 'default': 'last'}],
 }
 
 

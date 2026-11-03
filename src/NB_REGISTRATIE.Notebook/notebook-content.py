@@ -53,6 +53,10 @@
 # `{"function": "exclude_rows", "columns": "EVENT_CRUD", "parameters": {"values": ["delete"]}}`. Silver ziet de sleutel dan
 # als verdwenen en zet hem op `IsDeleted = 1, IsCurrent = 0`. Niet als Bronze-regel gebruiken. De lijst met functies in de
 # editor kent `exclude_rows` in de lijst met functies; vul bij `values` de waarden in, gescheiden door komma's.
+# `deduplicate_keys` houdt één rij per primary key als de bron een sleutel meer dan eens levert (ADR-022), als Bronze-regel
+# `{"function": "deduplicate_keys", "columns": "EVENT_TIMESTAMP", "parameters": {"keep": "last"}}`: de hoogste
+# `EVENT_TIMESTAMP` wint. Er is geen limiet: een te korte primary key gooit stil rijen weg; het aantal staat als
+# `RowsDeduplicated` in de log. De dry run meldt de functie nog als "not built in"; dat is een waarschuwing.
 
 # CELL ********************
 
