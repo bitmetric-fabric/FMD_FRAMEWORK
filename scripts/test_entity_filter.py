@@ -4,7 +4,8 @@
 
 Static check of the pipelines and SQL sources. The filter has to be in every place where LoadGroup is:
   1. every load pipeline that declares LoadGroup (except PL_FMD_ORCHESTRATION) also declares DataSourceName and
-     Entities, default "";
+     Entities, default "". PL_FMD_ORCHESTRATION (the schedule wrapper) only takes DataSourceName: a schedule can
+     name one source, not a table list;
   2. everywhere LoadGroup is passed on (invoke parameter or stored procedure parameter) both are passed on too;
   3. every inline query with the LoadGroup clause also calls fn_EntityInFilter, with the single quotes of both
      values doubled (a quote in a table name must not break or inject into the query);
@@ -59,7 +60,12 @@ for path in sorted((REPO / "src").glob("PL_FMD_*.DataPipeline/pipeline-content.j
 check(checked == 27, f"27 pipelines in the load chain checked (got {checked})")
 
 orchestration = (REPO / "src/PL_FMD_ORCHESTRATION.DataPipeline/pipeline-content.json").read_text(encoding="utf-8")
-check("DataSourceName" not in orchestration, "PL_FMD_ORCHESTRATION (schedule wrapper) is unchanged: LoadGroup only")
+orch = json.loads(orchestration)["properties"]
+orch_params = orch["activities"][0]["typeProperties"]["parameters"]
+check(orch["parameters"]["DataSourceName"]["defaultValue"] == "" and
+      orch_params["DataSourceName"]["value"] == "@pipeline().parameters.DataSourceName",
+      "PL_FMD_ORCHESTRATION (schedule wrapper) takes DataSourceName (default empty) and passes it to PL_FMD_LOAD_ALL")
+check("Entities" not in orchestration, "PL_FMD_ORCHESTRATION has no Entities: a schedule does not carry a table list")
 
 print("=== SQL ===")
 EXEC = REPO / "src/Config_Database/execution"

@@ -1074,7 +1074,8 @@ def schedule_pipeline_definition(code_workspace_id, orchestration_pipeline_id, m
                 "on": {"value": "@pipeline().parameters.Target", "type": "Expression"},
                 "cases": [
                     {"value": "LOAD", "activities": [invoke("PL_FMD_ORCHESTRATION", orchestration_pipeline_id, "0.12:00:00",
-                                                           {"LoadGroup": {"value": "@pipeline().parameters.LoadGroup", "type": "Expression"}})]},
+                                                           {"LoadGroup": {"value": "@pipeline().parameters.LoadGroup", "type": "Expression"},
+                                                            "DataSourceName": {"value": "@pipeline().parameters.DataSourceName", "type": "Expression"}})]},
                     {"value": "MAINTENANCE", "activities": [invoke("PL_FMD_MAINTENANCE", maintenance_pipeline_id, "0.04:00:00", {})]},
                 ],
                 "defaultActivities": [{
@@ -1084,7 +1085,8 @@ def schedule_pipeline_definition(code_workspace_id, orchestration_pipeline_id, m
                 }],
             },
         }],
-        "parameters": {"Target": {"type": "string", "defaultValue": "LOAD"}, "LoadGroup": {"type": "string", "defaultValue": ""}},
+        "parameters": {"Target": {"type": "string", "defaultValue": "LOAD"}, "LoadGroup": {"type": "string", "defaultValue": ""},
+                       "DataSourceName": {"type": "string", "defaultValue": ""}},
         "concurrency": 1,
     }}
 

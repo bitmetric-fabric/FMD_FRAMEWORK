@@ -87,11 +87,11 @@ workspace, in the folder `SchedulePipelines`: `PL_FMD_SCHEDULE_D`, `_T` and `_P`
 Development, Test and Production. It creates each one once and never
 overwrites it, so a setup update leaves your schedules and recipients alone.
 
-A schedule pipeline has two parameters and one Switch on `Target`:
+A schedule pipeline has three parameters (`Target`, `LoadGroup`, `DataSourceName`) and one Switch on `Target`:
 
 | `Target` | Invokes (in the CODE workspace of that environment) |
 |---|---|
-| `LOAD` (default) | `PL_FMD_ORCHESTRATION`, with `LoadGroup` |
+| `LOAD` (default) | `PL_FMD_ORCHESTRATION`, with `LoadGroup` and `DataSourceName` |
 | `MAINTENANCE` | `PL_FMD_MAINTENANCE` |
 | anything else | fails with `UnknownTarget`, so a typo shows as a failed run |
 
@@ -185,8 +185,12 @@ Examples: `DataSourceName = Customers`, `Entities = dbo.Customer,Orders`.
   table name does not break the query.
 - **`PL_FMD_LOAD_ALL` passes both parameters on** to the landing zone, Bronze
   and Silver.
-- **`PL_FMD_ORCHESTRATION` (the schedule wrapper) does not have them.** A
-  schedule should not carry a table list; start `PL_FMD_LOAD_ALL` by hand.
+- **`PL_FMD_ORCHESTRATION` (the schedule wrapper) has `DataSourceName`, not `Entities`.**
+  A schedule can name one source (`DataSourceName`, the exact name in
+  `integration.DataSource`), e.g. a source with several load groups in one run.
+  It does not carry a table list; for `Entities` start `PL_FMD_LOAD_ALL` by hand.
+  Add `DataSourceName` next to `Target` and `LoadGroup` in the schedule's
+  parameters (`"DataSourceName": "<source>"`). Both filled is an AND.
 
 **Bronze and Silver on their own only process what is already queued.** They
 read the queue (`execution.PipelineLandingzoneEntity`,

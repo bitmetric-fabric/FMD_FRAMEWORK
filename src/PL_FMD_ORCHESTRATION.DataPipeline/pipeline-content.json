@@ -12,6 +12,10 @@
             "LoadGroup": {
               "value": "@pipeline().parameters.LoadGroup",
               "type": "Expression"
+            },
+            "DataSourceName": {
+              "value": "@pipeline().parameters.DataSourceName",
+              "type": "Expression"
             }
           }
         },
@@ -31,6 +35,10 @@
     ],
     "parameters": {
       "LoadGroup": {
+        "type": "string",
+        "defaultValue": ""
+      },
+      "DataSourceName": {
         "type": "string",
         "defaultValue": ""
       }
