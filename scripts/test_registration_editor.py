@@ -12,6 +12,7 @@ The SQL itself is run by hand against SQL Server (see ADR-020); this script does
 
 import contextlib
 import copy
+import hashlib
 import html
 import io
 import json
@@ -44,6 +45,7 @@ def cell_with(marker):
 # ---- a stand-in for the part of ipywidgets that ColumnPicker uses -----------------------------------
 class Layout:
     def __init__(self, **kw):
+        self.display = ""  # ipywidgets: the default
         self.__dict__.update(kw)
 
 
@@ -75,14 +77,17 @@ class FakeWidget:
                 fn({"new": new, "old": old, "name": "value"})
 
 
-w = types.SimpleNamespace(HTML=FakeWidget, Text=FakeWidget, SelectMultiple=FakeWidget, Button=FakeWidget,
-                          HBox=lambda children, **kw: FakeWidget(children=children), VBox=lambda children, **kw: FakeWidget(children=children),
+w = types.SimpleNamespace(HTML=FakeWidget, Text=FakeWidget, SelectMultiple=FakeWidget, Button=FakeWidget, Dropdown=FakeWidget, Checkbox=FakeWidget, Combobox=FakeWidget,
+                          ToggleButtons=FakeWidget,
+                          HBox=lambda children, layout=None, **kw: FakeWidget(children=children, layout=layout or Layout()),
+                          VBox=lambda children, layout=None, **kw: FakeWidget(children=children, layout=layout or Layout()),
                           Layout=Layout)
 
-scope = {"json": json, "re": re, "html": html, "copy": copy, "io": io, "contextlib": contextlib, "traceback": traceback, "w": w}
+scope = {"hashlib": hashlib, "json": json, "re": re, "html": html, "copy": copy, "io": io, "contextlib": contextlib, "traceback": traceback, "w": w}
 exec(compile(cell_with("def build_state"), "registration logic", "exec"), scope)
 exec(compile(cell_with("class ColumnPicker"), "registration ui", "exec"), scope)
 exec(compile(cell_with("def plan_copy"), "registration copy", "exec"), scope)
+exec(compile(cell_with("class RegistrationUI"), "registration screen", "exec"), scope)
 
 # ---- state, payload, validation -----------------------------------------------------------------------
 print("=== logica ===")
@@ -257,6 +262,189 @@ for bad, text in (({"dbo.Nope": {"IsActive": 1}}, "onbekende tabel"), ({"*": {"P
 other = scope["build_state"]("TEST", "D", "WS", [{**sources_rows[0], "DataSourceType": "ORACLE_01"}], [row("Orders", DataSourceType="ORACLE_01")])
 other["environment"] = "D"
 check(any(p["level"] == "error" for p in plan_copy(other, target(), "T", overrides={"*": {"SourceFilter": "ID > 1"}})["problems"]), "override: filter voor een brontype dat het niet kent is een fout")
+
+# a source with another connection in the target (P-019), and an alias that differs per environment
+print("=== connectie en alias per omgeving ===")
+p_sources = [{**sources_rows[0], "ConnectionName": "CON_P"}]
+plan = plan_copy(d_state, scope["build_state"]("TEST", "P", "WS P", p_sources, [row("Orders", ConnectionName="CON_P")]), "P")
+check(plan["sources"][0]["ConnectionName"] == "CON_P", "kopie: de bron behoudt de connectie van het doel (P-019), niet die van D")
+check(plan_copy(d_state, target(), "T")["sources"][0]["ConnectionName"] == "CON_X", "kopie: een bron die het doel nog niet heeft, krijgt de connectie van D")
+check(d_state["sources"][0]["ConnectionName"] == "CON_X", "kopie: D zelf verandert niet")
+# in the target a second source shares the namespace, so the same source gets another alias there
+two = [{**sources_rows[0], "DataSourceName": "OTHERDB"}, sources_rows[0]]
+shifted = scope["build_state"]("TEST", "T", "WS T", two, [row("Orders", SourceFilter="Amount > 100")])
+check(shifted["sources"][1]["Source"] != d_state["sources"][0]["Source"], "voorwaarde: de alias van dezelfde bron verschilt per omgeving")
+plan = plan_copy(d_state, shifted, "T")
+check("Orders" not in names(plan) and "dbo.Orders" in plan["skipped"], "alias verschilt: een bestaande tabel wordt toch herkend")
+plan = plan_copy(d_state, shifted, "T", overrides={"dbo.Orders": {"SourceFilter": "Amount > 5"}})
+orders_s = next(e for e in plan["entities"] if e["SourceName"] == "Orders")
+check(orders_s["Source"] in {s["Source"] for s in plan["sources"]}, "override op een bestaande tabel: de bron staat in de payload (alias van D)")
+
+# ---- compare D, T and P ----------------------------------------------------------------------------------
+print("=== omgevingen vergelijken ===")
+compare = scope["compare_environments"]
+ds = scope["build_state"]("TEST", "D", "WS D", sources_rows, [row("Orders", SourceFilter="Amount > 0", Watermark="1"), row("Customers"), row("Wide", PrimaryKeys="ID")])
+ts = scope["build_state"]("TEST", "T", "WS T", sources_rows, [row("Orders", SourceFilter="Amount > 5"), row("Wide", PrimaryKeys="ID")])
+ps = scope["build_state"]("TEST", "P", "WS P", p_sources, [row("Orders", ConnectionName="CON_P", SourceFilter="Amount > 5", PrimaryKeys="ID,Line"), row("Wide", ConnectionName="CON_P", PrimaryKeys="ID")])
+rows_ = {r["Table"]: r for r in compare({"D": ds, "T": ts, "P": ps})}
+check(list(rows_) == ["dbo.Orders", "dbo.Customers", "dbo.Wide"], "vergelijken: een rij per tabel, in de volgorde van D")
+o, c, wd = rows_["dbo.Orders"], rows_["dbo.Customers"], rows_["dbo.Wide"]
+check(o["Selection"] == {"SourceFilter": {"D": "Amount > 0", "T": "Amount > 5", "P": "Amount > 5"}}, "vergelijken: een ander filter staat onder dataselectie")
+check(o["Other"] == {"PrimaryKeys": {"D": "ID", "T": "ID", "P": "ID,Line"}} and o["Status"] == "differs", "vergelijken: een andere primary key is een afwijking")
+check(o["Connection"] == {"D": "CON_X", "T": "CON_X", "P": "CON_P"} and "Watermark" not in o["Selection"] | o["Other"], "vergelijken: de connectie staat apart, het watermark telt niet mee")
+check(c["Present"] == {"D": True, "T": False, "P": False} and c["Status"] == "missing", "vergelijken: een tabel die ontbreekt")
+check(wd["Status"] == "same" and wd["Selection"] == {} and wd["Other"] == {} and wd["Connection"] == {"D": "CON_X", "T": "CON_X", "P": "CON_P"},
+      "vergelijken: alleen een andere connectie telt niet als verschil")
+only_sel = compare({"D": ds, "T": scope["build_state"]("TEST", "T", "WS T", sources_rows, [row("Orders", SourceFilter="Amount > 5"), row("Customers"), row("Wide", PrimaryKeys="ID")])})
+check({r["Table"]: r["Status"] for r in only_sel} == {"dbo.Orders": "selection", "dbo.Customers": "same", "dbo.Wide": "same"}, "vergelijken: alleen de dataselectie anders")
+rules2 = scope["build_state"]("TEST", "T", "WS T", sources_rows, [row("Orders", SourceFilter="Amount > 0", SilverRules=rules)])
+check(compare({"D": ds, "T": rules2})[0]["Other"].keys() == {"SilverRules"}, "vergelijken: andere Silver-regels zijn een afwijking")
+shifted_cmp = compare({"D": ds, "T": scope["build_state"]("TEST", "T", "WS T", two, [row("Orders", SourceFilter="Amount > 0")])})
+check(shifted_cmp[0]["Present"] == {"D": True, "T": True}, "vergelijken: herkent een tabel ook als de alias verschilt")
+check(compare({"D": ds}) and compare({"D": ds})[0]["Status"] == "same", "vergelijken: één omgeving geeft geen verschillen")
+
+# ---- the comparison as a table, and tab 4 -------------------------------------------------------------------
+print("=== tab Omgevingen ===")
+compared = compare({"D": ds, "T": ts, "P": ps})
+shown = scope["comparison_html"](compared, ["D", "T", "P"], "diff")
+check("dbo.Orders" in shown and "dbo.Customers" in shown and "dbo.Wide" not in shown, "tabel: 'alleen verschillen' laat gelijke tabellen weg (een andere connectie telt niet)")
+check("dbo.Wide" in scope["comparison_html"](compared, ["D", "T", "P"], "all"), "tabel: 'alles' toont ook gelijke tabellen")
+check("dbo.Customers" not in scope["comparison_html"](compared, ["D", "T", "P"], "differs") and "dbo.Orders" in scope["comparison_html"](compared, ["D", "T", "P"], "differs"), "tabel: filter op een status")
+check("SourceFilter" in shown and "Amount &gt; 5" in shown and "Amount > 5" not in shown, "tabel: waarden staan er, en HTML-tekens zijn ontsnapt")
+evil = compare({"D": scope["build_state"]("TEST", "D", "W", sources_rows, [row("<b>x</b>")]), "T": scope["build_state"]("TEST", "T", "W", sources_rows, [])})
+check("<b>x</b>" not in scope["comparison_html"](evil, ["D", "T"], "all"), "tabel: een tabelnaam met HTML wordt ontsnapt")
+
+calls = []
+scope["compare"] = lambda domain, envs: (calls.append(("compare", domain, envs)), compare({"D": ds, "T": ts, "P": ps}))[1]
+scope["copy_registration"] = lambda domain, to_environments, **kw: calls.append(("copy", domain, to_environments, kw))
+ui = types.SimpleNamespace(domain=w.Text("INTEGRATION"), _guard=lambda b, f: b.on_click(lambda _: f()))
+page = scope["EnvironmentsPage"](ui)
+check("icon=" not in NOTEBOOK, "geen iconen: Fabric laadt FontAwesome niet, ze zijn onzichtbaar")
+check(page.ov_value.continuous_update is False,
+      "tab: tekstvelden leggen hun waarde vast bij verlaten (Fabric loopt achter bij elke toetsaanslag; in de trial werd 'Amount > 1' als 'A' toegevoegd)")
+check(page.view == 0 and page.compare_view.layout.display == "" and page.copy_view.layout.display == "none", "tab: opent op Vergelijken")
+check(page.view_bar.buttons[0].button_style == "info" and page.view_bar.buttons[1].button_style == "", "tab: de gekozen weergave heeft een eigen stijl, anders dan de hoofdtabs")
+page.view_bar.buttons[1].click()
+check(page.view == 1 and page.compare_view.layout.display == "none" and page.copy_view.layout.display == "" and page.view_bar.buttons[1].button_style == "info" and page.view_bar.buttons[0].button_style == "",
+      "tab: omschakelen naar Overzetten")
+page.show_view(0)
+page.compare_btn.click()
+check(calls[-1] == ("compare", "INTEGRATION", ["D", "T", "P"]) and "dbo.Orders" in page.table.value, "tab: Vergelijken leest de aangevinkte omgevingen en toont de tabel")
+check("niet in T, P" in page.table.value, "tab: bij 'ontbreekt' staat in welke omgevingen de tabel niet staat")
+check(page.to_copy_btn.layout.display == "", "tab: na het vergelijken is 'Naar Overzetten' beschikbaar")
+n = len(calls)
+page.to_copy_btn.click()
+check(page.view == 1 and page.from_dd.value == "D" and [e for e, c in page.to_checks.items() if c.value] == ["T", "P"] and len(calls) == n,
+      "tab: 'Naar Overzetten' vult de omgevingen in en start niets")
+page.show_view(0)
+page.cmp_checks["D"].value = False
+page.compare_btn.click()
+page.to_copy_btn.click()
+check(page.from_dd.value == "T" and [e for e, c in page.to_checks.items() if c.value] == ["P"], "tab: zonder D in de vergelijking is de eerste omgeving de bron")
+page.from_dd.value = "D"
+page.to_checks["T"].value = page.to_checks["P"].value = True
+page.show_view(0)
+page.cmp_checks["D"].value = True
+page.cmp_checks["P"].value = False
+page.compare_btn.click()
+check(calls[-1] == ("compare", "INTEGRATION", ["D", "T"]), "tab: een niet aangevinkte omgeving gaat niet mee")
+page.cmp_checks["T"].value = False
+n = len(calls)
+page.compare_btn.click()
+check(len(calls) == n and "minstens twee" in page.cmp_res.widget.value and page.pane() is page.cmp_res, "tab: minder dan twee omgevingen: melding in het zichtbare vak, niets gelezen")
+page.show_view(1)
+check(page.pane() is page.res, "tab: op Overzetten gaan meldingen naar het vak van die weergave")
+check(page.from_dd.value == "D" and [e for e, c in page.to_checks.items() if c.value] == ["T", "P"], "tab: standaard van D naar T en P")
+check(page.to_checks["D"].disabled and not page.to_checks["T"].disabled, "tab: de bronomgeving is uitgeschakeld als doel")
+page.from_dd.value = "T"
+check(page.to_checks["T"].disabled and page.to_checks["T"].value is False and not page.to_checks["D"].disabled, "tab: een andere bron schakelt het vinkje van die omgeving uit en zet het uit")
+page.from_dd.value = "D"
+page.to_checks["T"].value = page.to_checks["P"].value = True
+check(page.ov_box.layout.display == "none", "tab: het override-formulier is verborgen tot je het aanzet")
+page.ov_enable.value = True
+check(page.ov_box.layout.display == "", "tab: het vinkje toont het override-formulier")
+page.ov_field.value = "LoadGroup"
+check("laadgroep" in page.ov_field_label.value and "laadgroep" in page.ov_help.value, "tab: de uitleg bij de gekozen instelling staat in een tooltip en zichtbaar eronder")
+page.ov_field.value = "SourceFilter"
+page.ov_env.value, page.ov_table.value, page.ov_value.value = "T", "dbo.Orders", "Amount > 9"
+page.ov_add.click()
+check(page.overrides == {"T": {"dbo.Orders": {"SourceFilter": "Amount > 9"}}} and len(page.ov_rows.children) == 1, "tab: een override per omgeving en tabel toevoegen")
+check("Amount &gt; 9" in page.ov_rows.children[0].children[1].value, "tab: de regel toont de waarde, ontsnapt")
+page.ov_field.value = "IsActive"
+check(page.ov_active.layout.display == "" and page.ov_value.layout.display == "none", "tab: bij Actief een Aan/Uit-keuze in plaats van een tekstveld")
+page.ov_table.value, page.ov_active.value = "*", 0
+page.ov_add.click()
+check(page.overrides["T"]["*"] == {"IsActive": 0} and len(page.ov_rows.children) == 2, "tab: Aan/Uit wordt 1 of 0, '*' geldt voor alle tabellen")
+page.ov_rows.children[1].children[0].click()
+check(page.overrides == {"T": {"dbo.Orders": {"SourceFilter": "Amount > 9"}}} and len(page.ov_rows.children) == 1, "tab: een override verwijderen met het kruisje van die regel")
+page.ov_table.value, page.ov_active.value = "*", 0
+page.ov_add.click()
+check(page.copy_btn.disabled and "proefdraaien" in page.copy_hint.value.lower(), "tab: overzetten kan niet voor een proefdraai, en de zichtbare regel zegt waarom")
+page.confirm.value = True
+check(page.copy_btn.disabled, "tab: een vinkje alleen is niet genoeg")
+page.dry_btn.click()
+kind, domain, to, kw = calls[-1]
+check(kind == "copy" and domain == "INTEGRATION" and to == ["T", "P"] and kw["dry_run"] is True and kw["from_environment"] == "D" and kw["update"] is False and kw["only_active"] is True,
+      "tab: proefdraai roept copy_registration aan met dry_run=True")
+check(kw["overrides"] == {"T": {"dbo.Orders": {"SourceFilter": "Amount > 9"}, "*": {"IsActive": 0}}}, "tab: de overrides gaan mee")
+check(page.confirm.value is False and "gecontroleerd" in page.copy_hint.value, "tab: een vinkje van vóór de proefdraai telt niet mee, en de regel vraagt erom")
+page.confirm.value = True
+check(not page.copy_btn.disabled and "Klaar" in page.copy_hint.value, "tab: na proefdraai en vinkje kan overzetten")
+page.copy_btn.click()
+check(calls[-1][3]["dry_run"] is False and page.copy_btn.disabled and "Al overgezet" in page.copy_hint.value, "tab: overzetten draait echt, en daarna niet nog een keer")
+n = len(calls)
+page.copy_btn.click()
+check(len(calls) == n, "tab: een tweede klik doet niets")
+page.dry_btn.click()
+page.confirm.value = True
+page.update_cb.value = True
+check(page.copy_btn.disabled and page.confirm.value is False and "proefdraaien" in page.copy_hint.value.lower(), "tab: een wijziging na de proefdraai maakt hem ongeldig")
+page.update_cb.value = False
+page.ov_enable.value = False
+page.dry_btn.click()
+check(calls[-1][3]["overrides"] is None, "tab: met het override-vinkje uit gaan de overrides niet mee")
+page.to_checks["P"].value = False
+page.dry_btn.click()
+check(calls[-1][2] == ["T"], "tab: een niet aangevinkte doelomgeving valt weg")
+page.to_checks["T"].value = False
+check("omgeving" in page.copy_hint.value and page.copy_btn.disabled, "tab: zonder doelomgeving zegt de regel dat je er een aanvinkt")
+page.ov_enable.value = True
+page.ov_clear.click()
+check(page.overrides == {} and page.ov_rows.children == [], "tab: overrides wissen")
+check(all(getattr(page, n).tooltip for n in ("compare_btn", "dry_btn", "copy_btn", "to_copy_btn")) and "Schrijft" in page.copy_btn.tooltip, "tab: de knoppen hebben een tooltip")
+# Fabric shows a tooltip on a button and on HTML (a title), but not on a checkbox or dropdown: their labels are HTML
+labels = {"Toon": page.show_label, "Van": page.from_label, "bijwerken": page.update_label, "uit staan": page.inactive_label}
+check(all("title=" in w_.value for w_ in labels.values()) and all(text in w_.value for text, w_ in labels.items()), "tab: de labels van vinkjes en dropdowns zijn HTML met een tooltip")
+check("Ontbreekt" in page.show_label.value and "Filter, kolommen, LoadGroup en actief blijven" in page.update_label.value, "tab: de tooltips hebben de afgesproken tekst")
+check(all("title=" in row.children[1].value for row in (*page.cmp_rows, *page.to_rows)) and all(not hasattr(c, "description_tooltip") for c in page.to_checks.values()),
+      "tab: ook de omgevingsvinkjes hebben een tooltip, zonder het verouderde description_tooltip (dat geeft een waarschuwing)")
+page.ov_field.value = "LoadGroup"
+check("laadgroep" in page.ov_field_label.value, "tab: het label bij Instelling volgt de gekozen instelling")
+shown_all = scope["comparison_html"](compared, ["D", "T", "P"], "all")
+check("title=" in shown_all and "geregistreerd in deze omgeving" in shown_all, "tabel: tooltip op de kolomkoppen")
+header = types.SimpleNamespace(env=w.Dropdown(value="T"), env_other=w.Text("DEV_X"), OTHER_ENV="Andere…")
+check(scope["RegistrationUI"]._environment(header) == "T", "kop: D, T en P komen uit de dropdown")
+header.env.value = "Andere…"
+check(scope["RegistrationUI"]._environment(header) == "DEV_X", "kop: 'Andere…' gebruikt het tekstveld (A en DEV_<NAAM>)")
+
+# the tab bar: the chosen tab is blue and the others are plain (a ToggleButtons selection is barely visible in Fabric)
+seen = []
+bar = scope["TabBar"](["een", "twee", "drie"], seen.append)
+check(bar.value == 0 and [b.button_style for b in bar.buttons] == ["primary", "", ""], "tabbalk: de eerste tab is gekozen en blauw")
+bar.buttons[2].click()
+check(bar.value == 2 and [b.button_style for b in bar.buttons] == ["", "", "primary"] and seen == [2], "tabbalk: klikken kiest die tab en meldt het")
+bar.value = 1
+check([b.button_style for b in bar.buttons] == ["", "primary", ""] and seen == [2, 1], "tabbalk: in code kiezen werkt ook (Terug naar begin)")
+
+# tab 3: the confirmation counts only after the dry run (the checkbox ticked beforehand must not carry over)
+registered = []
+scope["register"] = lambda *a, **kw: registered.append(kw.get("dry_run"))
+tab3 = types.SimpleNamespace(confirm=w.Checkbox(value=True), res=scope["Pane"](), dry_run_of=None, check=lambda: True,
+                             _payload=lambda: ([{"Source": "S"}], [{"Source": "S"}]), state={"domain": "TEST", "environment": "D"},
+                             _fingerprint=lambda: "fp", _say=lambda *a, **kw: None)
+scope["RegistrationUI"].dry_run(tab3)
+check(registered == [True] and tab3.dry_run_of == "fp", "tab 3: de proefdraai draait met dry_run=True")
+check(tab3.confirm.value is False, "tab 3: een vinkje van vóór de proefdraai telt niet mee")
 
 # ---- ColumnPicker -------------------------------------------------------------------------------------
 print("=== ColumnPicker ===")
