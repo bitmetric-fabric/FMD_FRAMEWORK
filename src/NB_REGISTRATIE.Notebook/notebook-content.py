@@ -26,6 +26,8 @@
 #    zoeken, selecteren, primary key, laadwijze en cleansing rules instellen.
 #    Tab 3: het overzicht van wat er wordt geregistreerd, **Controleren**, **Proefdraaien** en pas daarna **Registreren**.
 #    Tab 4: **Omgevingen** vergelijken (D, T, P) en wat in D staat **overzetten** naar T en P, met eigen filters per omgeving.
+#    Tab 5: **Beheer**: de laadstatus en wachtrij per tabel, een watermark resetten, open bestanden op verwerkt zetten, en opruimen na een
+#    wijziging van de primary key (Bronze en Silver wissen). Elke actie begint met een proefdraai; een actie die iets wist, of in P, vraagt om de omgeving te typen.
 # 4. Dezelfde editor gebruik je in elke stap van een feature:
 #    - tijdens de feature in je eigen developer-workspace: omgeving `DEV_<NAAM>` (kies in de kop "Andere…" en vul de naam in, bijvoorbeeld `DEV_MITCHELL`; de
 #      workspace `DEV_<NAAM>_<prefix>_INTEGRATION_DATA` moet al in de configdb staan, en de bronbinding is die van D);
@@ -90,7 +92,7 @@
 # MARKDOWN ********************
 
 # ## Stap 2: de editor
-# Klik op **Laden uit de configdb**. Daarna werk je van links naar rechts door de tabs; tab 4 is voor het vergelijken en overzetten tussen omgevingen.
+# Klik op **Laden uit de configdb**. Daarna werk je van links naar rechts door de tabs; tab 4 is voor het vergelijken en overzetten tussen omgevingen, tab 5 voor het dagelijks beheer.
 
 # CELL ********************
 
