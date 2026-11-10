@@ -477,7 +477,8 @@ check("2026-02-01" in plan[0]["Steps"][0] and "2026-03-01" in plan[0]["Steps"][0
 plan = pm("skip", [st(1, PendingLandingzoneFiles=2, PendingBronzeFiles=5)], layer="Both")
 check("2" in plan[0]["Steps"][0] and "5" in plan[0]["Steps"][0], "plan skip: aantallen per laag")
 plan = pm("skip", [st(1, PendingLandingzoneFiles=2, PendingBronzeFiles=5)], layer="Bronze")
-check("Bronze" in plan[0]["Steps"][0] and "Landingzone" not in plan[0]["Steps"][0], "plan skip: alleen de gekozen laag")
+check("Bronze" in plan[0]["Steps"][0] and "Landingzone" not in plan[0]["Steps"][0] and "landingzone" not in plan[0]["Steps"][0], "plan skip: alleen de gekozen laag")
+check("(landingzone en Bronze)" in pm("skip", [st(1)], layer="Both")[0]["Steps"][0] and "Both" not in pm("skip", [st(1)], layer="Both")[0]["Steps"][0], "plan skip: de laag in gewone woorden, niet als codewoord")
 exists = {p: True for p in paths["Silver"][:1] + paths["Bronze"][1:]}
 plan = pm("rebuild", [st(1, SourceName="Customer")], {1: info1}, exists=exists)
 steps = " ".join(plan[0]["Steps"])
@@ -515,7 +516,7 @@ mg("INTEGRATION", "D", "reset_to", [1], "test", value="2026-03-01 00:00:00.000",
 check(log[0][2]["LoadValue"] == "2026-03-01 00:00:00.000", "manage reset_to echt: de waarde gaat mee")
 log.clear()
 res = mg("INTEGRATION", "D", "skip", [2], "test", layer="Bronze", dry_run=True)
-check(log and log[0][1] == "sp_SkipOpenPipelineQueue" and log[0][2]["DryRun"] == 1 and log[0][2]["Layer"] == "Bronze" and "would be skipped" in res["results"][0]["Result"],
+check(log and log[0][1] == "sp_SkipOpenPipelineQueue" and log[0][2]["DryRun"] == 1 and log[0][2]["Layer"] == "Bronze" and "zou op verwerkt gezet worden" in res["results"][0]["Result"],
       "manage skip proefdraai: de procedure met DryRun = 1, en de uitkomst staat in het resultaat")
 log.clear()
 mg("INTEGRATION", "D", "skip", [2], "test", layer="Both", dry_run=False)

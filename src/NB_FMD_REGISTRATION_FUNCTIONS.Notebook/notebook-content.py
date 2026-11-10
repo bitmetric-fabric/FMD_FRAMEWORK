@@ -1202,6 +1202,9 @@ MANAGE_ACTIONS = {
     'rebuild': 'Opruimen na een PK-wijziging (Bronze en Silver wissen)',
 }
 MANAGE_LAYERS = ('Both', 'Landingzone', 'Bronze')
+_LAYER_TEXT = {'Both': 'landingzone en Bronze', 'Landingzone': 'landingzone', 'Bronze': 'Bronze'}
+# What execution.sp_SkipOpenPipelineQueue reports, in the language of the editor.
+_QUEUE_RESULT = {'nothing open': 'niets open', 'dry run: would be skipped': 'zou op verwerkt gezet worden', 'skipped': 'op verwerkt gezet', 'not requested': 'niet gevraagd'}
 
 _SQL_STATUS = """
 SELECT [LandingzoneEntityId], [DataSourceName], [SourceSchema], [SourceName], [IsActive], [LoadValue], [LastLoadDatetime], [LandingzoneLastEnd],
@@ -1301,7 +1304,7 @@ def plan_manage(action, status_rows, rebuild_info=None, value=None, layer='Both'
                 parts.append(f'landingzone {open_lz}')
             if layer in ('Both', 'Bronze'):
                 parts.append(f'Bronze {open_br}')
-            item['Steps'].append(f"Open wachtrijrijen op verwerkt zetten ({layer}): {', '.join(parts)}. Er wordt niets geladen.")
+            item['Steps'].append(f"Open wachtrijrijen op verwerkt zetten ({_LAYER_TEXT[layer]}): {', '.join(parts)}. Er wordt niets geladen.")
         elif action == 'rebuild':
             info = (rebuild_info or {}).get(row['LandingzoneEntityId'], {})
             found = delta_paths(info) if info else {'Bronze': [], 'Silver': []}
@@ -1347,7 +1350,7 @@ def manage(domain, environment, action, ids, reason, value=None, layer='Both', d
 
     def queue(item_id, layer_name, dry):
         sets = call('[execution].[sp_SkipOpenPipelineQueue]', LandingzoneEntityId=item_id, Layer=layer_name, Reason=reason, DryRun=1 if dry else 0)['result_sets']
-        return '; '.join(f"{r['Layer']}: {r['OpenRows']} open, {r['Result']}" for r in sets[-1])
+        return '; '.join(f"{r['Layer']}: {r['OpenRows']} open, {_QUEUE_RESULT.get(r['Result'], r['Result'])}" for r in sets[-1])
 
     results = []
     for item in plan:
