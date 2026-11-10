@@ -373,3 +373,21 @@ die via `build_payload` en `register()` aan T en P. Geen nieuwe procedure en gee
   gecontroleerd met `validate_state`. Fouten stoppen de kopie voordat er iets geschreven wordt.
 - Bewust geen knop in de editor: de editor blijft de plek voor een wijziging in een omgeving, de kopie is een
   aanroep in `NB_REGISTRATIE`.
+
+## Aanvulling 2026-11-10: omgevingen vergelijken en overzetten in de editor (tab 4)
+
+**Correctie op "Bewust geen knop in de editor" (2026-10-26).** Een beheerder moet zonder code kunnen zien waar D, T en P
+verschillen en D kunnen overzetten. Tab 4 doet dat; het schrijven blijft `copy_registration`, met dezelfde proefdraai en
+bevestiging als tab 3. Op tab 3 en 4 zet de proefdraai het bevestigingsvinkje terug, zodat bevestigen pas telt nadat je de
+uitkomst hebt gezien (voorheen telde een vinkje van vóór de proefdraai op tab 3 mee).
+
+- `compare_environments` (alleen lezen) geeft per tabel de verschillen tussen omgevingen. Een afwijking in de
+  dataselectie (`SELECTION_FIELDS`) is toegestaan en staat apart; een andere connectie telt niet als verschil (P mag bewust
+  een andere gateway gebruiken).
+- Een tabel en een bron worden tussen omgevingen herkend aan namespace, database, brontype, schema en naam, niet aan de
+  alias. De alias volgt per workspace uit de bronnen die er staan (`AFAS`, of `AFAS_<bron>` bij een gedeelde namespace) en
+  kan per omgeving verschillen. Voorheen zag `plan_copy` een bestaande tabel dan als nieuw, of miste de bron in de payload.
+- Een bron die het doel al heeft behoudt de connectie van het doel. `sp_RegisterEntities` herkent een `DataSource` aan
+  connectie, database en type; met de connectie van D zou P een tweede `DataSource` met dubbele entiteiten krijgen
+  (P-019). *Vastgesteld* in de code; *getest in eigen omgeving* met een nepdoel in `scripts/test_registration_editor.py`,
+  nog niet tegen een echte configdb.
