@@ -583,11 +583,11 @@ check(tuple(mpage.list.value) == (), "beheer: selectie wissen")
 check(mpage.run_btn.disabled and "proefdraaien" in mpage.hint.value.lower(), "beheer: uitvoeren staat uit voor een proefdraai, en de regel zegt waarom")
 
 mpage.action.value = "reset_to"
-check(mpage.value.layout.display == "" and mpage.layer.layout.display == "none", "beheer: bij een waarde-actie een tekstveld, geen laagkeuze")
+check(mpage.value.layout.display == "" and mpage.layer_row.layout.display == "none", "beheer: bij een waarde-actie een tekstveld, geen laagkeuze")
 mpage.action.value = "skip"
-check(mpage.layer.layout.display == "" and mpage.value.layout.display == "none", "beheer: bij overslaan een laagkeuze")
+check(mpage.layer_row.layout.display == "" and mpage.value.layout.display == "none", "beheer: bij overslaan een laagkeuze")
 mpage.action.value = "reset"
-check(mpage.layer.layout.display == "none" and mpage.value.layout.display == "none" and mpage.confirm_text.layout.display == "none", "beheer: bij een gewone reset in D geen extra bevestiging")
+check(mpage.layer_row.layout.display == "none" and mpage.value.layout.display == "none" and mpage.confirm_text.layout.display == "none", "beheer: bij een gewone reset in D geen extra bevestiging")
 
 mpage.dry_btn.click()
 check("Selecteer" in mpage.res.widget.value and mpage.dry_of is None and not manage_calls, "beheer: een proefdraai zonder selectie geeft een melding in het zichtbare vak en roept niets aan")

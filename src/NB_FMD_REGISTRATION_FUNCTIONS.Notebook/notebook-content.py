@@ -2184,7 +2184,8 @@ class ManagePage:
         self.action = w.Dropdown(options=[(text, key) for key, text in MANAGE_ACTIONS.items()], value='reset', layout=w.Layout(width='520px'))
         self.value = w.Text(description='Waarde', placeholder='bijvoorbeeld 2026-01-01 00:00:00.000, of een getal', continuous_update=False,
                             layout=w.Layout(width='620px', display='none'), style=label())
-        self.layer = w.Dropdown(options=self.LAYERS, value='Both', layout=w.Layout(width='260px', display='none'))
+        self.layer = w.Dropdown(options=self.LAYERS, value='Both', layout=w.Layout(width='260px'))
+        self.layer_row = w.HBox([_label('Laag', 'Welke wachtrij op verwerkt wordt gezet', '40px'), self.layer], layout=w.Layout(display='none'))
         self.reason = w.Text(description='Reden', placeholder='verplicht; komt in logging.ConfigChange', continuous_update=False, layout=w.Layout(width='700px'), style=label())
         self.dry_btn = _tip(w.Button(layout=wide_btn(), description='1. Proefdraaien', button_style='info'),
                             'Laat per tabel zien wat er zou gebeuren. Schrijft en wist niets.')
@@ -2200,7 +2201,7 @@ class ManagePage:
             w.HBox([_label('Toon', 'Filter op de status uit integration.vw_LoadStatus', '40px'), self.status_filter, w.HTML('&nbsp;&nbsp;'), self.search]), self.list,
             w.HBox([self.select_all_btn, self.clear_btn, w.HTML('&nbsp;&nbsp;'), self.count]),
             _heading('Actie', 'Voor de geselecteerde tabellen. Een actie die iets wist, of een actie in P, vraagt om de omgeving te typen.'),
-            self.action, self.value, w.HBox([_label('Laag', 'Welke wachtrij op verwerkt wordt gezet', '40px'), self.layer]), self.reason,
+            self.action, self.value, self.layer_row, self.reason,
             w.HBox([self.dry_btn]), self.result, self.res.widget, self.confirm_text, w.HBox([self.run_btn, self.hint])], width='100%')
         ui._guard(self.load_btn, self.load)
         ui._guard(self.dry_btn, self.dry_run)
@@ -2272,7 +2273,7 @@ class ManagePage:
     # ---- the action ----------------------------------------------------------------------------------
     def _action_changed(self):
         self.value.layout.display = '' if self.action.value == 'reset_to' else 'none'
-        self.layer.layout.display = '' if self.action.value == 'skip' else 'none'
+        self.layer_row.layout.display = '' if self.action.value == 'skip' else 'none'
         self.update_state()
 
     def _ids(self):
