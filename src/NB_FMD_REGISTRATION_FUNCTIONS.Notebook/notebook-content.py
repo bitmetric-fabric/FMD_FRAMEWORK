@@ -1210,6 +1210,210 @@ def start_discovery(connection_name, data_source_name, schema_filter='', domain=
 # META   "language_group": "jupyter_python"
 # META }
 
+# CELL ********************
+
+# Day-to-day management of the registered tables of one DATA workspace: status and queue, the watermark, the open queue, and the cleanup
+# after a change of the primary key. Everything that writes to the configuration database goes through the procedures in execution.*
+# (they write logging.ConfigChange, with the reason), and the cleanup removes the Delta folders of Bronze and Silver with notebookutils.fs.
+# Every action has a dry run; the editor only enables the real run for exactly the selection of the dry run.
+
+MANAGE_ACTIONS = {
+    'reset': 'Watermark resetten (de volgende load laadt alles)',
+    'reset_to': 'Watermark op een waarde zetten',
+    'skip': 'Open wachtrij op verwerkt zetten',
+    'rebuild': 'Opruimen na een PK-wijziging (Bronze en Silver wissen)',
+}
+MANAGE_LAYERS = ('Both', 'Landingzone', 'Bronze')
+_LAYER_TEXT = {'Both': 'landingzone en Bronze', 'Landingzone': 'landingzone', 'Bronze': 'Bronze'}
+# What execution.sp_SkipOpenPipelineQueue reports, in the language of the editor.
+_QUEUE_RESULT = {'nothing open': 'niets open', 'dry run: would be skipped': 'zou op verwerkt gezet worden', 'skipped': 'op verwerkt gezet', 'not requested': 'niet gevraagd'}
+
+_SQL_STATUS = """
+SELECT [LandingzoneEntityId], [DataSourceName], [SourceSchema], [SourceName], [IsActive], [LoadValue], [LastLoadDatetime], [LandingzoneLastEnd],
+       [BronzeLastEnd], [SilverLastEnd], [LastErrorAt], [PendingLandingzoneFiles], [PendingBronzeFiles], [Status]
+FROM [integration].[vw_LoadStatus]
+WHERE [WorkspaceName] = ?
+ORDER BY [DataSourceName], [SourceSchema], [SourceName]
+"""
+
+_SQL_REBUILD = """
+SELECT le.[LandingzoneEntityId], ds.[Namespace], le.[SourceSchema], le.[SourceName], ble.[PrimaryKeys],
+       bl.[WorkspaceGuid] AS BronzeWorkspace, bl.[LakehouseGuid] AS BronzeLakehouse, ble.[Schema] AS BronzeSchema, ble.[Name] AS BronzeName,
+       sl.[WorkspaceGuid] AS SilverWorkspace, sl.[LakehouseGuid] AS SilverLakehouse, sle.[Schema] AS SilverSchema, sle.[Name] AS SilverName,
+       ISNULL(sle.[IsHistorized], 0) AS IsHistorized
+FROM [integration].[LandingzoneEntity] le
+JOIN [integration].[DataSource] ds ON ds.[DataSourceId] = le.[DataSourceId]
+LEFT JOIN [integration].[BronzeLayerEntity] ble ON ble.[LandingzoneEntityId] = le.[LandingzoneEntityId]
+LEFT JOIN [integration].[Lakehouse] bl ON bl.[LakehouseId] = ble.[LakehouseId]
+LEFT JOIN [integration].[SilverLayerEntity] sle ON sle.[BronzeLayerEntityId] = ble.[BronzeLayerEntityId]
+LEFT JOIN [integration].[Lakehouse] sl ON sl.[LakehouseId] = sle.[LakehouseId]
+WHERE le.[LandingzoneEntityId] IN ({ids})
+"""
+
+
+def load_status(domain, environment):
+    """The load status per registered table of the DATA workspace of this domain and environment (integration.vw_LoadStatus), read-only."""
+    name, _ = resolve_data_workspace(domain, environment)
+    return read_config(_SQL_STATUS, name)
+
+
+def delta_paths(info):
+    """
+    The Delta folders of one table in Bronze and Silver: {'Bronze': [paths], 'Silver': [paths]}. The load notebooks write to
+    Tables/<namespace>/<schema>_<name> in a lakehouse with schemas and to Tables/<namespace>_<schema>_<name> in one without. This notebook
+    does not know which, so it lists both; the caller only touches the ones that exist.
+    """
+    out = {}
+    for layer in ('Bronze', 'Silver'):
+        workspace, lakehouse, schema, name = (info.get(f'{layer}{k}') for k in ('Workspace', 'Lakehouse', 'Schema', 'Name'))
+        if not (workspace and lakehouse and name):
+            out[layer] = []
+            continue
+        base = f"abfss://{str(workspace).lower()}@onelake.dfs.fabric.microsoft.com/{str(lakehouse).lower()}/Tables"
+        out[layer] = [f"{base}/{info['Namespace']}/{schema}_{name}", f"{base}/{info['Namespace']}_{schema}_{name}"]
+    return out
+
+
+def validate_watermark(value):
+    """'' when execution.sp_ResetLandingzoneEntityLastLoadValue accepts the value (a datetime as yyyy-mm-dd hh:mi:ss.mmm, or a whole number, at most 50 characters), else why not."""
+    text = (value or '').strip()
+    if not text:
+        return 'Vul een waarde in.'
+    if len(text) > 50:
+        return 'Maximaal 50 tekens.'
+    if re.fullmatch(r'-?\d+', text) or re.fullmatch(r'\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2}(\.\d{1,7})?)?', text):
+        return ''
+    return 'Een datum als yyyy-mm-dd hh:mi:ss.mmm, of een getal.'
+
+
+def manage_problems(action, ids, reason, value=None, layer='Both'):
+    """What is wrong with a request, before anything is read or written: a list of texts, empty when it is fine."""
+    problems = []
+    if action not in MANAGE_ACTIONS:
+        problems.append(f'Onbekende actie: {action}.')
+    if not ids:
+        problems.append('Selecteer minstens één tabel.')
+    if not (reason or '').strip():
+        problems.append('Vul een reden in: die komt in logging.ConfigChange.')
+    if action == 'reset_to' and validate_watermark(value):
+        problems.append('Waarde: ' + validate_watermark(value))
+    if layer not in MANAGE_LAYERS:
+        problems.append(f'Onbekende laag: {layer}.')
+    return problems
+
+
+def plan_manage(action, status_rows, rebuild_info=None, value=None, layer='Both', exists=None):
+    """
+    What an action would do per table, without database or lake access: [{'Id', 'Table', 'Steps': [text], 'Warnings': [text], 'Delete': [paths]}].
+    status_rows are the rows of load_status for the chosen tables. For 'rebuild', rebuild_info is {id: row of _SQL_REBUILD} and exists
+    {path: bool} says which Delta folders are there; only those are in 'Delete'.
+    """
+    plan = []
+    for row in status_rows:
+        wm = row.get('LoadValue')
+        old = str(wm) if wm else '(leeg)'
+        open_lz, open_br = row.get('PendingLandingzoneFiles') or 0, row.get('PendingBronzeFiles') or 0
+        item = {'Id': row['LandingzoneEntityId'], 'Table': f"{row['SourceSchema']}.{row['SourceName']}", 'Steps': [], 'Warnings': [], 'Delete': []}
+        if action == 'reset':
+            item['Steps'].append(f'Watermark {old} → (leeg): de volgende load laadt alles.')
+            if open_lz + open_br:
+                item['Warnings'].append(f'Er staan {open_lz + open_br} open wachtrijrijen (landingzone {open_lz}, Bronze {open_br}); zet ze zo nodig ook op verwerkt.')
+        elif action == 'reset_to':
+            item['Steps'].append(f'Watermark {old} → {value.strip()}.')
+        elif action == 'skip':
+            parts = []
+            if layer in ('Both', 'Landingzone'):
+                parts.append(f'landingzone {open_lz}')
+            if layer in ('Both', 'Bronze'):
+                parts.append(f'Bronze {open_br}')
+            item['Steps'].append(f"Open wachtrijrijen op verwerkt zetten ({_LAYER_TEXT[layer]}): {', '.join(parts)}. Er wordt niets geladen.")
+        elif action == 'rebuild':
+            info = (rebuild_info or {}).get(row['LandingzoneEntityId'], {})
+            found = delta_paths(info) if info else {'Bronze': [], 'Silver': []}
+            for lay in ('Silver', 'Bronze'):  # Silver reads Bronze, so Silver goes first
+                present = [p for p in found[lay] if (exists or {}).get(p)]
+                item['Delete'] += present
+                item['Steps'].append(f'{lay}-tabel wissen: {", ".join(p.split("/Tables/")[1] for p in present)}.' if present else f'{lay}-tabel: bestaat niet, niets te wissen.')
+            item['Steps'].append('Open wachtrij van landingzone en Bronze op verwerkt zetten.')
+            item['Steps'].append(f'Watermark {old} → (leeg): de volgende load laadt alles.')
+            if info and info.get('IsHistorized'):
+                item['Warnings'].append('De Silver-historie (SCD2) van deze tabel gaat verloren.')
+            if info:
+                item['Warnings'].append(f"Primary key in de configdb: {info.get('PrimaryKeys') or '(leeg)'}. Controleer of dat de nieuwe is.")
+            item['Warnings'].append('Laat geen load van deze tabel lopen tijdens het opruimen.')
+        plan.append(item)
+    return plan
+
+
+def manage(domain, environment, action, ids, reason, value=None, layer='Both', dry_run=True):
+    """
+    Runs one action on the chosen tables (ids are LandingzoneEntityId's) of an environment, and returns {'plan', 'results', 'dry_run'}.
+    dry_run (default) writes nothing: it plans, and for the open queue it uses the dry run of execution.sp_SkipOpenPipelineQueue.
+    The real cleanup removes the Delta folders first and only then changes the configuration database, per table: if the removal
+    fails, nothing in the configuration database has changed for that table. Every step can be repeated.
+    """
+    problems = manage_problems(action, ids, reason, value, layer)
+    if problems:
+        raise ValueError(' '.join(problems))
+    status = {r['LandingzoneEntityId']: r for r in load_status(domain, environment)}
+    unknown = [i for i in ids if i not in status]
+    if unknown:
+        raise ValueError(f'Niet gevonden in {environment}: {unknown}.')
+    rows = [status[i] for i in ids]
+    info = exists = None
+    if action == 'rebuild':
+        info = {r['LandingzoneEntityId']: r for r in read_config(_SQL_REBUILD.format(ids=','.join('?' * len(ids))), *ids)}
+        exists = {p: bool(notebookutils.fs.exists(p)) for i in info.values() for ps in delta_paths(i).values() for p in ps}
+    plan = plan_manage(action, rows, info, value, layer, exists)
+    driver, connstring, database = resolve_config_database()
+
+    def call(proc, **params):
+        return execute_with_outputs(proc, driver, connstring, database, **params)
+
+    def queue(item_id, layer_name, dry):
+        sets = call('[execution].[sp_SkipOpenPipelineQueue]', LandingzoneEntityId=item_id, Layer=layer_name, Reason=reason, DryRun=1 if dry else 0)['result_sets']
+        return '; '.join(f"{r['Layer']}: {r['OpenRows']} open, {_QUEUE_RESULT.get(r['Result'], r['Result'])}" for r in sets[-1])
+
+    results = []
+    for item in plan:
+        try:
+            if action == 'reset':
+                if dry_run:
+                    text = 'proefdraai: niets geschreven'
+                else:
+                    call('[execution].[sp_ResetLandingzoneEntityLastLoadValue]', LandingzoneEntityId=item['Id'], LoadValue=None, Reason=reason)
+                    text = 'watermark leeggemaakt'
+            elif action == 'reset_to':
+                if dry_run:
+                    text = 'proefdraai: niets geschreven'
+                else:
+                    call('[execution].[sp_ResetLandingzoneEntityLastLoadValue]', LandingzoneEntityId=item['Id'], LoadValue=value.strip(), Reason=reason)
+                    text = f'watermark op {value.strip()} gezet'
+            elif action == 'skip':
+                text = queue(item['Id'], layer, dry_run)
+            else:
+                if dry_run:
+                    text = 'proefdraai: ' + queue(item['Id'], 'Both', True)
+                else:
+                    for path in item['Delete']:
+                        print(f"  wissen: {path}")
+                        notebookutils.fs.rm(path, True)
+                    text = f"{len(item['Delete'])} tabel(len) gewist; " + queue(item['Id'], 'Both', False)
+                    call('[execution].[sp_ResetLandingzoneEntityLastLoadValue]', LandingzoneEntityId=item['Id'], LoadValue=None, Reason=reason)
+                    text += '; watermark leeggemaakt'
+            results.append({'Id': item['Id'], 'Table': item['Table'], 'Ok': True, 'Result': text})
+        except Exception as e:  # one table failing must not hide what happened to the others; the step that failed is in the text
+            results.append({'Id': item['Id'], 'Table': item['Table'], 'Ok': False, 'Result': f'{type(e).__name__}: {e}'})
+        print(f"{item['Table']}: {results[-1]['Result']}")
+    return {'plan': plan, 'results': results, 'dry_run': dry_run}
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "jupyter_python"
+# META }
+
 # MARKDOWN ********************
 
 # ## Editor
@@ -2067,6 +2271,237 @@ class EnvironmentsPage:
         self.res.print('Overgezet. Ga naar Vergelijken voor de actuele stand.')
 
 
+def status_label(row):
+    """One line of the table list: status, table, watermark and the open queue (landingzone/Bronze)."""
+    watermark = str(row['LoadValue'])[:19] if row.get('LoadValue') else '(leeg)'
+    return f"[{row['Status']}] {row['SourceSchema']}.{row['SourceName']} · watermark {watermark} · open {row['PendingLandingzoneFiles']}/{row['PendingBronzeFiles']}"
+
+
+def manage_result_html(result):
+    """The plan of a dry run (steps, warnings and what the dry run of the procedure found), or the outcome of a real run, as an HTML table."""
+    if result['dry_run']:
+        head = f"<th {_HEAD}>tabel</th><th {_HEAD}>wat er gebeurt</th><th {_HEAD}>uitkomst van de proefdraai</th>"
+        rows = ''
+        found = {r['Id']: r['Result'] for r in result['results']}
+        for item in result['plan']:
+            lines = [html.escape(step) for step in item['Steps']] + [f"<span style='color:#b45f06'>⚠ {html.escape(w_)}</span>" for w_ in item['Warnings']]
+            outcome = found.get(item['Id'], '')
+            outcome = '' if outcome.startswith('proefdraai: niets') else html.escape(outcome.replace('proefdraai: ', ''))
+            rows += f"<tr><td {_CELL}>{html.escape(item['Table'])}</td><td {_CELL}>{'<br>'.join(lines)}</td><td {_CELL}>{outcome}</td></tr>"
+    else:
+        head = f"<th {_HEAD}>tabel</th><th {_HEAD}>resultaat</th>"
+        rows = ''
+        for r in result['results']:
+            mark = "<b style='color:#2e7d32'>✓</b>" if r['Ok'] else "<b style='color:#b00020'>✗</b>"
+            rows += f"<tr><td {_CELL}>{mark} {html.escape(r['Table'])}</td><td {_CELL}>{html.escape(r['Result'])}</td></tr>"
+    return f"<table style='border-collapse:collapse'><tr>{head}</tr>{rows}</table>"
+
+
+class ManagePage:
+    """
+    Tab 5: day-to-day management of the registered tables of one environment. It shows the load status and the open queue per table
+    (integration.vw_LoadStatus) and offers four actions: reset the watermark, set it to a value, set the open queue on processed, and the
+    cleanup after a change of the primary key. Every action starts with a dry run; the real run is only possible for exactly the
+    selection, action and reason of that dry run, and a cleanup or anything in P also asks to type the environment.
+    """
+    STATUS_FILTER = [('alle', 'all'), ('Fout', 'Fout'), ('Wachtrij', 'Wachtrij'), ('Nooit geladen', 'Nooit geladen'), ('OK', 'OK'), ('Uitgeschakeld', 'Uitgeschakeld')]
+    LAYERS = [('landingzone en Bronze', 'Both'), ('alleen landingzone', 'Landingzone'), ('alleen Bronze', 'Bronze')]
+
+    def __init__(self, ui):
+        self.ui = ui
+        self.rows = []
+        self.selected = set()
+        self._refreshing = False
+        self.dry_of = self.done_of = None
+        self.failed = False
+        self.res = Pane(tall='220px', hide_empty=True)  # errors and the technical log of the last run
+        wide_btn = lambda: w.Layout(width='auto', min_width='140px', padding='0 14px')
+        label = lambda: {'description_width': '70px'}
+        self.env = w.Dropdown(options=['D', 'T', 'P'], value='D', layout=w.Layout(width='100px'))
+        self.load_btn = _tip(w.Button(layout=wide_btn(), description='Laden', button_style='primary'),
+                             'Leest de laadstatus en de wachtrij van deze omgeving uit de configdb. Schrijft niets.')
+        self.summary = w.HTML('<span style="color:#666">Kies een omgeving en klik op Laden.</span>')
+        self.status_filter = w.Dropdown(options=self.STATUS_FILTER, value='all', layout=w.Layout(width='160px'))
+        self.search = w.Text(placeholder='zoek een tabel', continuous_update=False, layout=w.Layout(width='260px'))
+        self.list = w.SelectMultiple(options=[], rows=10, layout=w.Layout(width='100%'))
+        self.select_all_btn = _tip(w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Alles in de lijst selecteren'), 'Selecteert alle tabellen die na het filter in de lijst staan.')
+        self.clear_btn = w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Selectie wissen')
+        self.count = w.HTML()
+        self.action = w.Dropdown(options=[(text, key) for key, text in MANAGE_ACTIONS.items()], value='reset', layout=w.Layout(width='520px'))
+        self.value = w.Text(description='Waarde', placeholder='bijvoorbeeld 2026-01-01 00:00:00.000, of een getal', continuous_update=False,
+                            layout=w.Layout(width='620px', display='none'), style=label())
+        self.layer = w.Dropdown(options=self.LAYERS, value='Both', layout=w.Layout(width='260px'))
+        self.layer_row = w.HBox([_label('Laag', 'Welke wachtrij op verwerkt wordt gezet', '40px'), self.layer], layout=w.Layout(display='none'))
+        self.reason = w.Text(description='Reden', placeholder='verplicht; komt in logging.ConfigChange', continuous_update=False, layout=w.Layout(width='700px'), style=label())
+        self.dry_btn = _tip(w.Button(layout=wide_btn(), description='1. Proefdraaien', button_style='info'),
+                            'Laat per tabel zien wat er zou gebeuren. Schrijft en wist niets.')
+        self.result = w.HTML(layout=w.Layout(max_height='360px', overflow='auto', width='100%', padding='4px 0'))
+        self.confirm_text = w.Text(description='Typ de omgeving', placeholder='D, T of P', continuous_update=False, layout=w.Layout(width='260px', display='none'),
+                                   style={'description_width': '110px'})
+        self.run_btn = _tip(w.Button(layout=wide_btn(), description='2. Uitvoeren', button_style='warning', disabled=True),
+                            'Voert de actie uit op precies de selectie van de proefdraai.')
+        self.hint = w.HTML(layout=w.Layout(margin='4px 0 0 10px'))
+        self.root = vbox([
+            _heading('Beheer', 'Laadstatus en wachtrij van de geregistreerde tabellen van één omgeving, en de dagelijkse handelingen. Elke actie begint met een proefdraai.'),
+            w.HBox([_label('Omgeving', '', '80px'), self.env, w.HTML('&nbsp;&nbsp;'), self.load_btn]), self.summary,
+            w.HBox([_label('Toon', 'Filter op de status uit integration.vw_LoadStatus', '40px'), self.status_filter, w.HTML('&nbsp;&nbsp;'), self.search]), self.list,
+            w.HBox([self.select_all_btn, self.clear_btn, w.HTML('&nbsp;&nbsp;'), self.count]),
+            _heading('Actie', 'Voor de geselecteerde tabellen. Een actie die iets wist, of een actie in P, vraagt om de omgeving te typen.'),
+            self.action, self.value, self.layer_row, self.reason,
+            w.HBox([self.dry_btn]), self.result, self.res.widget, self.confirm_text, w.HBox([self.run_btn, self.hint])], width='100%')
+        ui._guard(self.load_btn, self.load)
+        ui._guard(self.dry_btn, self.dry_run)
+        ui._guard(self.run_btn, self.run)
+        self.select_all_btn.on_click(lambda _: self._select(True))
+        self.clear_btn.on_click(lambda _: self._select(False))
+        self.env.observe(lambda _: self._reset_loaded(), names='value')
+        self.status_filter.observe(lambda _: self._refresh_list(), names='value')
+        self.search.observe(lambda _: self._refresh_list(), names='value')
+        self.list.observe(self._on_list, names='value')
+        self.action.observe(lambda _: self._action_changed(), names='value')
+        for widget in (self.value, self.layer, self.reason, self.confirm_text):
+            widget.observe(lambda _: self.update_state(), names='value')
+        self._action_changed()
+
+    def pane(self):
+        return self.res
+
+    # ---- the list ------------------------------------------------------------------------------------
+    def load(self):
+        self.res.clear()
+        self.rows = load_status(self.ui.domain.value.strip(), self.env.value)
+        self.selected = set()
+        counts = {}
+        for row in self.rows:
+            counts[row['Status']] = counts.get(row['Status'], 0) + 1
+        parts = ', '.join(f'{n} {status}' for status, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+        self.summary.value = f'<b>{len(self.rows)} tabel(len)</b> in {html.escape(self.env.value)}: {html.escape(parts) if parts else "geen"}.'
+        self._refresh_list()
+        self.update_state()
+
+    def _visible(self):
+        text = self.search.value.strip().lower()
+        return [r for r in self.rows if (self.status_filter.value == 'all' or r['Status'] == self.status_filter.value)
+                and (not text or text in f"{r['SourceSchema']}.{r['SourceName']}".lower())]
+
+    def _refresh_list(self):
+        self._refreshing = True  # setting the options clears the selection of the widget: do not take that for a choice
+        try:
+            options = [(status_label(r), r['LandingzoneEntityId']) for r in self._visible()]
+            self.list.options = options
+            self.list.value = tuple(i for _, i in options if i in self.selected)
+        finally:
+            self._refreshing = False
+        self._count()
+
+    def _on_list(self, change):
+        if self._refreshing:
+            return
+        visible = {v for _, v in self.list.options}
+        self.selected = (self.selected - visible) | set(change['new'])
+        self._count()
+        self.update_state()
+
+    def _select(self, everything):
+        visible = {v for _, v in self.list.options}
+        self.selected = (self.selected | visible) if everything else (self.selected - visible)
+        self.list.value = tuple(i for _, i in self.list.options if i in self.selected)
+
+    def _count(self):
+        self.count.value = f'<span style="color:#666">{len(self.selected)} geselecteerd van {len(self.rows)}</span>'
+
+    def _reset_loaded(self):
+        self.rows, self.selected = [], set()
+        self.summary.value = '<span style="color:#666">Kies een omgeving en klik op Laden.</span>'
+        self._refresh_list()
+        self.update_state()
+
+    # ---- the action ----------------------------------------------------------------------------------
+    def _action_changed(self):
+        self.value.layout.display = '' if self.action.value == 'reset_to' else 'none'
+        self.layer_row.layout.display = '' if self.action.value == 'skip' else 'none'
+        self.update_state()
+
+    def _ids(self):
+        return sorted(self.selected)
+
+    def _needs_confirm(self):
+        return self.env.value == 'P' or self.action.value == 'rebuild'
+
+    def _args(self):
+        action = self.action.value
+        return {'environment': self.env.value, 'action': action, 'ids': self._ids(), 'reason': self.reason.value.strip(),
+                'value': self.value.value.strip() if action == 'reset_to' else None, 'layer': self.layer.value if action == 'skip' else 'Both'}
+
+    def _fingerprint(self):
+        return hashlib.sha1(json.dumps(self._args(), sort_keys=True, default=str).encode()).hexdigest()
+
+    def update_state(self):
+        fingerprint = self._fingerprint()
+        needs = self._needs_confirm()
+        typed = self.confirm_text.value.strip().upper() == self.env.value
+        self.confirm_text.layout.display = '' if needs else 'none'
+        if self.dry_of and self.dry_of != fingerprint:
+            self.dry_of = None  # the old result no longer describes what is on screen
+            self.failed = False
+            self.result.value = ''
+            self.res.clear()
+            self.res.print('Er is iets gewijzigd sinds de proefdraai. Draai opnieuw proef voordat je uitvoert.')
+            if self.confirm_text.value:
+                self.confirm_text.value = ''
+        ready = self.dry_of == fingerprint and self.done_of != fingerprint and (typed or not needs)
+        self.run_btn.disabled = not ready
+        if self.done_of == fingerprint:
+            hint = 'Al uitgevoerd. Wijzig iets om opnieuw uit te voeren.'
+        elif self.dry_of != fingerprint:
+            hint = 'Eerst proefdraaien.'
+        elif needs and not typed:
+            hint = f'Typ {self.env.value} om te bevestigen.'
+        elif self.failed:
+            hint = 'Mislukt voor enkele tabellen: uitvoeren kan opnieuw, alle stappen zijn te herhalen.'
+        else:
+            hint = 'Klaar: je kunt uitvoeren.'
+        self.hint.value = f'<span style="color:#666">{html.escape(hint)}</span>'
+
+    def _call(self, dry_run):
+        args = self._args()
+        problems = manage_problems(args['action'], args['ids'], args['reason'], args['value'], args['layer'])
+        if problems:
+            self.res.clear()
+            self.res.print('\n'.join(problems))
+            return None
+        self.res.clear()
+        return self.res.capture(manage, self.ui.domain.value.strip(), args['environment'], args['action'], args['ids'], args['reason'],
+                                value=args['value'], layer=args['layer'], dry_run=dry_run)
+
+    def dry_run(self):
+        result = self._call(True)
+        if result is None:
+            return
+        self.result.value = manage_result_html(result)
+        self.failed = False
+        self.dry_of = self._fingerprint()
+        self.update_state()
+
+    def run(self):
+        fingerprint = self._fingerprint()
+        typed = self.confirm_text.value.strip().upper() == self.env.value
+        if not (self.dry_of == fingerprint and self.done_of != fingerprint and (typed or not self._needs_confirm())):
+            self.res.print('Niet uitgevoerd: eerst proefdraaien op precies deze keuzes en bevestigen.')
+            return
+        self.run_btn.disabled = True
+        result = self._call(False)
+        if result is None:
+            return
+        self.result.value = manage_result_html(result)
+        self.failed = not all(r['Ok'] for r in result['results'])
+        self.done_of = None if self.failed else fingerprint
+        self.confirm_text.value = ''
+        self.update_state()
+        if not self.failed:
+            self.res.print('Klaar. Klik op Laden voor de actuele stand.')
+
+
 class RegistrationUI:
     """
     Interactive editor for the registration. Everything is edited in memory; nothing is written until
@@ -2087,10 +2522,11 @@ class RegistrationUI:
         self._build_tables_tab()
         self._build_register_tab()
         self.env_page = EnvironmentsPage(self)
+        self.manage = ManagePage(self)
         # Own tabs instead of w.Tab: in a Fabric notebook the Tab widget does not hide the other pages, so all
         # three stacked under each other. A page is hidden with its own display style, which does work.
-        self.pages = [self.sources_tab, self.tables_tab, self.register_tab, self.env_page.root]
-        self.tab_pick = TabBar(['1. Bronnen', '2. Tabellen', '3. Controleren en registreren', '4. Omgevingen'], self._show_page)
+        self.pages = [self.sources_tab, self.tables_tab, self.register_tab, self.env_page.root, self.manage.root]
+        self.tab_pick = TabBar(['1. Bronnen', '2. Tabellen', '3. Controleren en registreren', '4. Omgevingen', '5. Beheer'], self._show_page)
         self._show_page(0)
         # The messages sit above the tabs, so a result is in view without scrolling down to it.
         self.top_btn = w.Button(layout=w.Layout(width='auto'), description='↑ Terug naar begin', tooltip='Naar tab 1 en de meldingen wissen; wijzigingen blijven staan')
@@ -2114,7 +2550,7 @@ class RegistrationUI:
 
     def _pane(self):
         """Where a message goes: the pane of tab 3 or 4 while that tab is open, otherwise the one above the tabs."""
-        return {2: lambda: self.res, 3: self.env_page.pane}.get(self.tab_pick.value, lambda: self.out)()
+        return {2: lambda: self.res, 3: self.env_page.pane, 4: self.manage.pane}.get(self.tab_pick.value, lambda: self.out)()
 
     def __repr__(self):
         return ''  # registration_ui(...) as the last line of a cell would otherwise print the object
@@ -2135,6 +2571,8 @@ class RegistrationUI:
                 self._update_register_state()
                 if hasattr(self, 'env_page'):
                     self.env_page.update_state()
+                if hasattr(self, 'manage'):
+                    self.manage.update_state()
         button.on_click(handler)
 
     def _payload(self):
