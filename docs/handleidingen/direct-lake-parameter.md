@@ -23,7 +23,21 @@ De labels *vastgesteld* (uit de definitie of de documentatie van Microsoft gelez
 - Je bent eigenaar van het model. Alleen de eigenaar kan een rule maken (*vastgesteld*, Microsoft Learn, *Create deployment rules*).
 - Je bent admin van de deployment pipeline van de SEMANTIC-workspace.
 - Een Apply in de TMDL view kan een compatibiliteitsniveau van minimaal 1707 vragen. Het niveau verhogen is eenmalig en niet terug te draaien. Het referentiemodel stond op 1707.
-- Je kent het OneLake-pad van het lakehouse `LH_GOLD_LAYER` van de omgeving, in de vorm `https://onelake.dfs.fabric.microsoft.com/<WorkspaceId>/<LakehouseId>` (het item van het type **Lakehouse**, niet het SQL-endpoint met dezelfde naam, en zonder slash aan het eind).
+- Je kent het OneLake-pad van het lakehouse `LH_GOLD_LAYER` van de omgeving, in de vorm `https://onelake.dfs.fabric.microsoft.com/<WorkspaceId>/<LakehouseId>` (het item van het type **Lakehouse**, niet het SQL-endpoint met dezelfde naam, en zonder slash aan het eind). Zo vind je het:
+
+  1. Open de DATA-workspace van de omgeving en het lakehouse `LH_GOLD_LAYER`. Kies in het paneel *Explorer* bij de map **Tables** het menu **…** en daarna **Properties**.
+
+     ![Het Explorer-paneel van het lakehouse met het menu bij de map Tables en de keuze Properties](afbeeldingen/direct-lake-parameter/20-pad-ophalen-menu.png)
+
+     *Afbeelding 20: kies Properties bij de map Tables.*
+
+  2. Het paneel *Folder properties* toont de **URL**. Kies het kopieerknopje.
+
+     ![Het paneel Folder properties met de URL en een kopieerknop, met de melding Copied](afbeeldingen/direct-lake-parameter/21-pad-ophalen-url.png)
+
+     *Afbeelding 21: kopieer de URL. Het ABFS-pad is vervaagd.*
+
+  3. **De gekopieerde URL eindigt op `/Tables`. Haal dat deel weg**: het pad dat je in de parameter en in de rule gebruikt, eindigt op het lakehouse (`…/<LakehouseId>`). Het paneel toont de URL afgekapt; controleer het einde na het plakken. *Getest in eigen omgeving* (10 november 2026): het pad zonder `/Tables` werkte in de parameter rule.
 
 ## Stap 1: de parameter toevoegen (Dev)
 
@@ -141,36 +155,153 @@ Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad act
 
 ## Stap 3: promoveren naar Test
 
-1. Open de deployment pipeline van de SEMANTIC-workspace.
-2. Kies de stage Development en kies **Deploy** naar Test. Vul een notitie in en wacht op `Succeeded`.
+1. Open de deployment pipeline van de SEMANTIC-workspace en kies de stage **Test**. Onder de stage staat een lijst met de items van Development en hun status. Een item dat nog niet in Test staat heeft de status *Only in source*.
+2. Vink het model aan dat je wilt promoveren. Selecteer alleen dat model; andere items in de lijst blijven ongemoeid.
 
-Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet dus eerst naar Test. *Getest in eigen omgeving* (27 oktober 2026, D naar T). Een schermafbeelding van deze stap volgt.
+   ![De deployment pipeline met de stage Test en in de lijst het model aangevinkt dat alleen in Development bestaat](afbeeldingen/direct-lake-parameter/09-promotie-selecteren.png)
+
+   *Afbeelding 9: het model is aangevinkt (status Only in source). De namen van andere modellen zijn vervaagd.*
+
+3. Kies **Deploy**, vul eventueel een notitie in en bevestig in het venster *Deploy to this stage*. Onder **New (1)** staat het model.
+
+   ![Het venster Deploy to this stage met onder New (1) het model dat wordt gedeployed](afbeeldingen/direct-lake-parameter/10-promotie-bevestigen.png)
+
+   *Afbeelding 10: bevestig de deployment.*
+
+4. Wacht op de melding *Successful deployment* bij de stage Test. Het model staat nu in Test en heeft in de lijst de status *Same as source*.
+
+   ![De deployment pipeline na de deployment: de stage Test toont Successful deployment en het model staat in de lijst](afbeeldingen/direct-lake-parameter/11-promotie-klaar.png)
+
+   *Afbeelding 11: de deployment is klaar.*
+
+Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet dus eerst naar Test. *Getest in eigen omgeving* (10 november 2026, D naar T).
+
+**Wat het model in Test nu doet.** Zonder rule neemt het model in Test de parameterwaarde van Dev mee en leest het dus uit Gold van Dev. Dat is vast te stellen in twee stappen:
+
+- De parameter in Test heeft de waarde van Gold van Dev (*getest in eigen omgeving*, 10 november 2026, via `GET …/datasets/{id}/parameters`).
+- De **item lineage** van het model toont dezelfde bron. Kies in de lijst bij het model het menu **…** en daarna **View item lineage**. Het lakehouse `LH_GOLD_LAYER` staat dan in de workspace van **Dev** (*(D)*), terwijl het model zelf in Test staat. Het lineageschema leidt deze bron af uit het pad van het model; dat is een *aanname* over hoe de portal dit bepaalt.
+
+![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat in de workspace van Dev, het model in die van Test](afbeeldingen/direct-lake-parameter/12-lineage-voor-de-rule.png)
+
+*Afbeelding 12: voor de rule. Het model in Test leest uit het lakehouse in de workspace (D).*
 
 ## Stap 4: de parameter rule in Test
 
 Deployment rules werken pas bij de volgende deployment naar die stage (*vastgesteld*, Microsoft Learn).
 
-1. Ga in de deployment pipeline naar de stage **Test**. In de stage Development kun je geen rules maken.
-2. Kies **Deployment rules** en selecteer het model.
-3. Klap **Parameter rules** uit (niet *Data source rules*) en kies **Add rule**.
-4. Kies de parameter `OneLakeUrl`. De huidige waarde, het pad van Dev, staat erbij.
-5. Vervang de waarde door het pad van Gold van Test: `https://onelake.dfs.fabric.microsoft.com/<WorkspaceId Gold Test>/<LakehouseId Gold Test>`. Gebruik het Lakehouse-item van `LH_GOLD_LAYER` in de DATA-workspace van Test.
-6. Sla de rule op.
+1. Ga in de deployment pipeline naar de stage **Test** en kies bij de stage de knop **Deployment rules**. In de stage Development kun je geen rules maken. Er verschijnt een lijst met de items in Test; kies het model.
 
-De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijderd. De deployment faalt dan (*vastgesteld*, Microsoft Learn). Microsoft Learn noemt parameters in een Direct Lake-expressie niet; dat de rule hier werkt, is alleen door onze test bevestigd (*getest in eigen omgeving*, 27 oktober 2026). Schermafbeeldingen van deze stap volgen.
+   ![Het paneel Deployment rules voor de stage Test met een lijst van de modellen in die stage](afbeeldingen/direct-lake-parameter/13-deployment-rules-lijst.png)
+
+   *Afbeelding 13: kies het model in de lijst. De namen van andere modellen zijn vervaagd.*
+
+2. Het model heeft de secties **Data source rules** en **Parameter rules**. Klap **Parameter rules** uit (niet *Data source rules*). Zonder rules staat er *No rules were added yet*. Kies **Add rule**.
+
+   ![De sectie Parameter rules van het model met de tekst No rules were added yet en de knop Add rule](afbeeldingen/direct-lake-parameter/14-parameter-rules-leeg.png)
+
+   *Afbeelding 14: de sectie Parameter rules is nog leeg.*
+
+3. Kies bij **From** de parameter `OneLakeUrl`. Open bij **To** de keuzelijst. Daar staat de huidige waarde (het pad van Dev) en de keuze **Other**. Kies **Other** en plak het pad van Gold van Test: `https://onelake.dfs.fabric.microsoft.com/<WorkspaceId Gold Test>/<LakehouseId Gold Test>`. Zo vind je dat pad: zie *Vooraf*.
+
+   ![De regel voor de parameter OneLakeUrl met bij To een keuzelijst met de huidige waarde en de keuze Other](afbeeldingen/direct-lake-parameter/15-parameter-waarde-kiezen.png)
+
+   *Afbeelding 15: kies bij To de keuze Other en vul daarna het pad van Gold van Test in.*
+
+4. Kies **Save**. De rule staat in de lijst en het icoon bij *Parameter rules* toont dat er een rule is.
+
+   ![De opgeslagen parameter rule voor OneLakeUrl met een nieuwe waarde](afbeeldingen/direct-lake-parameter/16-rule-opgeslagen.png)
+
+   *Afbeelding 16: de rule is opgeslagen.*
+
+De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijderd. De deployment faalt dan (*vastgesteld*, Microsoft Learn). Microsoft Learn noemt parameters in een Direct Lake-expressie niet; dat de rule hier werkt, is alleen door onze test bevestigd (*getest in eigen omgeving*, 10 november 2026).
 
 ## Stap 5: opnieuw promoveren en controleren
 
-1. Promoveer het model opnieuw van Dev naar Test. De rule werkt bij deze deployment.
-2. Controleer dat de parameter in Test het pad van Gold van Test heeft:
+1. Selecteer in de stage **Test** het model. De status is nu *Different from source*, want de rule is nieuw. Kies **Deploy** en bevestig in het venster. Onder **Different (1)** staat het model. De rule werkt bij deze deployment.
+
+   ![Het venster Deploy to this stage met onder Different (1) het model](afbeeldingen/direct-lake-parameter/17-opnieuw-promoveren.png)
+
+   *Afbeelding 17: deploy het model opnieuw.*
+
+2. Wacht op de melding *Successfully deployed content to 'Test'*.
+
+   ![De melding Successfully deployed content To Test en het menu bij het model](afbeeldingen/direct-lake-parameter/18-promotie-geslaagd.png)
+
+   *Afbeelding 18: de deployment is geslaagd. Het menu bij het model bevat View item lineage.*
+
+3. Controleer dat het model in Test het pad van Gold van Test gebruikt. Bewijs dat met de parameterwaarde:
 
    ```
    GET https://api.powerbi.com/v1.0/myorg/groups/{ws}/datasets/{id}/parameters
    ```
 
-3. Ververs het model in Test (**Refresh → Data**); de refresh moet `Completed` zijn.
-4. Een DAX-vergelijking bewijst alleen iets als de data in beide omgevingen verschilt. Gebruik de parameterwaarde als bewijs.
-5. Promoveer een rapport pas nadat het model in Test staat. Controleer daarna dat het `datasetId` van het rapport het model in Test is.
+   Dat gaf op 10 november 2026 het pad van Gold van Test (*getest in eigen omgeving*). Ter illustratie toont **View item lineage** nu het lakehouse in de workspace van **Test**:
+
+   ![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat nu in de workspace van Test](afbeeldingen/direct-lake-parameter/19-lineage-na-de-rule.png)
+
+   *Afbeelding 19: na de rule. Het model leest uit het lakehouse in de workspace (T).*
+
+4. Ververs het model in Test (**Refresh → Data**); de verversing moet `Completed` zijn. Op 10 november 2026 slaagde een verversing van het model in Test, ook zonder dat het aan een connectie gekoppeld was (*getest in eigen omgeving*; de verversing liep onder de identiteit van de gebruiker die de aanroep deed).
+5. Een DAX-vergelijking bewijst alleen iets als de data in beide omgevingen verschilt. Gebruik de parameterwaarde als bewijs.
+6. Promoveer een rapport pas nadat het model in Test staat. Controleer daarna dat het `datasetId` van het rapport het model in Test is.
+
+## Stap 6: een vaste identiteit instellen met een connectie
+
+Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebruiker (*Default: Single Sign-On (Entra ID)*). Wil je dat verversingen en lezers een vaste identiteit gebruiken, bijvoorbeeld een service principal, dan koppel je het model aan een **cloud connectie**. Zonder connectie slaagde de verversing in Test wel (zie stap 5); wat er zonder connectie gebeurt bij een geplande verversing of voor rapportlezers is *niet getest* (*aanname*: dat dit een vaste identiteit vereist).
+
+**Hoe vaak.** Maak de connectie **één keer per omgeving**: een connectie hoort bij één pad, en elke omgeving heeft een eigen lakehouse en dus een eigen pad. De connectie voor Dev wijst naar het lakehouse van Dev en is dus niet bedoeld voor Test. Koppel **elk semantisch model** vervolgens zelf aan de connectie van zijn omgeving. *Vastgesteld* (10 november 2026): na de promotie was het model in Test niet aan een connectie gekoppeld, terwijl het model in Dev het wel was. Een connectie wordt dus niet meegepromoveerd. *Aanname:* bij elk nieuw semantisch model moet je die koppeling opnieuw leggen.
+
+**Voorwaarde.** De service principal heeft minimaal leesrechten op het lakehouse in die omgeving (een rol op de DATA-workspace). Of de tenantinstelling voor service principals aan staat, moet je zelf controleren.
+
+1. Open in de workspace van de omgeving het model, kies **…**, daarna **Settings** en **Gateway and cloud connections**. Onder *Cloud connections* staat de data source van het model (`AzureDataLakeStorage`) met bij **Maps to** de keuze *Default: Single Sign-On (Entra ID)*. Open de keuzelijst en kies **Create a connection**.
+
+   ![Het onderdeel Gateway and cloud connections met bij Maps to de keuzelijst met Default Single Sign-On en Create a connection](afbeeldingen/direct-lake-parameter/22-connectie-kiezen.png)
+
+   *Afbeelding 22: kies bij Maps to de optie Create a connection. Het pad van de data source is vervaagd.*
+
+2. Het venster **New connection** opent. Geef de connectie een naam die de omgeving noemt (bijvoorbeeld `CON_<naam>_<omgeving>`). Het connectietype is **Azure Data Lake Storage Gen2**, als server geldt `onelake.dfs.fabric.microsoft.com`, en bij **Full path** staat het pad van het lakehouse van **deze** omgeving: `/<WorkspaceId>/<LakehouseId>`.
+
+   ![Het venster New connection met de connectienaam, het type Azure Data Lake Storage Gen2, de server en het pad van het lakehouse](afbeeldingen/direct-lake-parameter/23-connectie-naam-en-pad.png)
+
+   *Afbeelding 23: naam, type, server en pad. Het pad is vervaagd.*
+
+3. Open bij **Authentication method** de keuzelijst. De opties zijn *Key*, *OAuth 2.0*, *Shared Access Signature (SAS)*, *Service Principal* en *Workspace identity*. Kies **Service Principal**.
+
+   ![De keuzelijst Authentication method met de opties Key, OAuth 2.0, Shared Access Signature, Service Principal en Workspace identity](afbeeldingen/direct-lake-parameter/24-authenticatie-kiezen.png)
+
+   *Afbeelding 24: kies Service Principal.*
+
+4. Vul de **Tenant ID** en de **Service principal ID** (het client-ID van de app) in. Het **Credential type** is **Service principal key**.
+
+   ![De velden Tenant ID en Service principal ID, en het Credential type Service principal key](afbeeldingen/direct-lake-parameter/25-service-principal.png)
+
+   *Afbeelding 25: tenant-ID, service principal-ID en credential type. De waarden zijn vervaagd.*
+
+5. Geef het client secret op. In onze opname deden we dat via een **Azure Key Vault-verwijzing** (het knopje naast *Service principal key*): kies de Key Vault, vul de naam van het secret in en kies **Apply**. Zo staat het secret zelf niet in het venster. Tik het secret nooit in een veld dat je laat zien in een schermafbeelding. Of het secret ook direct in te vullen is, hebben we niet getest.
+
+   ![Het onderdeel Azure Key Vault reference met de Key Vault en de naam van het secret en de knop Apply](afbeeldingen/direct-lake-parameter/26-key-vault.png)
+
+   *Afbeelding 26: de Key Vault-verwijzing. De namen zijn vervaagd.*
+
+6. Het **Privacy level** staat op *Organizational*. Het vakje *Use Entra ID SSO for DirectQuery and Direct Lake* staat uit. Kies **Create**.
+
+   ![Het onderste deel van New connection met het privacy level Organizational en de knop Create](afbeeldingen/direct-lake-parameter/27-connectie-aanmaken.png)
+
+   *Afbeelding 27: controleer de instellingen en kies Create.*
+
+7. Ga terug naar het model. Open bij **Maps to** de keuzelijst, kies de nieuwe connectie en kies **Apply**.
+
+   ![De data source met bij Maps to de nieuwe connectie gekozen en de knop Apply actief](afbeeldingen/direct-lake-parameter/28-connectie-koppelen.png)
+
+   *Afbeelding 28: kies de connectie en kies Apply.*
+
+8. De melding *gateway connection updated* bevestigt de koppeling.
+
+   ![De melding dat de gateway connection van het model is bijgewerkt](afbeeldingen/direct-lake-parameter/29-koppeling-toegepast.png)
+
+   *Afbeelding 29: de koppeling is toegepast. Dit scherm komt uit Dev; in Test koppel je de connectie van Test.*
+
+Controle (*getest in eigen omgeving*, 10 november 2026): `GET …/datasets/{id}/datasources` toont de data source voor een gekoppeld model met een `gatewayId` en een `datasourceId`, en voor een niet gekoppeld model zonder die twee velden.
 
 ## Valkuilen
 
@@ -183,11 +314,16 @@ De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijder
 | De deployment faalt na het hernoemen van de parameter | De rule is ongeldig. Maak de rule opnieuw. |
 | Parameter rules zijn niet zichtbaar | Het model is nog niet naar die stage gepromoveerd. Promoveer eerst. |
 | Een verversing faalt met *We cannot access the source Delta table* | Het SQL-endpoint van het lakehouse kent de nieuwe tabellen nog niet. Ververs de metadata van het endpoint. |
+| Het model in Test leest nog uit Dev terwijl de rule bestaat | Het model is na het maken van de rule nog niet opnieuw gedeployed (status *Different from source*). Deploy het model opnieuw. |
+| De connectie wijst naar het lakehouse van de verkeerde omgeving | Een connectie hoort bij één pad. Maak per omgeving een eigen connectie en koppel elk model aan de connectie van zijn omgeving. |
+| De gekopieerde URL werkt niet als pad | De URL uit *Folder properties* eindigt op `/Tables`. Haal dat deel weg. |
 | Een Apply vraagt om een hoger compatibiliteitsniveau | Verhoog het niveau naar 1707. Dat is eenmalig en niet terug te draaien. |
 
 ## Nog niet getest of nog niet vastgelegd
 
-- Schermafbeeldingen van het promoveren en van de parameter rule (stap 3 en 4).
-- Het mappen van een cloud connectie voor het model in Test: er is geen procedure gevonden, en niet vastgesteld of het nodig is.
+- Of een geplande verversing of een rapportlezer zonder connectie werkt, en of die connectie daarvoor nodig is.
+- Of de portal een connectie met het pad van een andere omgeving toelaat voor een model.
+- Het koppelen van de connectie in Test: de schermafbeeldingen in stap 6 komen uit Dev; de stappen in Test zijn gelijk (*aanname*, het model in Test is nog niet gekoppeld getest).
 - Promotie van Test naar Productie met dezelfde rule.
+- **Edit tables** met de parameter actief na een promotie.
 - Meerdere rapporten op één model.
