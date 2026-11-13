@@ -99,13 +99,7 @@ De schermafbeeldingen komen uit een referentie-installatie van november 2026.
 
    *Afbeelding 6: Preview toont het verschil. Rood is wat verdwijnt (de actieve letterlijke regel), groen is wat erbij komt (de uitgecommentarieerde letterlijke regel en de regel met `OneLakeUrl`). De ID's zijn afgedekt.*
 
-6. Controleer dat het model de parameter kent. Onder **Expressions** staan nu twee items (de expressie en de parameter), en de service geeft de waarde terug:
-
-   ```
-   GET https://api.powerbi.com/v1.0/myorg/groups/{ws}/datasets/{id}/parameters
-   ```
-
-   Dat toont `OneLakeUrl` met de huidige waarde. Het eindpunt `datasources` toont voor dit model alleen het type (`AzureDataLakeStorage`) en niet het pad; gebruik het voor deze controle dus niet.
+6. Controleer dat het model de parameter kent. Onder **Expressions** staan nu twee items: de expressie en de parameter.
 
 Na de Apply slaagt een data-verversing direct (`Completed`, type `WebModeling`) en een DAX-query over het model geeft data.
 
@@ -291,8 +285,6 @@ Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebrui
    ![De melding dat de gateway connection van het model is bijgewerkt](afbeeldingen/direct-lake-parameter/29-koppeling-toegepast.png)
 
    *Afbeelding 29: de koppeling is toegepast. Dit scherm komt uit Dev; in Test koppel je de connectie van Test.*
-
-Controle: `GET …/datasets/{id}/datasources` toont de data source voor een gekoppeld model met een `gatewayId` en een `datasourceId`, en voor een niet gekoppeld model zonder die twee velden.
 
 ## Valkuilen
 
