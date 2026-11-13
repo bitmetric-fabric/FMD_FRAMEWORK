@@ -446,6 +446,114 @@ scope["RegistrationUI"].dry_run(tab3)
 check(registered == [True] and tab3.dry_run_of == "fp", "tab 3: de proefdraai draait met dry_run=True")
 check(tab3.confirm.value is False, "tab 3: een vinkje van vóór de proefdraai telt niet mee")
 
+# ---- copy only a selection: per data source, load group and table ---------------------------------------------------------------
+print("=== kopie met een selectie ===")
+exec(compile(cell_with("def plan_copy"), "registration copy", "exec"), scope)  # the tab tests replaced copy_registration by a stub: back to the real one
+scope["print"] = lambda *a, **k: None  # copy_registration prints its plans
+check(names(plan_copy(d_state, target(), "T", load_groups=["dag"])) == ["Customers"], "load_groups: alleen de tabellen in die groep")
+check(names(plan_copy(d_state, target(), "T", load_groups=["nacht"])) == ["Orders", "Wide"], "load_groups: een tabel zonder eigen groep valt onder de groep van haar bron")
+check(names(plan_copy(d_state, target(), "T", load_groups=["dag", "nacht"])) == ["Customers", "Orders", "Wide"], "load_groups: meerdere groepen")
+bad = plan_copy(d_state, target(), "T", load_groups=["nope"])
+check(names(bad) == [] and any(p["level"] == "error" and "nope" in p["table"] for p in bad["problems"]), "load_groups: een onbekende groep is een fout en niets gaat mee")
+check(names(plan_copy(d_state, target(), "T", tables=["dbo.Orders", "dbo.Wide"])) == ["Orders", "Wide"], "tables: alleen die tabellen")
+bad = plan_copy(d_state, target(), "T", tables=["dbo.Nope"])
+check(names(bad) == [] and any(p["level"] == "error" and "dbo.Nope" in p["table"] for p in bad["problems"]), "tables: een onbekende tabel is een fout en niets gaat mee")
+only_orders = {scope["entity_ident"](d_state, e) for e in d_state["entities"] if e["SourceName"] == "Orders"}
+check(names(plan_copy(d_state, target(), "T", only=only_orders)) == ["Orders"], "only: een tabel gekozen aan haar identiteit (databron, schema en naam)")
+check(names(plan_copy(d_state, target(), "T", only=[list(i) for i in only_orders])) == ["Orders"], "only: ook als lijsten, zoals na een JSON-ronde")
+check(names(plan_copy(d_state, target(), "T", load_groups=["nacht"], tables=["dbo.Orders"])) == ["Orders"], "de filters werken samen: een tabel moet bij alle voldoen")
+check(names(plan_copy(d_state, target(), "T", sources=["ERP"], load_groups=["dag"])) == ["Customers"], "databron en groep samen")
+check(names(plan_copy(d_state, target(), "T", tables=["dbo.Old"])) == [] and names(plan_copy(d_state, target(), "T", tables=["dbo.Old"], only_active=False)) == ["Old"],
+      "een gekozen tabel die in de bron uit staat gaat alleen mee als je uitgezette tabellen meeneemt")
+full = {e["SourceName"]: e for e in plan_copy(d_state, target(), "T")["entities"]}
+picked = {e["SourceName"]: e for e in plan_copy(d_state, target(), "T", tables=["dbo.Orders"])["entities"]}
+check(picked["Orders"] == full["Orders"], "een gekozen tabel wordt precies zo overgenomen als zonder selectie")
+plan = plan_copy(d_state, target(row("Customers")), "T", tables=["dbo.Orders"])
+check(plan["skipped"] == [] and names(plan) == ["Orders"], "een tabel buiten de selectie telt ook niet als 'al geregistreerd'")
+plan = plan_copy(d_state, target(), "T", tables=["dbo.Orders"], overrides={"dbo.Customers": {"IsActive": 0}})
+check(names(plan) == ["Orders"] and not [p for p in plan["problems"] if p["level"] == "error"], "een override voor een tabel buiten de selectie is geen fout en doet niets")
+check(names(plan_copy(d_state, target(), "T", load_groups=None, tables=None, only=None)) == ["Customers", "Orders", "Wide"], "zonder filters verandert er niets")
+
+# the comparison rows say what the editor needs to list the tables
+cmp_rows = {r["Table"]: r for r in compare({"D": ds, "T": ts, "P": ps})}
+cmp_groups = {r["Table"]: r for r in compare({"D": d_state, "T": target()})}
+check(cmp_rows["dbo.Orders"]["Namespace"] == "erp" and cmp_groups["dbo.Orders"]["LoadGroup"] == "nacht" and cmp_groups["dbo.Customers"]["LoadGroup"] == "dag",
+      "vergelijken: de databron en de effectieve groep (die van de tabel, anders die van de bron) staan in de rij")
+check(cmp_rows["dbo.Orders"]["Ident"] == scope["entity_ident"](ds, ds["entities"][0]) and cmp_rows["dbo.Orders"]["Active"] == {"D": 1, "T": 1, "P": 1}, "vergelijken: de identiteit en of de tabel actief is per omgeving")
+
+# copy_registration passes the selection on, and writes only that
+registered = []
+scope["load_registration"] = lambda domain, env: {"D": d_state, "T": target()}[env]
+scope["register"] = lambda sources, entities, domain, envs, **kw: registered.append(([e["SourceName"] for e in entities], envs, kw))
+scope["copy_registration"]("TEST", ["T"], load_groups=["dag"], dry_run=True)
+check(registered and registered[-1][0] == ["Customers"] and registered[-1][1] == ["T"] and registered[-1][2]["dry_run"] is True, "copy_registration: load_groups gaat door naar de plannen, en alleen die tabel wordt geregistreerd")
+registered.clear()
+scope["copy_registration"]("TEST", ["T"], only=only_orders, dry_run=True)
+check(registered[-1][0] == ["Orders"], "copy_registration: only gaat door")
+registered.clear()
+try:
+    scope["copy_registration"]("TEST", ["T"], tables=["dbo.Nope"], dry_run=False)
+    check(False, "copy_registration: een onbekende tabel hoort te stoppen")
+except ValueError:
+    check(not registered, "copy_registration: een onbekende tabel stopt, er wordt niets geregistreerd")
+del scope["print"]
+
+# ---- tab 4: choose what to copy -----------------------------------------------------------------------------------------------
+print("=== selectie in tab 4 ===")
+sel_calls = []
+scope["compare"] = lambda domain, envs: (sel_calls.append(("compare", domain, envs)), compare({"D": d_state, "T": target(row("Customers"))}))[1]
+scope["copy_registration"] = lambda domain, to_environments, **kw: sel_calls.append(("copy", domain, to_environments, kw))
+sp = scope["EnvironmentsPage"](ui)
+sp.to_checks["P"].value = False
+ident = lambda name: scope["entity_ident"](d_state, next(e for e in d_state["entities"] if e["SourceName"] == name))
+check(sp.mode.value == "all" and sp.sel_box.layout.display == "none" and sp._args()["only"] is None, "selectie: standaard gaat alles mee en het keuzedeel is verborgen")
+sp.mode.value = "selection"
+check(sp.sel_box.layout.display == "" and "tabellen laden" in sp.sel_hint.value.lower(), "selectie: kiezen voor 'alleen een selectie' toont het keuzedeel, met de regel dat je de tabellen moet laden")
+sp.show_view(1)
+sp.dry_btn.click()
+check("minstens één tabel" in sp.res.widget.value and not [c for c in sel_calls if c[0] == "copy"], "selectie: een proefdraai zonder tabellen geeft een melding en roept niets aan")
+check(sp.copy_btn.disabled and "minstens één tabel" in sp.copy_hint.value, "selectie: de regel naast de knop zegt dat je een tabel kiest")
+sp.sel_load_btn.click()
+check(sel_calls[-1] == ("compare", "INTEGRATION", ["D", "T"]), "selectie: tabellen laden leest de bron en de doelen")
+labels = [label for label, _ in sp.sel_list.options]
+check(len(labels) == 3 and not any("Old" in l for l in labels) and any("Customers" in l and "dag" in l and "ERPDB" in l for l in labels),
+      "selectie: de lijst toont de actieve tabellen van de bron, met databron en groep")
+check(any("Orders" in l and "nieuw in T" in l for l in labels) and any("Customers" in l and "staat al" in l for l in labels), "selectie: per tabel of hij in een doel nog ontbreekt")
+sp.sel_group.value = "dag"
+check([v for _, v in sp.sel_list.options] == [ident("Customers")], "selectie: filter op LoadGroup")
+sp.sel_group.value = "*"
+sp.sel_search.value = "ord"
+check([v for _, v in sp.sel_list.options] == [ident("Orders")], "selectie: zoeken op naam")
+sp.sel_search.value = ""
+sp.sel_select_all_btn.click()
+check(len(sp._args()["only"]) == 3, "selectie: alles in de lijst selecteren")
+sp.sel_clear_btn.click()
+check(sp._args()["only"] == [], "selectie: selectie wissen")
+sp.sel_group.value = "nacht"
+sp.sel_select_all_btn.click()
+check(sorted(sp._args()["only"]) == sorted([ident("Orders"), ident("Wide")]), "selectie: alles selecteren geldt voor wat het filter laat zien (alle tabellen in een groep)")
+sp.sel_group.value = "*"
+check(sorted(sp._args()["only"]) == sorted([ident("Orders"), ident("Wide")]) and "2 geselecteerd" in sp.sel_count.value, "selectie: de keuze blijft staan als het filter verandert")
+sp.dry_btn.click()
+kind, domain, to, kw = sel_calls[-1]
+check(kind == "copy" and kw["dry_run"] is True and sorted(kw["only"]) == sorted([ident("Orders"), ident("Wide")]) and to == ["T"], "selectie: de proefdraai geeft precies die tabellen mee als only")
+sp.confirm.value = True
+check(not sp.copy_btn.disabled, "selectie: na de proefdraai en het vinkje kan overzetten")
+sp.sel_list.value = (ident("Orders"),)
+check(sp.copy_btn.disabled and sp.dry_of is None, "selectie: een andere keuze maakt de proefdraai ongeldig")
+sp.dry_btn.click()
+sp.confirm.value = True
+sp.copy_btn.click()
+check(sel_calls[-1][3]["dry_run"] is False and sel_calls[-1][3]["only"] == [ident("Orders")], "selectie: overzetten geeft dezelfde selectie mee")
+sp.inactive_cb.value = True
+check(any("Old" in l for l, _ in sp.sel_list.options) and len(sp.sel_list.options) == 4, "selectie: 'uitgezette tabellen meenemen' zet ze ook in de lijst")
+sp.inactive_cb.value = False
+sp.from_dd.value = "T"
+check(sp.sel_rows == [] and sp.sel_list.options == [] and sp._args()["only"] == [] and "opnieuw" in sp.sel_hint.value.lower(), "selectie: een andere bron of doelomgeving leegt de lijst en de keuze")
+sp.from_dd.value = "D"
+sp.mode.value = "all"
+check(sp._args()["only"] is None and sp.sel_box.layout.display == "none", "selectie: terug naar 'alles' laat de selectie los")
+
 # ---- ColumnPicker -------------------------------------------------------------------------------------
 print("=== ColumnPicker ===")
 calls = []
