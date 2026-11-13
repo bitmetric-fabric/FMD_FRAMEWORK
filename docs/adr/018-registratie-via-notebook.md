@@ -391,3 +391,15 @@ uitkomst hebt gezien (voorheen telde een vinkje van vóór de proefdraai op tab 
   connectie, database en type; met de connectie van D zou P een tweede `DataSource` met dubbele entiteiten krijgen
   (P-019). *Vastgesteld* in de code; *getest in eigen omgeving* met een nepdoel in `scripts/test_registration_editor.py`,
   nog niet tegen een echte configdb.
+
+## Aanvulling 2026-11-10: dagelijks beheer in de editor (tab 5)
+
+Een beheerder moet het watermark van een tabel kunnen resetten, open wachtrijrijen op verwerkt kunnen zetten en een tabel kunnen opruimen na een wijziging van de primary key, zonder directe SQL. Tab 5 "Beheer" doet dat, bovenop de SQL van de vorige PR (`execution.sp_ResetLandingzoneEntityLastLoadValue`, `sp_SkipPipelineLandingzoneFile`, `sp_SkipOpenPipelineQueue`, `integration.vw_LoadStatus`, `logging.ConfigChange`). De directe SQL in de configdb blijft een uitzondering.
+
+- **Alles via procedures of een gecontroleerde bestandsactie.** Wat naar de configdb schrijft, gaat door de procedures in `execution.*`, die een auditregel in `logging.ConfigChange` schrijven met de reden (verplicht). Alleen het opruimen wist Delta-mappen, met `notebookutils.fs.rm`, en alleen mappen die bestaan.
+- **Het watermark wordt `NULL`, de rij wordt nooit verwijderd.** `vw_LoadToBronzeLayer` doet een `INNER JOIN` op `execution.LandingzoneEntityLastLoadValue`; een tabel zonder rij valt dan stil uit de Bronze-load (*vastgesteld*, code).
+- **Opruimen: eerst de mappen, dan de configdb.** Silver voor Bronze, dan de wachtrij (landingzone en Bronze, `sp_SkipOpenPipelineQueue`), dan het watermark. Een fout bij het wissen laat de configdb ongemoeid voor die tabel, en elke stap is te herhalen. De omgekeerde volgorde kan een tabel achterlaten waarvan het watermark al weg is en de oude Bronze nog bestaat, en dan merget een volle load op de nieuwe sleutel in oude rijen. Een open Bronze-rij wordt ook op verwerkt gezet, omdat `vw_LoadToSilverLayer` die wachtrij leest.
+- **Elke actie begint met een proefdraai** en kan daarna alleen voor precies die selectie, actie, waarde en reden; een wijziging maakt de proefdraai ongeldig. Opruimen en elke actie in P vragen om de omgeving te typen. Een proefdraai schrijft en wist niets; die van de wachtrij is de proefdraai van de procedure zelf.
+- **Geen `Silver opnieuw opbouwen` met behoud van historie.** Opruimen wist ook de Silver-historie (SCD2) van de tabel; de proefdraai waarschuwt daarvoor. Een tabel opnieuw opbouwen zonder historie te verliezen is een andere ingreep (`sp_RequeueSilverLayerEntities`, zie `10_operations.md`).
+- **De Delta-mappen volgen de load-notebooks:** `Tables/<namespace>/<schema>_<naam>` in een lakehouse met schema's, en `Tables/<namespace>_<schema>_<naam>` zonder. De CONFIG-notebook kent de instelling `lakehouse_schema_enabled` niet, dus beide paden worden gecontroleerd en alleen bestaande gewist.
+- *Getest in eigen omgeving* (FMD_TRIAL, 2026-11-10, alleen lezen en proefdraaien) en lokaal met nepwidgets (59 controles). **Niet getest:** een echte reset, overslaan of opruimen, een actie in T of P, en het tweede pad (een lakehouse zonder schema's).
