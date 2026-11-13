@@ -373,3 +373,51 @@ die via `build_payload` en `register()` aan T en P. Geen nieuwe procedure en gee
   gecontroleerd met `validate_state`. Fouten stoppen de kopie voordat er iets geschreven wordt.
 - Bewust geen knop in de editor: de editor blijft de plek voor een wijziging in een omgeving, de kopie is een
   aanroep in `NB_REGISTRATIE`.
+
+## Aanvulling 2026-11-10: omgevingen vergelijken en overzetten in de editor (tab 4)
+
+**Correctie op "Bewust geen knop in de editor" (2026-10-26).** Een beheerder moet zonder code kunnen zien waar D, T en P
+verschillen en D kunnen overzetten. Tab 4 doet dat; het schrijven blijft `copy_registration`, met dezelfde proefdraai en
+bevestiging als tab 3. Op tab 3 en 4 zet de proefdraai het bevestigingsvinkje terug, zodat bevestigen pas telt nadat je de
+uitkomst hebt gezien (voorheen telde een vinkje van vóór de proefdraai op tab 3 mee).
+
+- `compare_environments` (alleen lezen) geeft per tabel de verschillen tussen omgevingen. Een afwijking in de
+  dataselectie (`SELECTION_FIELDS`) is toegestaan en staat apart; een andere connectie telt niet als verschil (P mag bewust
+  een andere gateway gebruiken).
+- Een tabel en een bron worden tussen omgevingen herkend aan namespace, database, brontype, schema en naam, niet aan de
+  alias. De alias volgt per workspace uit de bronnen die er staan (`AFAS`, of `AFAS_<bron>` bij een gedeelde namespace) en
+  kan per omgeving verschillen. Voorheen zag `plan_copy` een bestaande tabel dan als nieuw, of miste de bron in de payload.
+- Een bron die het doel al heeft behoudt de connectie van het doel. `sp_RegisterEntities` herkent een `DataSource` aan
+  connectie, database en type; met de connectie van D zou P een tweede `DataSource` met dubbele entiteiten krijgen
+  (P-019). *Vastgesteld* in de code; *getest in eigen omgeving* met een nepdoel in `scripts/test_registration_editor.py`,
+  nog niet tegen een echte configdb.
+
+## Aanvulling 2026-11-13: kiezen wat je overzet, per databron, LoadGroup en tabel
+
+Tab 4 zette alles over wat nieuw en actief is in de bron (met de opties *bijwerken* en *uitgezette tabellen meenemen*). Bij een klant wil je vaak één databron, één LoadGroup of een paar tabellen doorzetten. `plan_copy` en `copy_registration` kunnen nu beperken, en de editor biedt dat aan.
+
+- **Drie filters naast `sources`** (de alias van een databron, zoals al bestond): `load_groups` (de *effectieve* LoadGroup: die van de tabel, anders die van haar databron, zoals in `vw_LoadSourceToLandingzone`; `''` is geen groep), `tables` (`Schema.Tabel`) en `only` (tabelidentiteiten: databron, schema en naam, zoals `entity_ident`; dit is wat de editor meegeeft, omdat dezelfde `Schema.Tabel` in twee databronnen kan voorkomen).
+- **De filters werken samen:** een tabel moet bij elk filter dat is opgegeven voldoen. `None` is geen filter. Een naam die niet in de bron staat is een fout, zodat een typefout niets kopieert in plaats van stil minder.
+- **Alleen de keuze verandert, niet de overname.** Een gekozen tabel wordt precies zo overgenomen als zonder selectie (connectie van het doel, dataselectie per omgeving, regels). Een tabel buiten de selectie telt niet als *al geregistreerd*, en een override voor zo'n tabel is geen fout en doet niets.
+- **De editor:** bij "Zet over: alleen een selectie" een lijst met per tabel de databron, de groep en of hij in een doel nog ontbreekt (uit `compare_environments`, dat daarvoor de identiteit, de databron, de effectieve groep en `IsActive` per omgeving in zijn rijen heeft). Filters op databron en LoadGroup, zoeken, en alles in de lijst selecteren (een hele databron of groep in een klik). De keuze blijft staan als een filter verandert; een andere bron of doelomgeving leegt de lijst en de keuze. De proefdraai en het overzetten gelden voor precies die selectie: een andere keuze maakt de proefdraai ongeldig, en zonder tabellen blijft overzetten uit.
+- *Getest in eigen omgeving* (FMD_TRIAL, 2026-11-13, alleen proefdraaien): met *bijwerken* aan en vijf gekozen tabellen meldt de proefdraai vijf tabellen voor T en voor P, niet alle tabellen van de omgeving. **Niet getest:** een echte overzetting met een selectie, het filter op LoadGroup in Fabric (de trial heeft geen LoadGroups; lokaal wel), en een selectie samen met overrides in Fabric.
+
+## Aanvulling 2026-11-10: dagelijks beheer in de editor (tab 5)
+
+Een beheerder moet het watermark van een tabel kunnen resetten, open wachtrijrijen op verwerkt kunnen zetten en een tabel kunnen opruimen na een wijziging van de primary key, zonder directe SQL. Tab 5 "Beheer" doet dat, bovenop de SQL van de vorige PR (`execution.sp_ResetLandingzoneEntityLastLoadValue`, `sp_SkipPipelineLandingzoneFile`, `sp_SkipOpenPipelineQueue`, `integration.vw_LoadStatus`, `logging.ConfigChange`). De directe SQL in de configdb blijft een uitzondering.
+
+- **Alles via procedures of een gecontroleerde bestandsactie.** Wat naar de configdb schrijft, gaat door de procedures in `execution.*`, die een auditregel in `logging.ConfigChange` schrijven met de reden (verplicht). Alleen het opruimen wist Delta-mappen, met `notebookutils.fs.rm`, en alleen mappen die bestaan.
+- **Het watermark wordt `NULL`, de rij wordt nooit verwijderd.** `vw_LoadToBronzeLayer` doet een `INNER JOIN` op `execution.LandingzoneEntityLastLoadValue`; een tabel zonder rij valt dan stil uit de Bronze-load (*vastgesteld*, code).
+- **Opruimen: eerst de mappen, dan de configdb.** Silver voor Bronze, dan de wachtrij (landingzone en Bronze, `sp_SkipOpenPipelineQueue`), dan het watermark. Een fout bij het wissen laat de configdb ongemoeid voor die tabel, en elke stap is te herhalen. De omgekeerde volgorde kan een tabel achterlaten waarvan het watermark al weg is en de oude Bronze nog bestaat, en dan merget een volle load op de nieuwe sleutel in oude rijen. Een open Bronze-rij wordt ook op verwerkt gezet, omdat `vw_LoadToSilverLayer` die wachtrij leest.
+- **Elke actie begint met een proefdraai** en kan daarna alleen voor precies die selectie, actie, waarde en reden; een wijziging maakt de proefdraai ongeldig. Opruimen en elke actie in P vragen om de omgeving te typen. Een proefdraai schrijft en wist niets; die van de wachtrij is de proefdraai van de procedure zelf.
+- **Geen `Silver opnieuw opbouwen` met behoud van historie.** Opruimen wist ook de Silver-historie (SCD2) van de tabel; de proefdraai waarschuwt daarvoor. Een tabel opnieuw opbouwen zonder historie te verliezen is een andere ingreep (`sp_RequeueSilverLayerEntities`, zie `10_operations.md`).
+- **De Delta-mappen volgen de load-notebooks:** `Tables/<namespace>/<schema>_<naam>` in een lakehouse met schema's, en `Tables/<namespace>_<schema>_<naam>` zonder. De CONFIG-notebook kent de instelling `lakehouse_schema_enabled` niet, dus beide paden worden gecontroleerd en alleen bestaande gewist.
+- *Getest in eigen omgeving* (FMD_TRIAL, 2026-11-10, alleen lezen en proefdraaien) en lokaal met nepwidgets (59 controles). **Niet getest:** een echte reset, overslaan of opruimen, een actie in T of P, en het tweede pad (een lakehouse zonder schema's).
+
+## Aanvulling 2026-11-13: een nieuw doel mag niet het doel van een bestaande tabel zijn, en Selectie wissen wist alles
+
+Een echte test in FMD_TRIAL (overzetten van `sales_targets.xlsx` naar T, waar `sales_targets.csv` al met hetzelfde doel `fin.SalesTarget` stond) liet twee dingen zien.
+
+- **Bronze en Silver horen bij het doel, niet bij de bron.** `sp_RegisterEntities` hing de bestaande Bronze-rij aan de nieuwe landingzone-entiteit; de csv-entiteit bleef zonder Bronze achter en zou niet meer zijn geladen. De proefdraai meldde alleen `New` en de tellingen van Bronze en Silver bleven gelijk, dus het viel niet op. Nu geeft `target_problems` een **fout** voor een nieuwe tabel waarvan het doel (`TargetSchema.TargetName`, hoofdletters tellen niet) al het doel is van een andere tabel. In `plan_copy` wordt dat tegen de doelomgeving gecontroleerd (de kopie ziet de doelomgeving niet via `validate_state`) en in `validate_state` tegen de geladen registratie (tab 3). Twee nieuwe tabellen met hetzelfde doel in één registratie zijn ook een fout. Een tabel die al geregistreerd is, ook met `update`, geeft geen fout op zijn eigen doel. Oplossing voor de gebruiker: een eigen `TargetSchema` of `TargetName`.
+- **Selectie wissen wist de hele selectie** in tab 4 en tab 5, ook de tabellen die een filter verbergt. Voorheen wiste de knop alleen de zichtbare rijen, terwijl het label alles telt; een opruimactie kon daardoor een verborgen tabel noemen. *Alles in de lijst selecteren* blijft de zichtbare rijen nemen.
+- *Getest in eigen omgeving:* lokaal met nepwidgets; de nieuwe controles falen op de code van vóór deze wijziging (6 mislukkingen) en slagen erna. Zie `testplan-trial.md` (T-L03, T-M01 en T-M02).

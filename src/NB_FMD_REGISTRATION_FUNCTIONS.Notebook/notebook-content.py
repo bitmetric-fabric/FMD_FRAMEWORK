@@ -726,6 +726,27 @@ def build_payload(state, original):
     return sources, entities
 
 
+def target_problems(new, taken, within_batch=True):
+    """
+    Problems for tables that are about to be registered (`new`) and whose target (TargetSchema.TargetName) is already the target of
+    another table: `taken` is {(schema, name) in lower case: 'Schema.Table' of that table}. Bronze and Silver belong to the target, not to
+    the source, so registering a second table with the same target takes over the Bronze and Silver rows of the first and leaves that table
+    without (found 2026-11-13 in FMD_TRIAL: sales_targets.xlsx next to sales_targets.csv with target fin.SalesTarget, testplan T-L03).
+    With within_batch, two tables of `new` that share a target clash as well.
+    """
+    problems, claimed = [], dict(taken)
+    for e in new:
+        name = f"{e['SourceSchema']}.{e['SourceName']}"
+        key = (e['TargetSchema'].lower(), e['TargetName'].lower())
+        if key in claimed:
+            problems.append({'table': name, 'field': 'TargetName', 'level': 'error',
+                             'message': f"the target {e['TargetSchema']}.{e['TargetName']} is already the target of {claimed[key]}: registering this table would "
+                                        f"take over its Bronze and Silver table and leave {claimed[key]} without. Give it its own TargetSchema or TargetName"})
+        elif within_batch:
+            claimed[key] = name
+    return problems
+
+
 def validate_state(state, original, discovered=None):
     """
     [{'table', 'field', 'level', 'message'}] for what would be registered. register(dry_run=True) stays the
@@ -750,6 +771,9 @@ def validate_state(state, original, discovered=None):
             add(s['Source'], 'DataSourceType', 'error', f"{s['DataSourceType']} does not fit connection type {ctype}")
         if s.get('HistoryDays') is not None and s['HistoryDays'] < 1:
             add(s['Source'], 'HistoryDays', 'error', 'must be 1 or more')
+    registered = {entity_key(o) for o in original['entities']}
+    problems += target_problems([e for e in entities_to_register(state, original) if entity_key(e) not in registered],
+                                {(o['TargetSchema'].lower(), o['TargetName'].lower()): f"{o['SourceSchema']}.{o['SourceName']}" for o in original['entities']})
     seen = set()
     for e in entities_to_register(state, original):
         name = f"{e['SourceSchema']}.{e['SourceName']}"
@@ -897,9 +921,25 @@ def export_tables(sources, entities):
 # Copy the registration of one environment to others (D -> T, P). The data selection fields differ per
 # environment on purpose: the entity rows are per DATA workspace, so a filter in T does not touch D or P.
 SELECTION_FIELDS = ('SourceFilter', 'SourceColumns', 'IsActive', 'LoadGroup')
+OTHER_FIELDS = tuple(f for f in ENTITY_FIELDS if f not in SELECTION_FIELDS) + ('BronzeRules', 'SilverRules')
 
 
-def plan_copy(source, target, environment, sources=None, only_active=True, update=False, history_days=None, overrides=None):
+def source_ident(source):
+    """A data source across environments: namespace, database and type. Not the connection (P may use another gateway on purpose) and not the alias."""
+    return (str(source['Namespace']).lower(), source['DataSourceName'], source['DataSourceType'])
+
+
+def entity_ident(state, entity):
+    """
+    A table across environments: its data source and its schema and name. The alias is derived per workspace (a namespace shared
+    by several sources gets the source name behind it), so the same source can have another alias in D and in P.
+    """
+    source = next(s for s in state['sources'] if s['Source'] == entity['Source'])
+    return source_ident(source) + (entity['SourceSchema'], entity['SourceName'])
+
+
+def plan_copy(source, target, environment, sources=None, only_active=True, update=False, history_days=None, overrides=None,
+              load_groups=None, tables=None, only=None):
     """
     What copy_registration would register in `target` (a load_registration state), as
     {'sources', 'entities', 'problems', 'skipped'}. No database access.
@@ -908,6 +948,10 @@ def plan_copy(source, target, environment, sources=None, only_active=True, updat
     unless update is set (then the target follows the source, except for SELECTION_FIELDS, which stay as they are in
     the target) or it has an override (then only the override fields change). `overrides` is
     {'*': {...}, 'Schema.Table': {...}} for this environment: SELECTION_FIELDS only, a table row beats '*'.
+
+    Which tables are considered: `sources` (source aliases), `load_groups` (the effective load group: the one of the table, else the one of its
+    source; '' is no group), `tables` ('Schema.Table') and `only` (table identities, see entity_ident) all narrow the choice, and a table must
+    meet every one that is given. None means no filter. A name that does not exist in `source` is an error, so a typo copies nothing.
     """
     overrides = overrides or {}
     problems, skipped = [], []
@@ -925,15 +969,27 @@ def plan_copy(source, target, environment, sources=None, only_active=True, updat
     unknown = set(sources or ()) - {s['Source'] for s in source['sources']}
     if unknown:
         problem(', '.join(sorted(unknown)), 'sources', f'not a source of {source["environment"]}')
+    source_group = {s['Source']: s['LoadGroup'] or '' for s in source['sources']}
+    group_of = lambda e: e['LoadGroup'] or source_group.get(e['Source'], '')
+    for group in sorted(set(load_groups or ()) - {group_of(e) for e in source['entities']}):
+        problem(group or '(geen groep)', 'load_groups', f'not a load group of {source["environment"]}')
+    for table in sorted(set(tables or ()) - names):
+        problem(table, 'tables', f'not a table of {source["environment"]}')
+    wanted = None if only is None else {tuple(i) for i in only}
 
-    present = {entity_key(e): e for e in target['entities']}
+    present = {entity_ident(target, e): e for e in target['entities']}
+    target_sources = {source_ident(s): s for s in target['sources']}
     chosen = []
     for e in source['entities']:
+        name = f"{e['SourceSchema']}.{e['SourceName']}"
         if (sources and e['Source'] not in sources) or (only_active and not e['IsActive']):
             continue
-        name = f"{e['SourceSchema']}.{e['SourceName']}"
+        if (load_groups is not None and group_of(e) not in load_groups) or (tables is not None and name not in tables):
+            continue
+        if wanted is not None and entity_ident(source, e) not in wanted:
+            continue
         change = {**overrides.get('*', {}), **overrides.get(name, {})}
-        existing = present.get(entity_key(e))
+        existing = present.get(entity_ident(source, e))
         if existing is None:
             item = {**e, **change, 'BronzeMode': 'replace' if e['BronzeRules'] else 'keep',
                     'SilverMode': 'replace' if e['SilverRules'] else 'keep'}
@@ -943,25 +999,122 @@ def plan_copy(source, target, environment, sources=None, only_active=True, updat
                     'BronzeMode': 'replace' if e['BronzeRules'] else ('clear' if existing['BronzeRules'] else 'keep'),
                     'SilverMode': 'replace' if e['SilverRules'] else ('clear' if existing['SilverRules'] else 'keep')}
         elif any(existing[f] != v for f, v in change.items()):
-            item = {**existing, **change, 'BronzeMode': 'keep', 'SilverMode': 'keep'}
+            # The payload carries the sources of `source`, so the row must use the alias of `source` too.
+            item = {**existing, **change, 'Source': e['Source'], 'BronzeMode': 'keep', 'SilverMode': 'keep'}
         else:
             skipped.append(name)
             continue
         chosen.append({**item, 'Registered': False, 'Selected': True, 'Watermark': None})
 
     used = {e['Source'] for e in chosen}
-    chosen_sources = [{**s, 'HistoryDays': history_days} for s in source['sources'] if s['Source'] in used]
+    # A source the target already has keeps its own connection: sp_RegisterEntities finds the DataSource by connection, database
+    # and type, so the connection of `source` would make a second DataSource with a second set of tables (P-019).
+    chosen_sources = []
+    for s in source['sources']:
+        if s['Source'] in used:
+            own = target_sources.get(source_ident(s))
+            chosen_sources.append({**s, 'HistoryDays': history_days, **({'ConnectionName': own['ConnectionName']} if own else {})})
     state = {'domain': target['domain'], 'environment': environment, 'workspace': target['workspace'],
              'sources': chosen_sources, 'entities': chosen}
     nothing_before = {'sources': [dict(s) for s in chosen_sources], 'entities': []}
     # A copy has no discovery to check against: that warning would repeat for every table.
     problems += [p for p in validate_state(state, nothing_before) if 'discovered tables' not in p['message']]
+    # The target environment is not `nothing_before`: a new table must not take the target of a table that is already registered there. The
+    # clashes within the copy itself are found by validate_state.
+    problems += target_problems([e for e in chosen if entity_ident(state, e) not in present],
+                                {(o['TargetSchema'].lower(), o['TargetName'].lower()): f"{o['SourceSchema']}.{o['SourceName']}" for o in target['entities']},
+                                within_batch=False)
     payload_sources, payload_entities = build_payload(state, nothing_before)
     return {'sources': payload_sources, 'entities': payload_entities, 'problems': problems, 'skipped': skipped}
 
 
+def compare_environments(states):
+    """
+    Compares the registrations of several environments ({'D': state, 'T': state, ...}, each from load_registration). One row per
+    table, in the order of the first environment that has it:
+    {'Table', 'DataSource', 'Present': {env: bool}, 'Selection': {...}, 'Other': {...}, 'Connection': {...}, 'Status'}.
+    Selection and Other list only the fields that differ, as {field: {env: value}}: Selection is the data selection that may
+    differ per environment (SELECTION_FIELDS), Other is everything else that is registered (keys, rules, load mode).
+    Connection is the connection per environment; a difference does not count, because P may use another gateway on purpose. Status is 'missing' (not in
+    every environment), 'differs' (Other differs), 'selection' (only the data selection differs) or 'same'. Ident is the identity of the table across
+    environments (entity_ident), Namespace its source's namespace, LoadGroup its effective load group and Active the IsActive per environment.
+    """
+    envs = list(states)
+    found = {env: {entity_ident(state, e): (e, next(x for x in state['sources'] if x['Source'] == e['Source']))
+                   for e in state['entities']} for env, state in states.items()}
+    order = list(dict.fromkeys(ident for env in envs for ident in found[env]))
+
+    def spread(here, fields, value):
+        out = {}
+        for field in fields:
+            values = {env: value(item, field) for env, item in here.items() if item}
+            if len({json.dumps(v, sort_keys=True, default=str) for v in values.values()}) > 1:
+                out[field] = values
+        return out
+
+    rows = []
+    for ident in order:
+        here = {env: found[env].get(ident) for env in envs}
+        present = {env: item is not None for env, item in here.items()}
+        selection = spread(here, SELECTION_FIELDS, lambda item, f: item[0][f])
+        other = spread(here, OTHER_FIELDS, lambda item, f: item[0][f])
+        connection = {env: item[1]['ConnectionName'] for env, item in here.items() if item}
+        status = 'missing' if not all(present.values()) else 'differs' if other else 'selection' if selection else 'same'
+        schema, name = ident[3], ident[4]
+        entity0, source0 = next(item for item in here.values() if item)  # the first environment that has the table
+        rows.append({'Table': f'{schema}.{name}' if schema else name, 'DataSource': ident[1], 'Present': present,
+                     'Selection': selection, 'Other': other, 'Connection': connection, 'Status': status,
+                     'Ident': ident, 'Namespace': source0['Namespace'], 'LoadGroup': entity0['LoadGroup'] or source0['LoadGroup'] or '',
+                     'Active': {env: item[0]['IsActive'] for env, item in here.items() if item}})
+    return rows
+
+
+STATUS_LABEL = {'missing': ('ontbreekt', '#b00020'), 'differs': ('afwijking', '#b45f06'), 'selection': ('dataselectie', '#1a5fb4'), 'same': ('gelijk', '#2e7d32')}
+_TIP_MARK = '✓ = geregistreerd in deze omgeving, – = niet geregistreerd'
+_TIP_DIFF = 'Welke instelling per omgeving anders is. Een andere connectie staat in grijs en telt niet mee.'
+_CELL = "style='padding:4px 12px;border-bottom:1px solid #e8e8e8;vertical-align:top'"
+_HEAD = "style='padding:4px 12px;background:#f3f3f3;text-align:left;border-bottom:1px solid #ccc'"
+
+
+def _short(value, limit=60):
+    text = json.dumps(value) if isinstance(value, (list, dict)) else str(value)
+    return text if len(text) <= limit else text[:limit - 1] + '…'
+
+
+def comparison_html(rows, environments, show='diff'):
+    """
+    The rows of compare_environments as an HTML table. show: 'diff' (everything that is not the same), 'all', or one status
+    ('missing', 'differs', 'selection'). A different connection is listed in grey and does not make a table differ.
+    """
+    keep = [r for r in rows if show == 'all' or (r['Status'] != 'same' if show == 'diff' else r['Status'] == show)]
+    head = ''.join(f"<th {_HEAD} title=\"{html.escape(_TIP_MARK, quote=True)}\">{html.escape(e)}</th>" for e in environments)
+    body = ''
+    for r in keep:
+        label, color = STATUS_LABEL[r['Status']]
+        marks = ''.join(f"<td {_CELL} align=center>{'✓' if r['Present'].get(e) else '–'}</td>" for e in environments)
+        lines = [f"{html.escape(f)}: " + ', '.join(f'{html.escape(e)}={html.escape(_short(v))}' for e, v in values.items())
+                 for fields in (r['Other'], r['Selection']) for f, values in fields.items()]
+        absent = [e for e in environments if not r['Present'].get(e)]
+        if absent:
+            lines.insert(0, 'niet in ' + ', '.join(html.escape(e) for e in absent))
+        if len(set(r['Connection'].values())) > 1:
+            lines.append('<span style="color:#888">connectie: ' + ', '.join(f'{html.escape(e)}={html.escape(str(c))}' for e, c in r['Connection'].items()) + '</span>')
+        body += (f"<tr><td {_CELL}><b style='color:{color}'>{label}</b></td><td {_CELL}>{html.escape(r['Table'])}</td>"
+                 f"<td {_CELL}>{html.escape(r['DataSource'])}</td>{marks}<td {_CELL}>{'<br>'.join(lines)}</td></tr>")
+    count = f'{len(keep)} van {len(rows)} tabel(len)'
+    if not keep:
+        return f'<i>Niets te tonen ({count}).</i>'
+    return (f"<div style='margin-bottom:6px;color:#666'>{count}</div><table style='border-collapse:collapse'><tr><th {_HEAD}>status</th><th {_HEAD}>tabel</th>"
+            f"<th {_HEAD}>bron</th>{head}<th {_HEAD} title=\"{html.escape(_TIP_DIFF, quote=True)}\">verschillen</th></tr>{body}</table>")
+
+
+def compare(domain, environments):
+    """compare_environments for the environments of one domain, read from the configuration database (read-only)."""
+    return compare_environments({env: load_registration(domain, env) for env in environments})
+
+
 def copy_registration(domain, to_environments, from_environment='D', sources=None, only_active=True, update=False,
-                      history_days=None, overrides=None, dry_run=True):
+                      history_days=None, overrides=None, dry_run=True, load_groups=None, tables=None, only=None):
     """
     Registers what is registered in `from_environment` also in `to_environments` (e.g. ["T", "P"]), through
     register(), so the dry run shows New/Changed/Unchanged per table. Nothing is written when any environment has an
@@ -971,6 +1124,8 @@ def copy_registration(domain, to_environments, from_environment='D', sources=Non
     in the source environment; update: also bring registered tables in line with the source (their SELECTION_FIELDS
     stay as they are in the target); history_days: start watermark for incremental tables that have none yet;
     overrides: {"T": {"*": {"IsActive": 0}, "Sales.Orders": {"IsActive": 1, "SourceFilter": "OrderDate >= '2025-01-01'"}}}.
+    load_groups, tables, only: copy only a selection, next to `sources`: the effective load groups (['dag']; '' is no group), 'Schema.Table' names, or
+    table identities (entity_ident, what the editor passes). They narrow each other; a name that does not exist is an error and nothing is copied.
     """
     stray = set(overrides or {}) - set(to_environments)
     if stray:
@@ -979,7 +1134,7 @@ def copy_registration(domain, to_environments, from_environment='D', sources=Non
         raise ValueError(f"{from_environment} is both the source and a target")
     source = load_registration(domain, from_environment)
     plans = {env: plan_copy(source, load_registration(domain, env), env, sources, only_active, update, history_days,
-                            (overrides or {}).get(env)) for env in to_environments}
+                            (overrides or {}).get(env), load_groups=load_groups, tables=tables, only=only) for env in to_environments}
     failed = False
     for env, plan in plans.items():
         errors = [p for p in plan['problems'] if p['level'] == 'error']
@@ -1076,6 +1231,210 @@ def start_discovery(connection_name, data_source_name, schema_filter='', domain=
             raise RuntimeError(f"Ontdekking niet klaar na {timeout_minutes} minuten (status {job.get('status')}); "
                                f"de pipeline loopt mogelijk nog in {code_name}.")
         time.sleep(poll_seconds)
+
+# METADATA ********************
+
+# META {
+# META   "language": "python",
+# META   "language_group": "jupyter_python"
+# META }
+
+# CELL ********************
+
+# Day-to-day management of the registered tables of one DATA workspace: status and queue, the watermark, the open queue, and the cleanup
+# after a change of the primary key. Everything that writes to the configuration database goes through the procedures in execution.*
+# (they write logging.ConfigChange, with the reason), and the cleanup removes the Delta folders of Bronze and Silver with notebookutils.fs.
+# Every action has a dry run; the editor only enables the real run for exactly the selection of the dry run.
+
+MANAGE_ACTIONS = {
+    'reset': 'Watermark resetten (de volgende load laadt alles)',
+    'reset_to': 'Watermark op een waarde zetten',
+    'skip': 'Open wachtrij op verwerkt zetten',
+    'rebuild': 'Opruimen na een PK-wijziging (Bronze en Silver wissen)',
+}
+MANAGE_LAYERS = ('Both', 'Landingzone', 'Bronze')
+_LAYER_TEXT = {'Both': 'landingzone en Bronze', 'Landingzone': 'landingzone', 'Bronze': 'Bronze'}
+# What execution.sp_SkipOpenPipelineQueue reports, in the language of the editor.
+_QUEUE_RESULT = {'nothing open': 'niets open', 'dry run: would be skipped': 'zou op verwerkt gezet worden', 'skipped': 'op verwerkt gezet', 'not requested': 'niet gevraagd'}
+
+_SQL_STATUS = """
+SELECT [LandingzoneEntityId], [DataSourceName], [SourceSchema], [SourceName], [IsActive], [LoadValue], [LastLoadDatetime], [LandingzoneLastEnd],
+       [BronzeLastEnd], [SilverLastEnd], [LastErrorAt], [PendingLandingzoneFiles], [PendingBronzeFiles], [Status]
+FROM [integration].[vw_LoadStatus]
+WHERE [WorkspaceName] = ?
+ORDER BY [DataSourceName], [SourceSchema], [SourceName]
+"""
+
+_SQL_REBUILD = """
+SELECT le.[LandingzoneEntityId], ds.[Namespace], le.[SourceSchema], le.[SourceName], ble.[PrimaryKeys],
+       bl.[WorkspaceGuid] AS BronzeWorkspace, bl.[LakehouseGuid] AS BronzeLakehouse, ble.[Schema] AS BronzeSchema, ble.[Name] AS BronzeName,
+       sl.[WorkspaceGuid] AS SilverWorkspace, sl.[LakehouseGuid] AS SilverLakehouse, sle.[Schema] AS SilverSchema, sle.[Name] AS SilverName,
+       ISNULL(sle.[IsHistorized], 0) AS IsHistorized
+FROM [integration].[LandingzoneEntity] le
+JOIN [integration].[DataSource] ds ON ds.[DataSourceId] = le.[DataSourceId]
+LEFT JOIN [integration].[BronzeLayerEntity] ble ON ble.[LandingzoneEntityId] = le.[LandingzoneEntityId]
+LEFT JOIN [integration].[Lakehouse] bl ON bl.[LakehouseId] = ble.[LakehouseId]
+LEFT JOIN [integration].[SilverLayerEntity] sle ON sle.[BronzeLayerEntityId] = ble.[BronzeLayerEntityId]
+LEFT JOIN [integration].[Lakehouse] sl ON sl.[LakehouseId] = sle.[LakehouseId]
+WHERE le.[LandingzoneEntityId] IN ({ids})
+"""
+
+
+def load_status(domain, environment):
+    """The load status per registered table of the DATA workspace of this domain and environment (integration.vw_LoadStatus), read-only."""
+    name, _ = resolve_data_workspace(domain, environment)
+    return read_config(_SQL_STATUS, name)
+
+
+def delta_paths(info):
+    """
+    The Delta folders of one table in Bronze and Silver: {'Bronze': [paths], 'Silver': [paths]}. The load notebooks write to
+    Tables/<namespace>/<schema>_<name> in a lakehouse with schemas and to Tables/<namespace>_<schema>_<name> in one without. This notebook
+    does not know which, so it lists both; the caller only touches the ones that exist.
+    """
+    out = {}
+    for layer in ('Bronze', 'Silver'):
+        workspace, lakehouse, schema, name = (info.get(f'{layer}{k}') for k in ('Workspace', 'Lakehouse', 'Schema', 'Name'))
+        if not (workspace and lakehouse and name):
+            out[layer] = []
+            continue
+        base = f"abfss://{str(workspace).lower()}@onelake.dfs.fabric.microsoft.com/{str(lakehouse).lower()}/Tables"
+        out[layer] = [f"{base}/{info['Namespace']}/{schema}_{name}", f"{base}/{info['Namespace']}_{schema}_{name}"]
+    return out
+
+
+def validate_watermark(value):
+    """'' when execution.sp_ResetLandingzoneEntityLastLoadValue accepts the value (a datetime as yyyy-mm-dd hh:mi:ss.mmm, or a whole number, at most 50 characters), else why not."""
+    text = (value or '').strip()
+    if not text:
+        return 'Vul een waarde in.'
+    if len(text) > 50:
+        return 'Maximaal 50 tekens.'
+    if re.fullmatch(r'-?\d+', text) or re.fullmatch(r'\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2}(\.\d{1,7})?)?', text):
+        return ''
+    return 'Een datum als yyyy-mm-dd hh:mi:ss.mmm, of een getal.'
+
+
+def manage_problems(action, ids, reason, value=None, layer='Both'):
+    """What is wrong with a request, before anything is read or written: a list of texts, empty when it is fine."""
+    problems = []
+    if action not in MANAGE_ACTIONS:
+        problems.append(f'Onbekende actie: {action}.')
+    if not ids:
+        problems.append('Selecteer minstens één tabel.')
+    if not (reason or '').strip():
+        problems.append('Vul een reden in: die komt in logging.ConfigChange.')
+    if action == 'reset_to' and validate_watermark(value):
+        problems.append('Waarde: ' + validate_watermark(value))
+    if layer not in MANAGE_LAYERS:
+        problems.append(f'Onbekende laag: {layer}.')
+    return problems
+
+
+def plan_manage(action, status_rows, rebuild_info=None, value=None, layer='Both', exists=None):
+    """
+    What an action would do per table, without database or lake access: [{'Id', 'Table', 'Steps': [text], 'Warnings': [text], 'Delete': [paths]}].
+    status_rows are the rows of load_status for the chosen tables. For 'rebuild', rebuild_info is {id: row of _SQL_REBUILD} and exists
+    {path: bool} says which Delta folders are there; only those are in 'Delete'.
+    """
+    plan = []
+    for row in status_rows:
+        wm = row.get('LoadValue')
+        old = str(wm) if wm else '(leeg)'
+        open_lz, open_br = row.get('PendingLandingzoneFiles') or 0, row.get('PendingBronzeFiles') or 0
+        item = {'Id': row['LandingzoneEntityId'], 'Table': f"{row['SourceSchema']}.{row['SourceName']}", 'Steps': [], 'Warnings': [], 'Delete': []}
+        if action == 'reset':
+            item['Steps'].append(f'Watermark {old} → (leeg): de volgende load laadt alles.')
+            if open_lz + open_br:
+                item['Warnings'].append(f'Er staan {open_lz + open_br} open wachtrijrijen (landingzone {open_lz}, Bronze {open_br}); zet ze zo nodig ook op verwerkt.')
+        elif action == 'reset_to':
+            item['Steps'].append(f'Watermark {old} → {value.strip()}.')
+        elif action == 'skip':
+            parts = []
+            if layer in ('Both', 'Landingzone'):
+                parts.append(f'landingzone {open_lz}')
+            if layer in ('Both', 'Bronze'):
+                parts.append(f'Bronze {open_br}')
+            item['Steps'].append(f"Open wachtrijrijen op verwerkt zetten ({_LAYER_TEXT[layer]}): {', '.join(parts)}. Er wordt niets geladen.")
+        elif action == 'rebuild':
+            info = (rebuild_info or {}).get(row['LandingzoneEntityId'], {})
+            found = delta_paths(info) if info else {'Bronze': [], 'Silver': []}
+            for lay in ('Silver', 'Bronze'):  # Silver reads Bronze, so Silver goes first
+                present = [p for p in found[lay] if (exists or {}).get(p)]
+                item['Delete'] += present
+                item['Steps'].append(f'{lay}-tabel wissen: {", ".join(p.split("/Tables/")[1] for p in present)}.' if present else f'{lay}-tabel: bestaat niet, niets te wissen.')
+            item['Steps'].append('Open wachtrij van landingzone en Bronze op verwerkt zetten.')
+            item['Steps'].append(f'Watermark {old} → (leeg): de volgende load laadt alles.')
+            if info and info.get('IsHistorized'):
+                item['Warnings'].append('De Silver-historie (SCD2) van deze tabel gaat verloren.')
+            if info:
+                item['Warnings'].append(f"Primary key in de configdb: {info.get('PrimaryKeys') or '(leeg)'}. Controleer of dat de nieuwe is.")
+            item['Warnings'].append('Laat geen load van deze tabel lopen tijdens het opruimen.')
+        plan.append(item)
+    return plan
+
+
+def manage(domain, environment, action, ids, reason, value=None, layer='Both', dry_run=True):
+    """
+    Runs one action on the chosen tables (ids are LandingzoneEntityId's) of an environment, and returns {'plan', 'results', 'dry_run'}.
+    dry_run (default) writes nothing: it plans, and for the open queue it uses the dry run of execution.sp_SkipOpenPipelineQueue.
+    The real cleanup removes the Delta folders first and only then changes the configuration database, per table: if the removal
+    fails, nothing in the configuration database has changed for that table. Every step can be repeated.
+    """
+    problems = manage_problems(action, ids, reason, value, layer)
+    if problems:
+        raise ValueError(' '.join(problems))
+    status = {r['LandingzoneEntityId']: r for r in load_status(domain, environment)}
+    unknown = [i for i in ids if i not in status]
+    if unknown:
+        raise ValueError(f'Niet gevonden in {environment}: {unknown}.')
+    rows = [status[i] for i in ids]
+    info = exists = None
+    if action == 'rebuild':
+        info = {r['LandingzoneEntityId']: r for r in read_config(_SQL_REBUILD.format(ids=','.join('?' * len(ids))), *ids)}
+        exists = {p: bool(notebookutils.fs.exists(p)) for i in info.values() for ps in delta_paths(i).values() for p in ps}
+    plan = plan_manage(action, rows, info, value, layer, exists)
+    driver, connstring, database = resolve_config_database()
+
+    def call(proc, **params):
+        return execute_with_outputs(proc, driver, connstring, database, **params)
+
+    def queue(item_id, layer_name, dry):
+        sets = call('[execution].[sp_SkipOpenPipelineQueue]', LandingzoneEntityId=item_id, Layer=layer_name, Reason=reason, DryRun=1 if dry else 0)['result_sets']
+        return '; '.join(f"{r['Layer']}: {r['OpenRows']} open, {_QUEUE_RESULT.get(r['Result'], r['Result'])}" for r in sets[-1])
+
+    results = []
+    for item in plan:
+        try:
+            if action == 'reset':
+                if dry_run:
+                    text = 'proefdraai: niets geschreven'
+                else:
+                    call('[execution].[sp_ResetLandingzoneEntityLastLoadValue]', LandingzoneEntityId=item['Id'], LoadValue=None, Reason=reason)
+                    text = 'watermark leeggemaakt'
+            elif action == 'reset_to':
+                if dry_run:
+                    text = 'proefdraai: niets geschreven'
+                else:
+                    call('[execution].[sp_ResetLandingzoneEntityLastLoadValue]', LandingzoneEntityId=item['Id'], LoadValue=value.strip(), Reason=reason)
+                    text = f'watermark op {value.strip()} gezet'
+            elif action == 'skip':
+                text = queue(item['Id'], layer, dry_run)
+            else:
+                if dry_run:
+                    text = 'proefdraai: ' + queue(item['Id'], 'Both', True)
+                else:
+                    for path in item['Delete']:
+                        print(f"  wissen: {path}")
+                        notebookutils.fs.rm(path, True)
+                    text = f"{len(item['Delete'])} tabel(len) gewist; " + queue(item['Id'], 'Both', False)
+                    call('[execution].[sp_ResetLandingzoneEntityLastLoadValue]', LandingzoneEntityId=item['Id'], LoadValue=None, Reason=reason)
+                    text += '; watermark leeggemaakt'
+            results.append({'Id': item['Id'], 'Table': item['Table'], 'Ok': True, 'Result': text})
+        except Exception as e:  # one table failing must not hide what happened to the others; the step that failed is in the text
+            results.append({'Id': item['Id'], 'Table': item['Table'], 'Ok': False, 'Result': f'{type(e).__name__}: {e}'})
+        print(f"{item['Table']}: {results[-1]['Result']}")
+    return {'plan': plan, 'results': results, 'dry_run': dry_run}
 
 # METADATA ********************
 
@@ -1318,7 +1677,7 @@ class RuleEditor:
         # A dropdown, not radio buttons: with "Ongewijzigd laten" (the usual case) the editor is one line, not four.
         self.mode = w.Dropdown(options=self.MODES, value='keep', description=f'{layer}-cleansing', style={'description_width': '110px'},
                                layout=w.Layout(width='100%', max_width='520px'))
-        self.add = w.Button(layout=w.Layout(width='auto'), description='Regel toevoegen', icon='plus')
+        self.add = w.Button(layout=w.Layout(width='auto'), description='Regel toevoegen')
         self.rows = vbox()
         self.box = vbox([self.rows, self.add])
         self.widget = vbox([self.mode, self.box])
@@ -1482,6 +1841,703 @@ class RuleEditor:
 STATUS_NL = {'new': 'nieuw', 'selected': 'geselecteerd', 'changed': 'gewijzigd', 'registered': 'geregistreerd'}
 
 
+class TabBar:
+    """
+    Buttons that act as tabs: the chosen one is 'primary' (blue), the others plain. A ToggleButtons selection is shown too faintly
+    in Fabric (every tab looks the same). value is the index; setting it in code also calls on_change, like a click.
+    """
+
+    def __init__(self, labels, on_change, width='auto', height=None, indent=False, active='primary'):
+        self._value = 0
+        self.on_change = on_change
+        self.active = active  # the button_style of the chosen tab: another colour for a second level of tabs
+        size = {'width': width, 'padding': '0 12px', **({'height': height} if height else {})}
+        self.buttons = [w.Button(description=label, layout=w.Layout(**size)) for label in labels]
+        for i, button in enumerate(self.buttons):
+            button.on_click(lambda _, i=i: setattr(self, 'value', i))
+        self.widget = w.HBox([*([w.HTML('&nbsp;&nbsp;&nbsp;&nbsp;')] if indent else []), *self.buttons], layout=w.Layout(margin='6px 0 0 0'))
+        self._paint()
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, index):
+        self._value = index
+        self._paint()
+        self.on_change(index)
+
+    def _paint(self):
+        for i, button in enumerate(self.buttons):
+            button.button_style = self.active if i == self._value else ''
+
+
+def _heading(title, hint='', hint_tip=''):
+    """A section title with an optional grey line below it; hint_tip is a tooltip on that line."""
+    tip = f' title="{html.escape(hint_tip, quote=True)}"' if hint_tip else ''
+    sub = f'<div style="color:#666;margin-top:1px"{tip}>{html.escape(hint)}</div>' if hint else ''
+    return w.HTML(f'<div style="margin:14px 0 4px;font-size:14px"><b>{html.escape(title)}</b>{sub}</div>')
+
+
+def _tip(button, text):
+    """A tooltip on a button (Fabric shows it as the title). Never the only place for a warning: a disabled button may show none."""
+    button.tooltip = text
+    return button
+
+
+def _label(text, tip='', width=None):
+    """
+    A label as HTML. Fabric shows a tooltip on a button and on HTML (a title attribute), but not on a checkbox or dropdown:
+    there the title is the description, whatever tooltip is set. So these widgets get no description and this label next to them.
+    """
+    attr = f' title="{html.escape(tip, quote=True)}"' if tip else ''
+    return w.HTML(f'<span{attr}>{html.escape(text)}</span>', layout=w.Layout(width=width) if width else w.Layout())
+
+
+def _check(value, text, tip='', width=None):
+    """(checkbox, row): a checkbox without description and its HTML label, so the label can carry a tooltip."""
+    check = w.Checkbox(value=value, indent=False, description='', layout=w.Layout(width='26px'))
+    return check, w.HBox([check, _label(text, tip, width)])
+
+
+class EnvironmentsPage:
+    """
+    Tab 4: compare the registration of D, T and P, and copy it from one environment to others. Two views, one at a time:
+    "Vergelijken" only reads; "Overzetten" is copy_registration(), with a dry run first like registering on tab 3. The data
+    selection that may differ per environment (SELECTION_FIELDS, for example a filter) is set as overrides, behind a checkbox.
+    """
+    ENVIRONMENTS = ('D', 'T', 'P')
+    FIELDS = (('Filter', 'SourceFilter'), ('Kolommen', 'SourceColumns'), ('LoadGroup', 'LoadGroup'), ('Actief', 'IsActive'))
+    FIELD_HELP = {
+        'SourceFilter': "Een voorwaarde op de bron (SourceFilter), zonder het woord WHERE, bijvoorbeeld OrderDate >= '2025-01-01'. Data die al geladen is, blijft staan.",
+        'SourceColumns': 'Welke kolommen geladen worden (SourceColumns). Leeg = alle kolommen. De primary key en de watermarkkolom moeten erbij zitten.',
+        'LoadGroup': 'De laadgroep van de tabel (LoadGroup). Leeg = de groep van de bron. Een run of schedule kan één groep apart laden.',
+        'IsActive': 'Aan = de tabel wordt geladen, uit = niet. Dit mag per omgeving verschillen.'}
+    SHOW_HELP = ('Alleen verschillen: alle tabellen die niet in elke omgeving gelijk zijn\n'
+                 'Ontbreekt: tabellen die in minstens één aangevinkte omgeving niet geregistreerd zijn\n'
+                 'Afwijking: tabellen die overal staan, maar met een andere instelling (bijvoorbeeld bestandstype of regels)\n'
+                 'Dataselectie: tabellen die alleen verschillen in filter, kolommen, LoadGroup of actief. Dat mag per omgeving.')
+
+    def __init__(self, ui):
+        self.ui = ui
+        self.rows, self.envs = [], []
+        self.overrides = {}  # {env: {'*' or 'Schema.Table': {field: value}}}: the overrides of copy_registration
+        self.dry_of = self.done_of = None
+        self.view = 0
+        # One message pane per view: the pane of the other view is hidden, so a message sent there would not be seen.
+        self.res = Pane(tall='300px', hide_empty=True)  # no empty box until there is something to say
+        self.cmp_res = Pane(tall='160px', hide_empty=True)
+        box = lambda: w.Layout(width='70px')
+        wide_btn = lambda: w.Layout(width='auto', min_width='140px', padding='0 14px')
+        # Fabric sends every keystroke of a continuous Text on its own and the kernel can lag: a click on a button right after typing
+        # then sees the first letters only (seen in the trial: a filter 'Amount > 1' was added as 'A'). So the text fields commit on
+        # blur or Enter (continuous_update=False), as the header fields do.
+        # The two views are a TabBar, indented and smaller than the tabs above, so they read as a second level.
+        self.view_bar = TabBar(['Vergelijken', 'Overzetten'], self._apply_view, width='120px', height='26px', indent=True, active='info')
+
+        # -- view 1: compare
+        self.cmp_checks, self.cmp_rows = {}, []
+        for env in self.ENVIRONMENTS:
+            self.cmp_checks[env], row = _check(True, env, f'Vergelijk {env} mee', '50px')
+            self.cmp_rows.append(row)
+        self.show = w.Dropdown(options=[('alleen verschillen', 'diff'), ('alles', 'all'), ('ontbreekt', 'missing'), ('afwijking', 'differs'), ('dataselectie', 'selection')],
+                               value='diff', layout=w.Layout(width='170px'))
+        self.show_label = _label('Toon', self.SHOW_HELP, '40px')
+        self.compare_btn = _tip(w.Button(layout=wide_btn(), description='Vergelijken', button_style='primary'), 'Leest de registratie van de aangevinkte omgevingen en toont de verschillen. Schrijft niets.')
+        self.table = w.HTML('<span style="color:#666">Vink de omgevingen aan en klik op Vergelijken.</span>',
+                            layout=w.Layout(max_height='360px', overflow='auto', width='100%', padding='4px 0'))
+        self.to_copy_btn = _tip(w.Button(layout=w.Layout(width='auto', min_width='160px', padding='0 14px', display='none'), description='Naar Overzetten →'),
+                                'Opent Overzetten met deze omgevingen al ingevuld. Er start niets.')
+        self.compare_view = vbox([
+            _heading('Omgevingen vergelijken', 'Alleen lezen. Dataselectie (filter, kolommen, LoadGroup, actief) mag per omgeving verschillen; een andere connectie telt niet als verschil.'),
+            w.HBox([w.HTML('Omgevingen:&nbsp;&nbsp;'), *self.cmp_rows, self.show_label, self.show, w.HTML('&nbsp;&nbsp;'), self.compare_btn]),
+            self.cmp_res.widget, self.table, self.to_copy_btn], width='100%')
+
+        # -- view 2: copy
+        self.from_dd = w.Dropdown(options=list(self.ENVIRONMENTS), value='D', layout=w.Layout(width='100px'))
+        self.from_label = _label('Van', 'De omgeving waarvan de registratie wordt overgenomen', '34px')
+        self.to_checks, self.to_rows = {}, []
+        for env in self.ENVIRONMENTS:
+            self.to_checks[env], row = _check(env != 'D', env, f'Zet over naar {env}', '50px')
+            self.to_rows.append(row)
+        # -- what to copy: everything that is new, or a selection per data source, load group and table
+        self.mode = w.Dropdown(options=[('alles wat nieuw is', 'all'), ('alleen een selectie', 'selection')], value='all', layout=w.Layout(width='220px'))
+        self.sel_rows, self.sel_targets, self.sel_selected, self._sel_busy = [], [], set(), False
+        self.sel_load_btn = _tip(w.Button(layout=w.Layout(width='auto', min_width='150px', padding='0 14px'), description='Tabellen laden'),
+                                 'Leest de tabellen van de bronomgeving en van de doelen, en toont per tabel of hij in een doel nog ontbreekt. Schrijft niets.')
+        self.sel_source = w.Dropdown(options=[('alle databronnen', '*')], value='*', layout=w.Layout(width='300px'))
+        self.sel_group = w.Dropdown(options=[('alle groepen', '*')], value='*', layout=w.Layout(width='200px'))
+        self.sel_search = w.Text(placeholder='zoek een tabel', continuous_update=False, layout=w.Layout(width='260px'))
+        self.sel_list = w.SelectMultiple(options=[], rows=10, layout=w.Layout(width='100%'))
+        self.sel_select_all_btn = _tip(w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Alles in de lijst selecteren'),
+                                       'Selecteert alle tabellen die na de filters in de lijst staan, bijvoorbeeld een hele databron of LoadGroup.')
+        self.sel_clear_btn = w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Selectie wissen')
+        self.sel_count = w.HTML()
+        self.sel_hint = w.HTML()
+        self.sel_box = vbox([
+            w.HBox([self.sel_load_btn, w.HTML('&nbsp;&nbsp;'), self.sel_count]), self.sel_hint,
+            w.HBox([_label('Databron', 'Filter op databron (namespace en database)', '70px'), self.sel_source, w.HTML('&nbsp;&nbsp;'),
+                    _label('LoadGroup', 'Filter op de effectieve LoadGroup: die van de tabel, anders die van haar databron', '80px'), self.sel_group]),
+            self.sel_search, self.sel_list, w.HBox([self.sel_select_all_btn, self.sel_clear_btn])], width='100%', display='none')
+        self.update_cb, update_row = _check(False, 'Ook tabellen bijwerken die er al staan (hun dataselectie blijft staan)',
+                                            'Tabellen die in het doel al staan, krijgen de instellingen van de bron. Filter, kolommen, LoadGroup en actief blijven zoals ze in het doel zijn.')
+        self.update_label = update_row.children[1]
+        self.inactive_cb, inactive_row = _check(False, 'Ook tabellen meenemen die in de bron uit staan', 'Neemt ook tabellen mee die in de bron niet geladen worden (IsActive = 0).')
+        self.inactive_label = inactive_row.children[1]
+        self.ov_enable = w.Checkbox(value=False, indent=False, layout=w.Layout(width='auto'), description='Voor een omgeving een eigen filter of instelling gebruiken')
+        self.ov_env = w.Dropdown(options=['T'], description='Omgeving', layout=w.Layout(width='190px'), style={'description_width': '80px'})
+        self.ov_table = w.Dropdown(options=[('Alle tabellen', '*')], value='*', description='Tabel', layout=w.Layout(width='300px'), style={'description_width': '50px'})
+        self.ov_field = w.Dropdown(options=list(self.FIELDS), value='SourceFilter', layout=w.Layout(width='130px'))
+        self.ov_field_label = _label('Instelling', '', '70px')
+        self.ov_help = w.HTML(layout=w.Layout(margin='2px 0 0 0'))
+        self.ov_value = w.Text(description='Waarde', placeholder="bijvoorbeeld OrderDate >= '2025-01-01'; leeg = leegmaken", continuous_update=False,
+                               layout=w.Layout(width='640px'), style={'description_width': '80px'})
+        self.ov_active = w.Dropdown(options=[('Aan', 1), ('Uit', 0)], value=1, description='Waarde', layout=w.Layout(width='190px', display='none'), style={'description_width': '80px'})
+        self.ov_add = w.Button(layout=w.Layout(width='auto', min_width='110px', padding='0 14px'), description='Toevoegen')
+        self.ov_clear = w.Button(layout=w.Layout(width='auto', min_width='110px', padding='0 14px'), description='Alles wissen')
+        self.ov_rows = vbox([], width='100%')
+        self.ov_box = vbox([w.HBox([self.ov_env, self.ov_table, self.ov_field_label, self.ov_field], layout=w.Layout(flex_flow='row wrap')), self.ov_help, self.ov_value, self.ov_active,
+                            w.HBox([self.ov_add, self.ov_clear]), self.ov_rows], width='100%', display='none')
+        self.dry_btn = _tip(w.Button(layout=wide_btn(), description='1. Proefdraaien', button_style='info'), 'Laat per omgeving zien wat er zou veranderen. Schrijft niets.')
+        self.confirm = w.Checkbox(value=False, indent=False, layout=w.Layout(width='auto'), description='Ik heb de uitkomst van de proefdraai gecontroleerd')
+        self.copy_btn = _tip(w.Button(layout=wide_btn(), description='2. Overzetten', button_style='warning', disabled=True),
+                             'Schrijft de registratie naar de aangevinkte omgevingen. Kan alleen na een proefdraai op precies deze keuzes.')
+        self.copy_hint = w.HTML(layout=w.Layout(margin='4px 0 0 10px'))  # why the button is off: always visible, a disabled button shows no tooltip everywhere
+        self.copy_view = vbox([
+            _heading('Overzetten', 'Standaard alleen tabellen die in de doelomgeving nog ontbreken. Het watermark gaat nooit mee.',
+                     'Watermark: het punt tot waar een incrementele tabel al geladen is. Elke omgeving houdt zijn eigen watermark.'),
+            w.HBox([self.from_label, self.from_dd, w.HTML('&nbsp;&nbsp;naar:&nbsp;&nbsp;'), *self.to_rows]),
+            _heading('Wat zet je over?', 'Standaard alles wat in de doelomgeving nog ontbreekt. Kies een selectie om alleen bepaalde databronnen, LoadGroups of tabellen over te zetten.'),
+            w.HBox([w.HTML('Zet over:&nbsp;&nbsp;'), self.mode]), self.sel_box, update_row, inactive_row,
+            _heading('Eigen dataselectie per omgeving', 'Bijvoorbeeld een kortere periode in T. Een filter wijzigen verwijdert niets in Bronze en Silver.'),
+            self.ov_enable, self.ov_box,
+            _heading('Controleren en overzetten', 'Eerst een proefdraai: die schrijft niets en laat per omgeving zien wat er zou gebeuren.'),
+            w.HBox([self.dry_btn]), self.res.widget, self.confirm, w.HBox([self.copy_btn, self.copy_hint])], width='100%', display='none')
+        self.root = vbox([self.view_bar.widget, self.compare_view, self.copy_view], width='100%')
+
+        ui._guard(self.compare_btn, self.compare)
+        ui._guard(self.ov_add, self.add_override)
+        ui._guard(self.ov_clear, self.clear_overrides)
+        ui._guard(self.dry_btn, self.dry_run)
+        ui._guard(self.copy_btn, self.copy)
+        self.to_copy_btn.on_click(lambda _: self.use_compared())
+        self.show.observe(lambda _: self._render(), names='value')
+        self.mode.observe(lambda _: self._mode_changed(), names='value')
+        ui._guard(self.sel_load_btn, self.sel_load)
+        self.sel_select_all_btn.on_click(lambda _: self._sel_select(True))
+        self.sel_clear_btn.on_click(lambda _: self._sel_select(False))
+        for widget in (self.sel_source, self.sel_group, self.sel_search):
+            widget.observe(lambda _: None if self._sel_busy else self._sel_refresh(), names='value')
+        self.sel_list.observe(self._sel_on_list, names='value')
+        self.inactive_cb.observe(lambda _: self._sel_refresh() if self.sel_rows else None, names='value')
+        for widget in (self.from_dd, *self.to_checks.values()):
+            widget.observe(lambda _: self._sel_reset(), names='value')
+        for widget in (self.from_dd, *self.to_checks.values(), self.update_cb, self.inactive_cb, self.ov_enable, self.confirm):
+            widget.observe(lambda _: self.update_state(), names='value')
+        self.from_dd.observe(lambda _: self._sync_from(), names='value')
+        for widget in (self.from_dd, *self.to_checks.values()):
+            widget.observe(lambda _: self._sync_targets(), names='value')
+        self.ov_enable.observe(lambda c: self._show_overrides(c['new']), names='value')
+        self.ov_field.observe(lambda c: self._show_value_widget(c['new']), names='value')
+        self._apply_view(0)
+        self._sync_from()
+        self._sync_targets()
+        self._sel_hint()
+        self._show_value_widget(self.ov_field.value)
+        self._render_overrides()
+        self.update_state()
+
+    # ---- views ---------------------------------------------------------------------------------------
+    def show_view(self, index):
+        self.view_bar.value = index
+
+    def _apply_view(self, index):
+        self.view = index
+        self.compare_view.layout.display = '' if index == 0 else 'none'
+        self.copy_view.layout.display = '' if index == 1 else 'none'
+
+    def _show_overrides(self, on):
+        self.ov_box.layout.display = '' if on else 'none'
+
+    def _show_value_widget(self, field):
+        on = field == 'IsActive'
+        self.ov_value.layout.display = 'none' if on else ''
+        self.ov_active.layout.display = '' if on else 'none'
+        self.ov_field_label.value = f'<span title="{html.escape(self.FIELD_HELP[field], quote=True)}">Instelling</span>'
+        self.ov_help.value = f'<span style="color:#666">{html.escape(self.FIELD_HELP[field])}</span>'
+
+    def pane(self):
+        """Where a message goes: the pane of the view that is showing."""
+        return self.cmp_res if self.view == 0 else self.res
+
+    @staticmethod
+    def _picked(checks):
+        return [e for e, c in checks.items() if c.value]
+
+    def _sync_from(self):
+        """The source is never also a target: its checkbox is off and cannot be ticked."""
+        for env, check in self.to_checks.items():
+            check.disabled = env == self.from_dd.value
+            if check.disabled:
+                check.value = False
+
+    def _targets(self):
+        return [e for e in self._picked(self.to_checks) if e != self.from_dd.value]
+
+    def _sync_targets(self):
+        targets = self._targets() or list(self.ENVIRONMENTS)
+        self.ov_env.options = targets
+        self.ov_env.value = targets[0]
+
+    def _domain(self):
+        return self.ui.domain.value.strip()
+
+    # ---- compare -------------------------------------------------------------------------------------
+    def compare(self):
+        self.envs = self._picked(self.cmp_checks)
+        if len(self.envs) < 2:
+            return self.cmp_res.print('Vink minstens twee omgevingen aan om te vergelijken.')
+        self.cmp_res.clear()
+        self.rows = compare(self._domain(), self.envs)
+        self.ov_table.options = [('Alle tabellen', '*')] + [(r['Table'], r['Table']) for r in self.rows]
+        self.ov_table.value = '*'
+        self._render()
+
+    def _render(self):
+        if self.rows:
+            self.table.value = comparison_html(self.rows, self.envs, self.show.value)
+            self.to_copy_btn.layout.display = ''
+
+    def use_compared(self):
+        """Opens Overzetten with the compared environments filled in: from D (or the first one), to the others. Starts nothing."""
+        source = 'D' if 'D' in self.envs else self.envs[0]
+        self.from_dd.value = source
+        for env, check in self.to_checks.items():
+            check.value = env in self.envs and env != source
+        self.show_view(1)
+
+    # ---- what to copy --------------------------------------------------------------------------------
+    def _mode_changed(self):
+        self.sel_box.layout.display = '' if self.mode.value == 'selection' else 'none'
+        self._sel_hint()
+        self.update_state()
+
+    def _sel_hint(self):
+        text = '' if self.sel_rows else 'Klik op Tabellen laden om te kiezen.'
+        self.sel_hint.value = f'<span style="color:#666">{html.escape(text)}</span>'
+
+    def sel_load(self):
+        """Reads the tables of the source and the targets; the list says per table where it is still missing."""
+        targets = self._targets()
+        if not targets:
+            return self.res.print('Vink aan naar welke omgeving je overzet.')
+        self.res.clear()
+        self.sel_targets = targets
+        self.sel_rows = compare(self._domain(), [self.from_dd.value, *targets])
+        self.sel_selected = set()  # a new list is a new choice
+        self._sel_hint()
+        self._sel_refresh()
+        self.update_state()
+
+    def _sel_reset(self):
+        """The list belongs to one source and its targets: when those change the list is gone, and so is the choice."""
+        had = bool(self.sel_rows or self.sel_selected)
+        self.sel_rows, self.sel_selected = [], set()
+        self._sel_refresh()
+        if had:  # a reset without anything to reset leaves the message alone: the source change and the unticked target both call this
+            self.sel_hint.value = '<span style="color:#666">De bron of de doelen zijn veranderd: klik opnieuw op Tabellen laden.</span>'
+            self.update_state()
+
+    def _sel_visible(self):
+        text = self.sel_search.value.strip().lower()
+        source = self.from_dd.value
+        out = []
+        for r in self.sel_rows:
+            if not r['Present'].get(source) or (not self.inactive_cb.value and not r['Active'].get(source)):
+                continue
+            if self.sel_source.value != '*' and f"{r['Namespace']} · {r['DataSource']}" != self.sel_source.value:
+                continue
+            if self.sel_group.value != '*' and r['LoadGroup'] != self.sel_group.value:
+                continue
+            if text and text not in r['Table'].lower():
+                continue
+            out.append(r)
+        return out
+
+    def _sel_label(self, row):
+        missing = [e for e in self.sel_targets if not row['Present'].get(e)]
+        status = f"nieuw in {', '.join(missing)}" if missing else 'staat al'
+        return f"{row['DataSource']} · {row['Table']} · {row['LoadGroup'] or 'geen groep'} · {status}"
+
+    def _sel_refresh(self):
+        self._sel_busy = True  # setting options clears the value of a widget: do not take that for a choice
+        try:
+            sources = sorted({f"{r['Namespace']} · {r['DataSource']}" for r in self.sel_rows})
+            groups = sorted({r['LoadGroup'] for r in self.sel_rows})
+            keep_source, keep_group = self.sel_source.value, self.sel_group.value
+            self.sel_source.options = [('alle databronnen', '*')] + [(x, x) for x in sources]
+            self.sel_source.value = keep_source if keep_source in ('*', *sources) else '*'
+            self.sel_group.options = [('alle groepen', '*')] + [(g or 'geen groep', g) for g in groups]
+            self.sel_group.value = keep_group if keep_group in ('*', *groups) else '*'
+            options = [(self._sel_label(r), r['Ident']) for r in self._sel_visible()]
+            self.sel_list.options = options
+            self.sel_list.value = tuple(i for _, i in options if i in self.sel_selected)
+        finally:
+            self._sel_busy = False
+        self._sel_count()
+
+    def _sel_on_list(self, change):
+        if self._sel_busy:
+            return
+        visible = {v for _, v in self.sel_list.options}
+        self.sel_selected = (self.sel_selected - visible) | set(change['new'])
+        self._sel_count()
+        self.update_state()
+
+    def _sel_select(self, everything):
+        # "Alles in de lijst selecteren" takes what the filters show; "Selectie wissen" clears the whole selection, also the tables a filter hides
+        # (found 2026-11-13: a hidden table stayed selected and a clean-up would have named it).
+        visible = {v for _, v in self.sel_list.options}
+        self.sel_selected = (self.sel_selected | visible) if everything else set()
+        self.sel_list.value = tuple(i for _, i in self.sel_list.options if i in self.sel_selected)
+        self._sel_count()
+        self.update_state()
+
+    def _sel_count(self):
+        shown = len(self.sel_list.options)
+        self.sel_count.value = f'<span style="color:#666">{len(self.sel_selected)} geselecteerd, {shown} tabel(len) in de lijst</span>'
+
+    # ---- overrides -----------------------------------------------------------------------------------
+    def add_override(self):
+        env, table, field = self.ov_env.value, self.ov_table.value or '*', self.ov_field.value
+        value = self.ov_active.value if field == 'IsActive' else self.ov_value.value.strip()
+        self.overrides.setdefault(env, {}).setdefault(table, {})[field] = value
+        self._render_overrides()
+        self.update_state()
+
+    def remove_override(self, env, table, field):
+        del self.overrides[env][table][field]
+        if not self.overrides[env][table]:
+            del self.overrides[env][table]
+        if not self.overrides[env]:
+            del self.overrides[env]
+        self._render_overrides()
+        self.update_state()
+
+    def clear_overrides(self):
+        self.overrides = {}
+        self._render_overrides()
+        self.update_state()
+
+    def _render_overrides(self):
+        names = {field: label for label, field in self.FIELDS}
+        rows = []
+        for env, tables in self.overrides.items():
+            for table, fields in tables.items():
+                for field, value in fields.items():
+                    shown = ('aan' if value else 'uit') if field == 'IsActive' else (value if value != '' else '(leeg)')
+                    text = f"{env} · {'alle tabellen' if table == '*' else table} · {names.get(field, field)} = {shown}"
+                    remove = w.Button(description='✕', tooltip='Deze regel verwijderen', layout=w.Layout(width='40px'))
+                    remove.on_click(lambda _, e=env, t=table, f=field: self.remove_override(e, t, f))
+                    rows.append(w.HBox([remove, w.HTML(f'<span style="margin-left:8px">{html.escape(str(text))}</span>')]))
+        self.ov_rows.children = rows
+
+    # ---- copy ----------------------------------------------------------------------------------------
+    def _args(self):
+        to = self._targets()
+        use = {env: ov for env, ov in self.overrides.items() if env in to} if self.ov_enable.value else {}
+        return {'domain': self._domain(), 'to_environments': to, 'from_environment': self.from_dd.value,
+                'update': bool(self.update_cb.value), 'only_active': not self.inactive_cb.value, 'overrides': use or None,
+                'only': sorted(self.sel_selected) if self.mode.value == 'selection' else None}
+
+    def _fingerprint(self):
+        return hashlib.sha1(json.dumps(self._args(), sort_keys=True, default=str).encode()).hexdigest()
+
+    def update_state(self):
+        fingerprint = self._fingerprint()
+        targets = self._targets()
+        self.copy_btn.disabled = not (self.confirm.value and self.dry_of == fingerprint and self.done_of != fingerprint)
+        self.copy_btn.description = f"2. Overzetten naar {', '.join(targets) or '…'}"
+        if self.dry_of and self.dry_of != fingerprint:
+            self.dry_of = None  # the old result no longer describes what is on screen
+            self.confirm.value = False
+            self.res.clear()
+            self.res.print('Er is iets gewijzigd sinds de proefdraai. Draai opnieuw proef voordat je overzet.')
+        if not targets:
+            hint = 'Vink aan naar welke omgeving je overzet.'
+        elif self.mode.value == 'selection' and not self.sel_selected:
+            hint = 'Kies minstens één tabel.'
+        elif self.done_of == fingerprint:
+            hint = 'Al overgezet. Wijzig iets om opnieuw over te zetten.'
+        elif self.dry_of != fingerprint:
+            hint = 'Eerst proefdraaien.'
+        elif not self.confirm.value:
+            hint = 'Vink aan dat je de uitkomst van de proefdraai hebt gecontroleerd.'
+        else:
+            hint = 'Klaar: je kunt overzetten.'
+        self.copy_hint.value = f'<span style="color:#666">{html.escape(hint)}</span>'
+
+    def dry_run(self):
+        args = self._args()
+        if not args['to_environments']:
+            return self.res.print('Vink aan naar welke omgeving je overzet.')
+        if args['only'] is not None and not args['only']:
+            return self.res.print('Kies minstens één tabel, of zet "Zet over" op alles wat nieuw is.')
+        self.res.clear()
+        self.res.capture(copy_registration, **args, dry_run=True)
+        self.confirm.value = False  # confirming counts only after the result of this dry run has been seen
+        self.dry_of = self._fingerprint()
+        self.update_state()
+        self.res.print('Proefdraai gedaan, er is niets geschreven. Controleer de uitkomst, vink de bevestiging aan en zet over.')
+
+    def copy(self):
+        fingerprint = self._fingerprint()
+        if not (self.confirm.value and self.dry_of == fingerprint and self.done_of != fingerprint):
+            return self.res.print('Niet uitgevoerd: eerst proefdraaien op precies deze keuzes en bevestigen.')
+        self.res.clear()
+        self.copy_btn.disabled = True
+        self.res.capture(copy_registration, **self._args(), dry_run=False)
+        self.done_of = fingerprint
+        self.confirm.value = False
+        self.update_state()
+        self.res.print('Overgezet. Ga naar Vergelijken voor de actuele stand.')
+
+
+def status_label(row):
+    """One line of the table list: status, table, watermark and the open queue (landingzone/Bronze)."""
+    watermark = str(row['LoadValue'])[:19] if row.get('LoadValue') else '(leeg)'
+    return f"[{row['Status']}] {row['SourceSchema']}.{row['SourceName']} · watermark {watermark} · open {row['PendingLandingzoneFiles']}/{row['PendingBronzeFiles']}"
+
+
+def manage_result_html(result):
+    """The plan of a dry run (steps, warnings and what the dry run of the procedure found), or the outcome of a real run, as an HTML table."""
+    if result['dry_run']:
+        head = f"<th {_HEAD}>tabel</th><th {_HEAD}>wat er gebeurt</th><th {_HEAD}>uitkomst van de proefdraai</th>"
+        rows = ''
+        found = {r['Id']: r['Result'] for r in result['results']}
+        for item in result['plan']:
+            lines = [html.escape(step) for step in item['Steps']] + [f"<span style='color:#b45f06'>⚠ {html.escape(w_)}</span>" for w_ in item['Warnings']]
+            outcome = found.get(item['Id'], '')
+            outcome = '' if outcome.startswith('proefdraai: niets') else html.escape(outcome.replace('proefdraai: ', ''))
+            rows += f"<tr><td {_CELL}>{html.escape(item['Table'])}</td><td {_CELL}>{'<br>'.join(lines)}</td><td {_CELL}>{outcome}</td></tr>"
+    else:
+        head = f"<th {_HEAD}>tabel</th><th {_HEAD}>resultaat</th>"
+        rows = ''
+        for r in result['results']:
+            mark = "<b style='color:#2e7d32'>✓</b>" if r['Ok'] else "<b style='color:#b00020'>✗</b>"
+            rows += f"<tr><td {_CELL}>{mark} {html.escape(r['Table'])}</td><td {_CELL}>{html.escape(r['Result'])}</td></tr>"
+    return f"<table style='border-collapse:collapse'><tr>{head}</tr>{rows}</table>"
+
+
+class ManagePage:
+    """
+    Tab 5: day-to-day management of the registered tables of one environment. It shows the load status and the open queue per table
+    (integration.vw_LoadStatus) and offers four actions: reset the watermark, set it to a value, set the open queue on processed, and the
+    cleanup after a change of the primary key. Every action starts with a dry run; the real run is only possible for exactly the
+    selection, action and reason of that dry run, and a cleanup or anything in P also asks to type the environment.
+    """
+    STATUS_FILTER = [('alle', 'all'), ('Fout', 'Fout'), ('Wachtrij', 'Wachtrij'), ('Nooit geladen', 'Nooit geladen'), ('OK', 'OK'), ('Uitgeschakeld', 'Uitgeschakeld')]
+    LAYERS = [('landingzone en Bronze', 'Both'), ('alleen landingzone', 'Landingzone'), ('alleen Bronze', 'Bronze')]
+
+    def __init__(self, ui):
+        self.ui = ui
+        self.rows = []
+        self.selected = set()
+        self._refreshing = False
+        self.dry_of = self.done_of = None
+        self.failed = False
+        self.res = Pane(tall='220px', hide_empty=True)  # errors and the technical log of the last run
+        wide_btn = lambda: w.Layout(width='auto', min_width='140px', padding='0 14px')
+        label = lambda: {'description_width': '70px'}
+        self.env = w.Dropdown(options=['D', 'T', 'P'], value='D', layout=w.Layout(width='100px'))
+        self.load_btn = _tip(w.Button(layout=wide_btn(), description='Laden', button_style='primary'),
+                             'Leest de laadstatus en de wachtrij van deze omgeving uit de configdb. Schrijft niets.')
+        self.summary = w.HTML('<span style="color:#666">Kies een omgeving en klik op Laden.</span>')
+        self.status_filter = w.Dropdown(options=self.STATUS_FILTER, value='all', layout=w.Layout(width='160px'))
+        self.search = w.Text(placeholder='zoek een tabel', continuous_update=False, layout=w.Layout(width='260px'))
+        self.list = w.SelectMultiple(options=[], rows=10, layout=w.Layout(width='100%'))
+        self.select_all_btn = _tip(w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Alles in de lijst selecteren'), 'Selecteert alle tabellen die na het filter in de lijst staan.')
+        self.clear_btn = w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Selectie wissen')
+        self.count = w.HTML()
+        self.action = w.Dropdown(options=[(text, key) for key, text in MANAGE_ACTIONS.items()], value='reset', layout=w.Layout(width='520px'))
+        self.value = w.Text(description='Waarde', placeholder='bijvoorbeeld 2026-01-01 00:00:00.000, of een getal', continuous_update=False,
+                            layout=w.Layout(width='620px', display='none'), style=label())
+        self.layer = w.Dropdown(options=self.LAYERS, value='Both', layout=w.Layout(width='260px'))
+        self.layer_row = w.HBox([_label('Laag', 'Welke wachtrij op verwerkt wordt gezet', '40px'), self.layer], layout=w.Layout(display='none'))
+        self.reason = w.Text(description='Reden', placeholder='verplicht; komt in logging.ConfigChange', continuous_update=False, layout=w.Layout(width='700px'), style=label())
+        self.dry_btn = _tip(w.Button(layout=wide_btn(), description='1. Proefdraaien', button_style='info'),
+                            'Laat per tabel zien wat er zou gebeuren. Schrijft en wist niets.')
+        self.result = w.HTML(layout=w.Layout(max_height='360px', overflow='auto', width='100%', padding='4px 0'))
+        self.confirm_text = w.Text(description='Typ de omgeving', placeholder='D, T of P', continuous_update=False, layout=w.Layout(width='260px', display='none'),
+                                   style={'description_width': '110px'})
+        self.run_btn = _tip(w.Button(layout=wide_btn(), description='2. Uitvoeren', button_style='warning', disabled=True),
+                            'Voert de actie uit op precies de selectie van de proefdraai.')
+        self.hint = w.HTML(layout=w.Layout(margin='4px 0 0 10px'))
+        self.root = vbox([
+            _heading('Beheer', 'Laadstatus en wachtrij van de geregistreerde tabellen van één omgeving, en de dagelijkse handelingen. Elke actie begint met een proefdraai.'),
+            w.HBox([_label('Omgeving', '', '80px'), self.env, w.HTML('&nbsp;&nbsp;'), self.load_btn]), self.summary,
+            w.HBox([_label('Toon', 'Filter op de status uit integration.vw_LoadStatus', '40px'), self.status_filter, w.HTML('&nbsp;&nbsp;'), self.search]), self.list,
+            w.HBox([self.select_all_btn, self.clear_btn, w.HTML('&nbsp;&nbsp;'), self.count]),
+            _heading('Actie', 'Voor de geselecteerde tabellen. Een actie die iets wist, of een actie in P, vraagt om de omgeving te typen.'),
+            self.action, self.value, self.layer_row, self.reason,
+            w.HBox([self.dry_btn]), self.result, self.res.widget, self.confirm_text, w.HBox([self.run_btn, self.hint])], width='100%')
+        ui._guard(self.load_btn, self.load)
+        ui._guard(self.dry_btn, self.dry_run)
+        ui._guard(self.run_btn, self.run)
+        self.select_all_btn.on_click(lambda _: self._select(True))
+        self.clear_btn.on_click(lambda _: self._select(False))
+        self.env.observe(lambda _: self._reset_loaded(), names='value')
+        self.status_filter.observe(lambda _: self._refresh_list(), names='value')
+        self.search.observe(lambda _: self._refresh_list(), names='value')
+        self.list.observe(self._on_list, names='value')
+        self.action.observe(lambda _: self._action_changed(), names='value')
+        for widget in (self.value, self.layer, self.reason, self.confirm_text):
+            widget.observe(lambda _: self.update_state(), names='value')
+        self._action_changed()
+
+    def pane(self):
+        return self.res
+
+    # ---- the list ------------------------------------------------------------------------------------
+    def load(self):
+        self.res.clear()
+        self.rows = load_status(self.ui.domain.value.strip(), self.env.value)
+        self.selected = set()
+        counts = {}
+        for row in self.rows:
+            counts[row['Status']] = counts.get(row['Status'], 0) + 1
+        parts = ', '.join(f'{n} {status}' for status, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+        self.summary.value = f'<b>{len(self.rows)} tabel(len)</b> in {html.escape(self.env.value)}: {html.escape(parts) if parts else "geen"}.'
+        self._refresh_list()
+        self.update_state()
+
+    def _visible(self):
+        text = self.search.value.strip().lower()
+        return [r for r in self.rows if (self.status_filter.value == 'all' or r['Status'] == self.status_filter.value)
+                and (not text or text in f"{r['SourceSchema']}.{r['SourceName']}".lower())]
+
+    def _refresh_list(self):
+        self._refreshing = True  # setting the options clears the selection of the widget: do not take that for a choice
+        try:
+            options = [(status_label(r), r['LandingzoneEntityId']) for r in self._visible()]
+            self.list.options = options
+            self.list.value = tuple(i for _, i in options if i in self.selected)
+        finally:
+            self._refreshing = False
+        self._count()
+
+    def _on_list(self, change):
+        if self._refreshing:
+            return
+        visible = {v for _, v in self.list.options}
+        self.selected = (self.selected - visible) | set(change['new'])
+        self._count()
+        self.update_state()
+
+    def _select(self, everything):
+        # "Selectie wissen" clears the whole selection, also the tables a filter hides (found 2026-11-13, see _sel_select).
+        visible = {v for _, v in self.list.options}
+        self.selected = (self.selected | visible) if everything else set()
+        self.list.value = tuple(i for _, i in self.list.options if i in self.selected)
+        self._count()
+        self.update_state()
+
+    def _count(self):
+        self.count.value = f'<span style="color:#666">{len(self.selected)} geselecteerd van {len(self.rows)}</span>'
+
+    def _reset_loaded(self):
+        self.rows, self.selected = [], set()
+        self.summary.value = '<span style="color:#666">Kies een omgeving en klik op Laden.</span>'
+        self._refresh_list()
+        self.update_state()
+
+    # ---- the action ----------------------------------------------------------------------------------
+    def _action_changed(self):
+        self.value.layout.display = '' if self.action.value == 'reset_to' else 'none'
+        self.layer_row.layout.display = '' if self.action.value == 'skip' else 'none'
+        self.update_state()
+
+    def _ids(self):
+        return sorted(self.selected)
+
+    def _needs_confirm(self):
+        return self.env.value == 'P' or self.action.value == 'rebuild'
+
+    def _args(self):
+        action = self.action.value
+        return {'environment': self.env.value, 'action': action, 'ids': self._ids(), 'reason': self.reason.value.strip(),
+                'value': self.value.value.strip() if action == 'reset_to' else None, 'layer': self.layer.value if action == 'skip' else 'Both'}
+
+    def _fingerprint(self):
+        return hashlib.sha1(json.dumps(self._args(), sort_keys=True, default=str).encode()).hexdigest()
+
+    def update_state(self):
+        fingerprint = self._fingerprint()
+        needs = self._needs_confirm()
+        typed = self.confirm_text.value.strip().upper() == self.env.value
+        self.confirm_text.layout.display = '' if needs else 'none'
+        if self.dry_of and self.dry_of != fingerprint:
+            self.dry_of = None  # the old result no longer describes what is on screen
+            self.failed = False
+            self.result.value = ''
+            self.res.clear()
+            self.res.print('Er is iets gewijzigd sinds de proefdraai. Draai opnieuw proef voordat je uitvoert.')
+            if self.confirm_text.value:
+                self.confirm_text.value = ''
+        ready = self.dry_of == fingerprint and self.done_of != fingerprint and (typed or not needs)
+        self.run_btn.disabled = not ready
+        if self.done_of == fingerprint:
+            hint = 'Al uitgevoerd. Wijzig iets om opnieuw uit te voeren.'
+        elif self.dry_of != fingerprint:
+            hint = 'Eerst proefdraaien.'
+        elif needs and not typed:
+            hint = f'Typ {self.env.value} om te bevestigen.'
+        elif self.failed:
+            hint = 'Mislukt voor enkele tabellen: uitvoeren kan opnieuw, alle stappen zijn te herhalen.'
+        else:
+            hint = 'Klaar: je kunt uitvoeren.'
+        self.hint.value = f'<span style="color:#666">{html.escape(hint)}</span>'
+
+    def _call(self, dry_run):
+        args = self._args()
+        problems = manage_problems(args['action'], args['ids'], args['reason'], args['value'], args['layer'])
+        if problems:
+            self.res.clear()
+            self.res.print('\n'.join(problems))
+            return None
+        self.res.clear()
+        return self.res.capture(manage, self.ui.domain.value.strip(), args['environment'], args['action'], args['ids'], args['reason'],
+                                value=args['value'], layer=args['layer'], dry_run=dry_run)
+
+    def dry_run(self):
+        result = self._call(True)
+        if result is None:
+            return
+        self.result.value = manage_result_html(result)
+        self.failed = False
+        self.dry_of = self._fingerprint()
+        self.update_state()
+
+    def run(self):
+        fingerprint = self._fingerprint()
+        typed = self.confirm_text.value.strip().upper() == self.env.value
+        if not (self.dry_of == fingerprint and self.done_of != fingerprint and (typed or not self._needs_confirm())):
+            self.res.print('Niet uitgevoerd: eerst proefdraaien op precies deze keuzes en bevestigen.')
+            return
+        self.run_btn.disabled = True
+        result = self._call(False)
+        if result is None:
+            return
+        self.result.value = manage_result_html(result)
+        self.failed = not all(r['Ok'] for r in result['results'])
+        self.done_of = None if self.failed else fingerprint
+        self.confirm_text.value = ''
+        self.update_state()
+        if not self.failed:
+            self.res.print('Klaar. Klik op Laden voor de actuele stand.')
+
+
 class RegistrationUI:
     """
     Interactive editor for the registration. Everything is edited in memory; nothing is written until
@@ -1501,17 +2557,17 @@ class RegistrationUI:
         self._build_sources_tab()
         self._build_tables_tab()
         self._build_register_tab()
+        self.env_page = EnvironmentsPage(self)
+        self.manage = ManagePage(self)
         # Own tabs instead of w.Tab: in a Fabric notebook the Tab widget does not hide the other pages, so all
         # three stacked under each other. A page is hidden with its own display style, which does work.
-        self.pages = [self.sources_tab, self.tables_tab, self.register_tab]
-        self.tab_pick = w.ToggleButtons(options=[('1. Bronnen', 0), ('2. Tabellen', 1), ('3. Controleren en registreren', 2)], value=0,
-                                     style={'button_width': 'auto'})
-        self.tab_pick.observe(lambda c: self._show_page(c['new']), names='value')
+        self.pages = [self.sources_tab, self.tables_tab, self.register_tab, self.env_page.root, self.manage.root]
+        self.tab_pick = TabBar(['1. Bronnen', '2. Tabellen', '3. Controleren en registreren', '4. Omgevingen', '5. Beheer'], self._show_page)
         self._show_page(0)
         # The messages sit above the tabs, so a result is in view without scrolling down to it.
-        self.top_btn = w.Button(layout=w.Layout(width='auto'), description='Terug naar begin', icon='arrow-up', tooltip='Naar tab 1 en de meldingen wissen; wijzigingen blijven staan')
+        self.top_btn = w.Button(layout=w.Layout(width='auto'), description='↑ Terug naar begin', tooltip='Naar tab 1 en de meldingen wissen; wijzigingen blijven staan')
         self.top_btn.on_click(lambda _: self.back_to_start())
-        self.root = w.VBox([self.header, self.status, self.out.widget, self.tab_pick, *self.pages, w.HBox([self.top_btn])],
+        self.root = w.VBox([self.header, self.status, self.out.widget, self.tab_pick.widget, *self.pages, w.HBox([self.top_btn])],
                            layout=w.Layout(width='100%'))
         # No load here: widget values set while this cell is still running are overwritten by the state the Fabric
         # frontend sends back when it opens the widgets (index=None), which left tab 1 empty and broke the next load.
@@ -1526,11 +2582,11 @@ class RegistrationUI:
     def _show_page(self, index):
         for i, page in enumerate(self.pages):
             page.layout.display = '' if i == index else 'none'
-        self.out.widget.layout.display = 'none' if index == 2 else ''  # tab 3 has its own result pane
+        self.out.widget.layout.display = 'none' if index >= 2 else ''  # tabs 3 and 4 have their own result pane
 
     def _pane(self):
-        """Where a message goes: the pane of tab 3 while that tab is open, otherwise the one above the tabs."""
-        return self.res if self.tab_pick.value == 2 else self.out
+        """Where a message goes: the pane of tab 3 or 4 while that tab is open, otherwise the one above the tabs."""
+        return {2: lambda: self.res, 3: self.env_page.pane, 4: self.manage.pane}.get(self.tab_pick.value, lambda: self.out)()
 
     def __repr__(self):
         return ''  # registration_ui(...) as the last line of a cell would otherwise print the object
@@ -1549,6 +2605,10 @@ class RegistrationUI:
             finally:
                 button.disabled = False
                 self._update_register_state()
+                if hasattr(self, 'env_page'):
+                    self.env_page.update_state()
+                if hasattr(self, 'manage'):
+                    self.manage.update_state()
         button.on_click(handler)
 
     def _payload(self):
@@ -1567,20 +2627,32 @@ class RegistrationUI:
     # ---- header ------------------------------------------------------------------------------------
     def _build_header(self, domain, environment):
         self.domain = w.Text(continuous_update=False, value=domain, description='Domein', layout=w.Layout(width='260px'))
-        self.env = w.Combobox(continuous_update=False, options=['D', 'T', 'A', 'P'], value=environment, ensure_option=False, description='Omgeving',
-                              placeholder='D, T, A, P of DEV_<NAAM>', layout=w.Layout(width='300px'))
-        self.load_btn = w.Button(layout=w.Layout(width='auto'), description='Laden uit de configdb', button_style='primary', icon='refresh')
-        self.header = w.HBox([self.domain, self.env, self.load_btn])
+        # D, T and P are a dropdown; A and DEV_<NAAM> (the workflow of NB_REGISTRATIE) go through "Andere…", which shows a text field.
+        usual = ('D', 'T', 'P')
+        self.env = w.Dropdown(options=[*usual, self.OTHER_ENV], value=environment if environment in usual else self.OTHER_ENV, description='Omgeving',
+                              layout=w.Layout(width='200px'), style={'description_width': '80px'})
+        self.env_other = w.Text(continuous_update=False, value='' if environment in usual else environment, placeholder='A of DEV_<NAAM>',
+                                layout=w.Layout(width='180px', display='' if environment not in usual else 'none'))
+        self.env.observe(lambda c: setattr(self.env_other.layout, 'display', '' if c['new'] == self.OTHER_ENV else 'none'), names='value')
+        self.load_btn = w.Button(layout=w.Layout(width='auto'), description='Laden uit de configdb', button_style='primary')
+        self.header = w.HBox([self.domain, self.env, self.env_other, self.load_btn])
         self.status = w.HTML('Nog niets geladen: klik op <b>Laden uit de configdb</b> om te beginnen.', layout=w.Layout(height='28px'))
         self._guard(self.load_btn, self.load)
+
+    OTHER_ENV = 'Andere…'
+
+    def _environment(self):
+        """The environment as chosen in the header: D, T or P from the dropdown, or the text of "Andere…"."""
+        return self.env_other.value.strip() if self.env.value == self.OTHER_ENV else self.env.value
 
     def load(self):
         if self.state is not None and entities_to_register(self.state, self.original):
             self._say('LET OP: er waren niet-opgeslagen wijzigingen; die zijn nu weggegooid door opnieuw te laden.')
         else:
             self._pane().clear()
-        self._say(f'Laden:{self.domain.value} / {self.env.value} ...', clear=False)
-        self.state = load_registration(self.domain.value.strip(), self.env.value.strip())
+        environment = self._environment()
+        self._say(f'Laden:{self.domain.value} / {environment} ...', clear=False)
+        self.state = load_registration(self.domain.value.strip(), environment)
         self.state['connections'] = list_connections()
         self.original = copy.deepcopy(self.state)
         self.discovered, self.dry_run_of, self.done_of, self.current = {}, None, None, None
@@ -1616,7 +2688,7 @@ class RegistrationUI:
         self.s_type = w.Dropdown(description='Brontype', layout=wide())
         self.s_lg = w.Text(continuous_update=False, description='LoadGroup', placeholder='leeg = standaard', layout=wide())
         self.s_hd = w.Text(continuous_update=False, description='HistoryDays', placeholder='leeg; alleen voor nieuwe incrementele tabellen', layout=wide())
-        self.s_save = w.Button(layout=w.Layout(width='auto'), description='Bron bewaren (in geheugen)', icon='check')
+        self.s_save = w.Button(layout=w.Layout(width='auto'), description='Bron bewaren (in geheugen)')
         self.s_note = w.HTML()
         self.sources_tab = vbox([self.s_pick, self.s_alias, self.s_conn, self.s_ds, self.s_ns, self.s_type, self.s_lg, self.s_hd,
                                    self.s_save, self.s_note])
@@ -1685,20 +2757,20 @@ class RegistrationUI:
     def _build_tables_tab(self):
         label = lambda: {'description_width': '130px'}  # a new dict each time; wide enough for "Watermarkkolom" and "Custom notebook"
         self.t_src = w.Dropdown(description='Bron', layout=w.Layout(width='320px'))
-        self.t_discover = w.Button(layout=w.Layout(width='auto'), description='Ontdekte tabellen laden', icon='search',
+        self.t_discover = w.Button(layout=w.Layout(width='auto'), description='Ontdekte tabellen laden',
                                    tooltip='Leest wat de laatste ontdekking in de configdb heeft gezet')
         self.t_schema = w.Text(description='Schemafilter', placeholder="leeg = alle schema's", layout=w.Layout(width='320px'), continuous_update=False)
-        self.t_run = w.Button(layout=w.Layout(width='auto'), description='Ontdekking starten (pipeline)', icon='play',
+        self.t_run = w.Button(layout=w.Layout(width='auto'), description='Ontdekking starten (pipeline)',
                               tooltip='Start PL_FMD_DISCOVER_SOURCE in de CODE-workspace, wacht tot hij klaar is en laadt daarna de ontdekte tabellen')
         self.t_filter = w.Text(description='Zoeken', placeholder='schema, tabel of LoadGroup', layout=w.Layout(width='320px'), continuous_update=False)
         self.t_incols = w.Checkbox(description='ook in kolomnamen', indent=False, layout=w.Layout(width='auto'),
                                    tooltip="Zoekt ook in de kolommen van de ontdekte tabellen (eerst 'Ontdekte tabellen laden')")
         self.t_status = w.Dropdown(description='Status', options=['alle', 'nieuw', 'geselecteerd', 'geregistreerd', 'gewijzigd'], layout=w.Layout(width='220px'))
         self.t_list = w.SelectMultiple(rows=12, layout=w.Layout(width='100%'))
-        self.t_all = w.Button(layout=w.Layout(width='auto'), description='Alles in lijst selecteren', icon='list',
+        self.t_all = w.Button(layout=w.Layout(width='auto'), description='Alles in lijst selecteren',
                               tooltip='Selecteert alle tabellen die na het filter in de lijst staan')
-        self.t_mark = w.Button(layout=w.Layout(width='auto'), description='Selecteren voor registratie', icon='check-square')
-        self.t_unmark = w.Button(layout=w.Layout(width='auto'), description='Selectie weghalen', icon='square')
+        self.t_mark = w.Button(layout=w.Layout(width='auto'), description='Selecteren voor registratie')
+        self.t_unmark = w.Button(layout=w.Layout(width='auto'), description='Selectie weghalen')
         self.b_field = w.Dropdown(description='Bulk', options=list(BULK_FIELDS), layout=w.Layout(width='220px'))
         self.b_value = w.Dropdown(options=[('aan (1)', 1), ('uit (0)', 0)], layout=w.Layout(width='100px'))
         self.b_text = w.Text(placeholder='leeg = van de bron', layout=w.Layout(width='160px', display='none'), continuous_update=False)
@@ -1723,7 +2795,7 @@ class RegistrationUI:
                                    style=label(), continuous_update=False)
         self.d_pk = ColumnPicker('Primary key', rows=6, on_change=lambda: self._detail_changed(None))
         self.d_nb = w.Text(description='Custom notebook', layout=wide(), style=label(), continuous_update=False)
-        self.d_reset = w.Button(layout=w.Layout(width='auto'), description='Deze tabel terugzetten', icon='undo')
+        self.d_reset = w.Button(layout=w.Layout(width='auto'), description='Deze tabel terugzetten')
         self.d_widgets = [self.d_tschema, self.d_tname, self.d_fname, self.d_ftype, self.d_lg, self.d_inc, self.d_inccol, self.d_active, self.d_hist,
                           self.d_filter, self.d_nb]
         self.bronze, self.silver = RuleEditor('Bronze', self._rules_changed), RuleEditor('Silver', self._rules_changed)
@@ -1996,10 +3068,10 @@ class RegistrationUI:
 
     # ---- tab 3: validate, dry run, register --------------------------------------------------------
     def _build_register_tab(self):
-        self.v_btn = w.Button(layout=w.Layout(width='auto'), description='Controleren', icon='search')
-        self.dry_btn = w.Button(layout=w.Layout(width='auto'), description='Proefdraaien (dry_run=True)', button_style='info', icon='flask')
+        self.v_btn = w.Button(layout=w.Layout(width='auto'), description='Controleren')
+        self.dry_btn = w.Button(layout=w.Layout(width='auto'), description='Proefdraaien (dry_run=True)', button_style='info')
         self.confirm = w.Checkbox(value=False, indent=False, description='Ik heb de wijzigingen en de proefdraai gecontroleerd en wil registreren', layout=w.Layout(width='auto'))
-        self.reg_btn = w.Button(layout=w.Layout(width='auto'), description='Registreren (dry_run=False)', button_style='danger', icon='upload', disabled=True)
+        self.reg_btn = w.Button(layout=w.Layout(width='auto'), description='Registreren (dry_run=False)', button_style='danger', disabled=True)
         # What will be registered, per table, as filled in on tab 2. Always current, so it can be read before and
         # after the dry run. A fixed height with a scroll bar, like the panes: a long list must not push the buttons away.
         self.overview = w.HTML(layout=w.Layout(max_height='220px', overflow='auto', width='100%', border='1px solid #ddd', padding='4px'))
@@ -2050,6 +3122,7 @@ class RegistrationUI:
             return self._say('Niets te registreren.', clear=False)
         # The existing function, unchanged: a dry run runs every check and the registration, then rolls back.
         self.res.capture(register, sources, entities, domain=self.state['domain'], environments=[self.state['environment']], dry_run=True)
+        self.confirm.value = False  # confirming counts only after the result of this dry run has been seen
         self.dry_run_of = self._fingerprint()
         self._say('Proefdraai gedaan en teruggedraaid. Controleer de uitkomst en het overzicht hierboven, vink de bevestiging aan en registreer.', clear=False)
 

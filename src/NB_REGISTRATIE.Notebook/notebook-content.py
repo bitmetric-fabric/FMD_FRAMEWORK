@@ -25,8 +25,11 @@
 #    `PL_FMD_DISCOVER_SOURCE` in de CODE-workspace, wacht tot hij klaar is en laadt de ontdekte tabellen. Daarna tabellen
 #    zoeken, selecteren, primary key, laadwijze en cleansing rules instellen.
 #    Tab 3: het overzicht van wat er wordt geregistreerd, **Controleren**, **Proefdraaien** en pas daarna **Registreren**.
+#    Tab 4: **Omgevingen** vergelijken (D, T, P) en wat in D staat **overzetten** naar T en P, met eigen filters per omgeving.
+#    Tab 5: **Beheer**: de laadstatus en wachtrij per tabel, een watermark resetten, open bestanden op verwerkt zetten, en opruimen na een
+#    wijziging van de primary key (Bronze en Silver wissen). Elke actie begint met een proefdraai; een actie die iets wist, of in P, vraagt om de omgeving te typen.
 # 4. Dezelfde editor gebruik je in elke stap van een feature:
-#    - tijdens de feature in je eigen developer-workspace: omgeving `DEV_<NAAM>` (bijvoorbeeld `DEV_MITCHELL`; de
+#    - tijdens de feature in je eigen developer-workspace: omgeving `DEV_<NAAM>` (kies in de kop "Andere…" en vul de naam in, bijvoorbeeld `DEV_MITCHELL`; de
 #      workspace `DEV_<NAAM>_<prefix>_INTEGRATION_DATA` moet al in de configdb staan, en de bronbinding is die van D);
 #    - na de merge: `D`;
 #    - vlak voor een promotie: `T`, en later `P`.
@@ -89,7 +92,7 @@
 # MARKDOWN ********************
 
 # ## Stap 2: de editor
-# Klik op **Laden uit de configdb**. Daarna werk je van links naar rechts door de drie tabs.
+# Klik op **Laden uit de configdb**. Daarna werk je van links naar rechts door de tabs; tab 4 is voor het vergelijken en overzetten tussen omgevingen, tab 5 voor het dagelijks beheer.
 
 # CELL ********************
 
@@ -129,6 +132,7 @@ registration_ui(domain="INTEGRATION", environment="D")
 # MARKDOWN ********************
 
 # ## Van D naar T en P
+# Dit doe je in tab 4 van de editor (vergelijken, overzetten en overrides per omgeving, met proefdraai). Zonder editor kan het ook:
 # `copy_registration` registreert wat in D staat ook in T en P, in een keer, via `register()`: de proefdraai toont per
 # tabel `New`, `Changed` of `Unchanged`, en er wordt niets geschreven zolang een omgeving een fout heeft.
 # - **Standaard alleen nieuwe tabellen**: wat in T of P al staat blijft ongemoeid. `update=True` brengt ook bestaande
