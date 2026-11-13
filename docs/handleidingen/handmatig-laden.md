@@ -124,7 +124,7 @@ ORDER  BY DurationSeconds DESC;
 
 ## Time-outs
 
-De framework-pipelines hebben vaste time-outs). De belangrijkste:
+De framework-pipelines hebben vaste time-outs. De belangrijkste:
 
 | Waar | Time-out |
 |---|---|
