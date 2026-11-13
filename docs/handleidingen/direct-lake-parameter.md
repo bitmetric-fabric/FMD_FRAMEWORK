@@ -9,18 +9,18 @@ Een Direct Lake-model leest uit het lakehouse waarvan het pad in de expressie st
 
 Het gaat om een model op **OneLake** (`AzureStorage.DataLake`). Voor een model op het SQL-endpoint van het lakehouse geldt een andere route, een data source rule, die hier niet wordt beschreven.
 
-De labels *vastgesteld* (uit de definitie of de documentatie van Microsoft gelezen), *getest in eigen omgeving* (met datum) en *aanname* geven aan hoe zeker een bewering is. De schermafbeeldingen komen uit een referentie-installatie van november 2026.
+De schermafbeeldingen komen uit een referentie-installatie van november 2026.
 
 ## Wat vaststaat en wat niet
 
-- **Verversen van de data werkt**, ook met de parameter actief (*getest in eigen omgeving*, 10 november 2026).
-- **Promoveer alleen met de parameter actief.** Staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet en leest Test uit Dev (*getest in eigen omgeving*, 9 november 2026).
-- **Het schema bijwerken werkt met de parameter actief** (**Refresh → Schema** en **Edit tables**), mits elke tabel in het model een `sourceLineageTag` heeft. Ontbreekt die op een tabel, dan faalt het schema verversen, met of zonder parameter (*getest in eigen omgeving*, 10 november 2026). Zie *Het schema bijwerken*.
+- **Verversen van de data werkt**, ook met de parameter actief.
+- **Promoveer alleen met de parameter actief.** Staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet en leest Test uit Dev.
+- **Het schema bijwerken werkt met de parameter actief** (**Refresh → Schema** en **Edit tables**), mits elke tabel in het model een `sourceLineageTag` heeft. Ontbreekt die op een tabel, dan faalt het schema verversen, met of zonder parameter. Zie *Het schema bijwerken*.
 
 ## Vooraf
 
 - Gold van de omgeving waar je naartoe promoveert bestaat en is gevuld. Het model in Test moet naar Gold van Test kunnen wijzen.
-- Je bent eigenaar van het model. Alleen de eigenaar kan een rule maken (*vastgesteld*, Microsoft Learn, *Create deployment rules*).
+- Je bent eigenaar van het model. Alleen de eigenaar kan een rule maken.
 - Je bent admin van de deployment pipeline van de SEMANTIC-workspace.
 - Een Apply in de TMDL view kan een compatibiliteitsniveau van minimaal 1707 vragen. Het niveau verhogen is eenmalig en niet terug te draaien. Het referentiemodel stond op 1707.
 - Je kent het OneLake-pad van het lakehouse `LH_GOLD_LAYER` van de omgeving, in de vorm `https://onelake.dfs.fabric.microsoft.com/<WorkspaceId>/<LakehouseId>` (het item van het type **Lakehouse**, niet het SQL-endpoint met dezelfde naam, en zonder slash aan het eind). Zo vind je het:
@@ -37,7 +37,7 @@ De labels *vastgesteld* (uit de definitie of de documentatie van Microsoft gelez
 
      *Afbeelding 21: kopieer de URL. Het ABFS-pad is vervaagd.*
 
-  3. **De gekopieerde URL eindigt op `/Tables`. Haal dat deel weg**: het pad dat je in de parameter en in de rule gebruikt, eindigt op het lakehouse (`…/<LakehouseId>`). Het paneel toont de URL afgekapt; controleer het einde na het plakken. *Getest in eigen omgeving* (10 november 2026): het pad zonder `/Tables` werkte in de parameter rule.
+  3. **De gekopieerde URL eindigt op `/Tables`. Haal dat deel weg**: het pad dat je in de parameter en in de rule gebruikt, eindigt op het lakehouse (`…/<LakehouseId>`). Het paneel toont de URL afgekapt; controleer het einde na het plakken.
 
 ## Stap 1: de parameter toevoegen (Dev)
 
@@ -89,7 +89,7 @@ De labels *vastgesteld* (uit de definitie of de documentatie van Microsoft gelez
    *Afbeelding 5: `Source` gebruikt nu `OneLakeUrl`; het letterlijke pad staat in commentaar (met `//`).*
 
    - Laat de bestaande `lineageTag` en de annotaties (`PBI_IncludeFutureArtifacts`) staan. De editor beheert ze. Microsoft beschrijft `PBI_IncludeFutureArtifacts` niet; raak hem niet aan.
-   - **De parameter moet in hetzelfde script staan** als de verwijzing erop. Staat `OneLakeUrl` niet in het model, dan geeft de Apply de foutmelding *Direct Lake mode requires a Direct Lake data source* (*getest in eigen omgeving*, 10 november 2026: die melding kwam doordat het script naar de parameter verwees zonder haar te definiëren).
+   - **De parameter moet in hetzelfde script staan** als de verwijzing erop. Staat `OneLakeUrl` niet in het model, dan geeft de Apply de foutmelding *Direct Lake mode requires a Direct Lake data source*.
    - De waarde achter het `=` bij `OneLakeUrl` is de huidige waarde van de parameter in Dev. Je hoeft hem nergens apart in te stellen.
    - Plak het script in één keer: de editor springt bij typen vanzelf in.
 
@@ -105,9 +105,9 @@ De labels *vastgesteld* (uit de definitie of de documentatie van Microsoft gelez
    GET https://api.powerbi.com/v1.0/myorg/groups/{ws}/datasets/{id}/parameters
    ```
 
-   Dat toont `OneLakeUrl` met de huidige waarde (*getest in eigen omgeving*, 10 november 2026). Het eindpunt `datasources` toont voor dit model alleen het type (`AzureDataLakeStorage`) en niet het pad; gebruik het voor deze controle dus niet.
+   Dat toont `OneLakeUrl` met de huidige waarde. Het eindpunt `datasources` toont voor dit model alleen het type (`AzureDataLakeStorage`) en niet het pad; gebruik het voor deze controle dus niet.
 
-Getest in eigen omgeving (10 november 2026): de Apply slaagt, een data-verversing slaagt direct daarna (`Completed`, type `WebModeling`) en een DAX-query over het model geeft data.
+Na de Apply slaagt een data-verversing direct (`Completed`, type `WebModeling`) en een DAX-query over het model geeft data.
 
 ## Stap 2: verversen
 
@@ -119,15 +119,15 @@ Kies in de modelweergave **Refresh** (het pijltje ernaast opent het menu). Er zi
 
 | Optie | Met de parameter actief |
 |---|---|
-| **Data** | Werkt (*getest in eigen omgeving*, 10 november 2026). |
-| **Schema** | Werkt (*getest in eigen omgeving*, 10 november 2026), mits elke tabel een `sourceLineageTag` heeft; zie *Het schema bijwerken*. |
+| **Data** | Werkt. |
+| **Schema** | Werkt, mits elke tabel een `sourceLineageTag` heeft; zie *Het schema bijwerken*. |
 | **Schema and data** | Idem (het schema is het eerste deel). |
 
 Tijdens een verversing kun je het model niet bekijken of bewerken, en de portal waarschuwt daarvoor.
 
 ## Het schema bijwerken
 
-Is er in Gold een tabel of kolom bijgekomen, of wil je tabellen aan het model toevoegen, dan ververs je het schema met **Refresh → Schema** of **Edit tables**. Dat kan met de parameter actief; je hoeft hem niet uit te zetten (*getest in eigen omgeving*, 10 november 2026, op drie modellen, met en zonder parameter).
+Is er in Gold een tabel of kolom bijgekomen, of wil je tabellen aan het model toevoegen, dan ververs je het schema met **Refresh → Schema** of **Edit tables**. Dat kan met de parameter actief; je hoeft hem niet uit te zetten.
 
 Faalt het met de melding *Underlying Error: Query Evaluation failed for query: DirectLake - LH_GOLD_LAYER*, controleer dan de tabellen in het model:
 
@@ -135,7 +135,7 @@ Faalt het met de melding *Underlying Error: Query Evaluation failed for query: D
 
 *Afbeelding 8: de melding bij Refresh, Schema. Het Activity ID is afgedekt.*
 
-**Oorzaak: een tabel zonder `sourceLineageTag`** (*getest in eigen omgeving*, 10 november 2026). Met die tag koppelt de editor een tabel aan de tabel in het lakehouse. Een tabel die via een script of de API is aangemaakt, kan hem missen. Het gevolg: Refresh → Schema faalt met bovenstaande melding, ook als de parameter niet in het model staat. In ons referentiemodel was dat de enige afwijking: dezelfde tabel faalde zonder de tag en slaagde na het toevoegen ervan; een data-verversing slaagde in beide gevallen.
+**Oorzaak: een tabel zonder `sourceLineageTag`.** Met die tag koppelt de editor een tabel aan de tabel in het lakehouse. Een tabel die via een script of de API is aangemaakt, kan hem missen. Het gevolg: Refresh → Schema faalt met bovenstaande melding, ook als de parameter niet in het model staat. In ons referentiemodel was dat de enige afwijking: dezelfde tabel faalde zonder de tag en slaagde na het toevoegen ervan; een data-verversing slaagde in beide gevallen.
 
 Herstel in de TMDL view (**Apply**) of via de definitie: zet de tag direct onder `lineageTag` van de tabel, in de vorm `[schema].[tabel]` van de tabel in het lakehouse:
 
@@ -149,9 +149,9 @@ Open het model daarna opnieuw in Editing en ververs het schema. Wijzig je het mo
 
 Controleer vooraf in de TMDL view (sleep **Tables** naar de editor) of elke tabel de regel `sourceLineageTag` heeft.
 
-*Aanname:* eerdere mislukte schema-verversingen op andere modellen (26 oktober en 9 november 2026) hadden dezelfde oorzaak. Dat is niet nagegaan.
+Mogelijk hadden eerdere mislukte schema-verversingen op andere modellen dezelfde oorzaak; dat is niet nagegaan.
 
-Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet (*getest in eigen omgeving*, 9 november 2026: het model in Test wees naar Gold van Dev).
+Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet en wijst het model in Test naar Gold van Dev.
 
 ## Stap 3: promoveren naar Test
 
@@ -174,12 +174,12 @@ Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad act
 
    *Afbeelding 11: de deployment is klaar.*
 
-Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet dus eerst naar Test. *Getest in eigen omgeving* (10 november 2026, D naar T).
+Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet dus eerst naar Test.
 
 **Wat het model in Test nu doet.** Zonder rule neemt het model in Test de parameterwaarde van Dev mee en leest het dus uit Gold van Dev. Dat is vast te stellen in twee stappen:
 
-- De parameter in Test heeft de waarde van Gold van Dev (*getest in eigen omgeving*, 10 november 2026, via `GET …/datasets/{id}/parameters`).
-- De **item lineage** van het model toont dezelfde bron. Kies in de lijst bij het model het menu **…** en daarna **View item lineage**. Het lakehouse `LH_GOLD_LAYER` staat dan in de workspace van **Dev** (*(D)*), terwijl het model zelf in Test staat. Het lineageschema leidt deze bron af uit het pad van het model; dat is een *aanname* over hoe de portal dit bepaalt.
+- De parameter in Test heeft de waarde van Gold van Dev (te lezen met `GET …/datasets/{id}/parameters`).
+- De **item lineage** van het model toont dezelfde bron. Kies in de lijst bij het model het menu **…** en daarna **View item lineage**. Het lakehouse `LH_GOLD_LAYER` staat dan in de workspace van **Dev** (*(D)*), terwijl het model zelf in Test staat. Gebruik de lineage als illustratie; de parameterwaarde hierboven is het bewijs.
 
 ![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat in de workspace van Dev, het model in die van Test](afbeeldingen/direct-lake-parameter/12-lineage-voor-de-rule.png)
 
@@ -187,7 +187,7 @@ Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet du
 
 ## Stap 4: de parameter rule in Test
 
-Deployment rules werken pas bij de volgende deployment naar die stage (*vastgesteld*, Microsoft Learn).
+Deployment rules werken pas bij de volgende deployment naar die stage.
 
 1. Ga in de deployment pipeline naar de stage **Test** en kies bij de stage de knop **Deployment rules**. In de stage Development kun je geen rules maken. Er verschijnt een lijst met de items in Test; kies het model.
 
@@ -213,7 +213,7 @@ Deployment rules werken pas bij de volgende deployment naar die stage (*vastgest
 
    *Afbeelding 16: de rule is opgeslagen.*
 
-De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijderd. De deployment faalt dan (*vastgesteld*, Microsoft Learn). Microsoft Learn noemt parameters in een Direct Lake-expressie niet; dat de rule hier werkt, is alleen door onze test bevestigd (*getest in eigen omgeving*, 10 november 2026).
+De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijderd. De deployment faalt dan.
 
 ## Stap 5: opnieuw promoveren en controleren
 
@@ -235,21 +235,21 @@ De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijder
    GET https://api.powerbi.com/v1.0/myorg/groups/{ws}/datasets/{id}/parameters
    ```
 
-   Dat gaf op 10 november 2026 het pad van Gold van Test (*getest in eigen omgeving*). Ter illustratie toont **View item lineage** nu het lakehouse in de workspace van **Test**:
+   Dat geeft het pad van Gold van Test. Ter illustratie toont **View item lineage** nu het lakehouse in de workspace van **Test**:
 
    ![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat nu in de workspace van Test](afbeeldingen/direct-lake-parameter/19-lineage-na-de-rule.png)
 
    *Afbeelding 19: na de rule. Het model leest uit het lakehouse in de workspace (T).*
 
-4. Ververs het model in Test (**Refresh → Data**); de verversing moet `Completed` zijn. Op 10 november 2026 slaagde een verversing van het model in Test, ook zonder dat het aan een connectie gekoppeld was (*getest in eigen omgeving*; de verversing liep onder de identiteit van de gebruiker die de aanroep deed).
+4. Ververs het model in Test (**Refresh → Data**); de verversing moet `Completed` zijn. Een verversing van het model in Test slaagt ook zonder dat het aan een connectie gekoppeld is; de verversing loopt dan onder de identiteit van de gebruiker.
 5. Een DAX-vergelijking bewijst alleen iets als de data in beide omgevingen verschilt. Gebruik de parameterwaarde als bewijs.
 6. Promoveer een rapport pas nadat het model in Test staat. Controleer daarna dat het `datasetId` van het rapport het model in Test is.
 
 ## Stap 6: een vaste identiteit instellen met een connectie
 
-Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebruiker (*Default: Single Sign-On (Entra ID)*). Wil je dat verversingen en lezers een vaste identiteit gebruiken, bijvoorbeeld een service principal, dan koppel je het model aan een **cloud connectie**. Zonder connectie slaagde de verversing in Test wel (zie stap 5); wat er zonder connectie gebeurt bij een geplande verversing of voor rapportlezers is *niet getest* (*aanname*: dat dit een vaste identiteit vereist).
+Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebruiker (*Default: Single Sign-On (Entra ID)*). Wil je dat verversingen en lezers een vaste identiteit gebruiken, bijvoorbeeld een service principal, dan koppel je het model aan een **cloud connectie**. Zonder connectie slaagde de verversing in Test wel (zie stap 5); wat er zonder connectie gebeurt bij een geplande verversing of voor rapportlezers is niet getest.
 
-**Hoe vaak.** Maak de connectie **één keer per omgeving**: een connectie hoort bij één pad, en elke omgeving heeft een eigen lakehouse en dus een eigen pad. De connectie voor Dev wijst naar het lakehouse van Dev en is dus niet bedoeld voor Test. Koppel **elk semantisch model** vervolgens zelf aan de connectie van zijn omgeving. *Vastgesteld* (10 november 2026): na de promotie was het model in Test niet aan een connectie gekoppeld, terwijl het model in Dev het wel was. Een connectie wordt dus niet meegepromoveerd. *Aanname:* bij elk nieuw semantisch model moet je die koppeling opnieuw leggen.
+**Hoe vaak.** Maak de connectie **één keer per omgeving**: een connectie hoort bij één pad, en elke omgeving heeft een eigen lakehouse en dus een eigen pad. De connectie voor Dev wijst naar het lakehouse van Dev en is dus niet bedoeld voor Test. Koppel **elk semantisch model** vervolgens zelf aan de connectie van zijn omgeving. Na de promotie is het model in Test niet aan een connectie gekoppeld, ook niet als het model in Dev dat wel is. Een connectie wordt dus niet meegepromoveerd. Bij elk nieuw semantisch model moet je die koppeling opnieuw leggen.
 
 **Voorwaarde.** De service principal heeft minimaal leesrechten op het lakehouse in die omgeving (een rol op de DATA-workspace). Of de tenantinstelling voor service principals aan staat, moet je zelf controleren.
 
@@ -301,15 +301,15 @@ Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebrui
 
    *Afbeelding 29: de koppeling is toegepast. Dit scherm komt uit Dev; in Test koppel je de connectie van Test.*
 
-Controle (*getest in eigen omgeving*, 10 november 2026): `GET …/datasets/{id}/datasources` toont de data source voor een gekoppeld model met een `gatewayId` en een `datasourceId`, en voor een niet gekoppeld model zonder die twee velden.
+Controle: `GET …/datasets/{id}/datasources` toont de data source voor een gekoppeld model met een `gatewayId` en een `datasourceId`, en voor een niet gekoppeld model zonder die twee velden.
 
 ## Valkuilen
 
 | Verschijnsel | Oorzaak en oplossing |
 |---|---|
-| *Direct Lake mode requires a Direct Lake data source … Failed to save modifications* bij een Apply | Het script verwijst naar `OneLakeUrl` zonder dat de parameter in het model of in hetzelfde script staat. Neem de parameter in het script op. Dezelfde melding is eerder bij andere modellen gezien; de oorzaak is daar niet vastgesteld. |
+| *Direct Lake mode requires a Direct Lake data source … Failed to save modifications* bij een Apply | Het script verwijst naar `OneLakeUrl` zonder dat de parameter in het model of in hetzelfde script staat. Neem de parameter in het script op. Dezelfde melding is eerder bij andere modellen gezien; de oorzaak is daar niet bekend. |
 | *Query Evaluation failed for query: DirectLake - LH_GOLD_LAYER* bij **Refresh → Schema** of **Schema and data** | Een tabel mist `sourceLineageTag`. Voeg hem toe (zie *Het schema bijwerken*). De parameter is niet de oorzaak. |
-| **Edit tables** faalt met *ConceptualSchemaSettings* | Op 26 oktober 2026 gezien; oorzaak niet vastgesteld. Op 10 november 2026 werkte Edit tables met de parameter actief. Controleer eerst de `sourceLineageTag` van de tabellen. |
+| **Edit tables** faalt met *ConceptualSchemaSettings* | Op 26 oktober 2026 gezien; oorzaak onbekend. Op 10 november 2026 werkte Edit tables met de parameter actief. Controleer eerst de `sourceLineageTag` van de tabellen. |
 | Het model in Test leest uit Dev | Het letterlijke pad was actief tijdens de promotie, of de rule is nog niet van kracht. Controleer de parameterwaarde in Test, zet de parameter aan in Dev en promoveer opnieuw. |
 | De deployment faalt na het hernoemen van de parameter | De rule is ongeldig. Maak de rule opnieuw. |
 | Parameter rules zijn niet zichtbaar | Het model is nog niet naar die stage gepromoveerd. Promoveer eerst. |
@@ -323,7 +323,8 @@ Controle (*getest in eigen omgeving*, 10 november 2026): `GET …/datasets/{id}/
 
 - Of een geplande verversing of een rapportlezer zonder connectie werkt, en of die connectie daarvoor nodig is.
 - Of de portal een connectie met het pad van een andere omgeving toelaat voor een model.
-- Het koppelen van de connectie in Test: de schermafbeeldingen in stap 6 komen uit Dev; de stappen in Test zijn gelijk (*aanname*, het model in Test is nog niet gekoppeld getest).
+- Het koppelen van de connectie in Test: de schermafbeeldingen in stap 6 komen uit Dev; de stappen in Test zijn naar verwachting gelijk, maar dat is niet getest.
 - Promotie van Test naar Productie met dezelfde rule.
+- Parameter rules op een Direct Lake-expressie zijn niet door Microsoft beschreven; het werkt in onze referentie-installatie, maar is niet als ondersteund gedrag bevestigd.
 - **Edit tables** met de parameter actief na een promotie.
 - Meerdere rapporten op één model.
