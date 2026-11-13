@@ -7,8 +7,6 @@ sidebar_position: 2
 
 Deze handleiding beschrijft hoe geplande runs in een FMD-installatie werken, wat je na elke run controleert, hoe je een schedule wijzigt en hoe je de wekelijkse maintenance plant. Gegevens van één specifieke installatie (tijden, namen, aanpassingen) horen niet hier maar in de documentatie van die installatie.
 
-De labels *vastgesteld* (uit de code of de definitie gelezen), *getest in eigen omgeving* en *aanname* geven aan hoe zeker een bewering is.
-
 ## De keten van een geplande run
 
 Een schedule start een schedule-pipeline, die de rest aanroept:
@@ -16,7 +14,7 @@ Een schedule start een schedule-pipeline, die de rest aanroept:
 1. `PL_FMD_SCHEDULE_<omgeving>` in de workspace INTEGRATION CONFIG start met de parameter `Target = LOAD`.
 2. Die roept `PL_FMD_ORCHESTRATION` aan in de INTEGRATION CODE-workspace van de omgeving, met de parameters `LoadGroup` en `DataSourceName`.
 3. De orchestratie start `PL_FMD_LOAD_ALL`: Landingzone, Bronze en Silver.
-4. De setup van de business-domeinen hangt daarna per domein de Gold-pipeline `PL_<DOMEIN>_LOAD_GOLD` aan de orchestratie, met de conditie dat `PL_FMD_LOAD_ALL` **Succeeded** is (*vastgesteld*, code van de setup). Na een fout in één entiteit draait Gold dan voor geen enkel domein. Een installatie kan die conditie aanpassen.
+4. De setup van de business-domeinen hangt daarna per domein de Gold-pipeline `PL_<DOMEIN>_LOAD_GOLD` aan de orchestratie, met de conditie dat `PL_FMD_LOAD_ALL` **Succeeded** is. Na een fout in één entiteit draait Gold dan voor geen enkel domein. Een installatie kan die conditie aanpassen.
 5. Gold draait na elke run van de orchestratie, ook na een run met een filter op `LoadGroup` of `DataSourceName`.
 
 `PL_FMD_SCHEDULE_<omgeving>` heeft de parameters `Target` (`LOAD` of `MAINTENANCE`), `LoadGroup` en `DataSourceName`. Een andere waarde van `Target` laat de pipeline falen met `UnknownTarget`. De pipeline heeft `concurrency: 1`: een run wacht zolang een andere van dezelfde pipeline loopt.
@@ -52,14 +50,14 @@ Doe dit na elke geplande run, per omgeving die je beheert. Het kost ongeveer vij
 Doe dit in de portal, op het item `PL_FMD_SCHEDULE_<omgeving>` in INTEGRATION CONFIG, één omgeving per keer.
 
 - Geef bij een load-schedule geen parameters op om alles te laden. Wil je een deel laden, vul dan `LoadGroup` of `DataSourceName` in. Zonder parameters gelden de standaardwaarden van de pipeline: `Target = LOAD` en geen filter.
-- Geef bij een maintenance-schedule altijd `Target = MAINTENANCE` mee. **Zonder die parameter draait het schedule een gewone load, met Gold, in plaats van maintenance**, omdat de standaardwaarde `LOAD` is (*vastgesteld*, definitie van de schedule-pipeline).
+- Geef bij een maintenance-schedule altijd `Target = MAINTENANCE` mee. **Zonder die parameter draait het schedule een gewone load, met Gold, in plaats van maintenance**, omdat de standaardwaarde `LOAD` is.
 - Lees het schedule na het opslaan terug. De lijst met schedules via de REST API toont de parameters niet; de definitie van het item (`getDefinition`, onderdeel `.schedules`) wel.
 - Een schedule heeft een eigen tijdzone. Kies bewust dezelfde tijdzone voor alle schedules van een omgeving.
 - Leg elke wijziging vast: schedules staan niet in git en een promotie neemt ze niet mee. Een verwijderd of opnieuw aangemaakt schedule-pipeline-item verliest ze.
 
 ## Meldingen bij een gefaalde run
 
-Het framework stuurt zelf geen meldingen. Fabric kan dat wel voor een **geplande** pipeline: zet op `PL_FMD_SCHEDULE_<omgeving>` onder **Home → Schedule → Failure notifications** gebruikers of groepen, één keer per omgeving. Omdat CONFIG in geen deployment pipeline zit, blijven de ontvangers bij een promotie staan. Een handmatige run geeft geen e-mail (*vastgesteld*, documentatie van Microsoft).
+Het framework stuurt zelf geen meldingen. Fabric kan dat wel voor een **geplande** pipeline: zet op `PL_FMD_SCHEDULE_<omgeving>` onder **Home → Schedule → Failure notifications** gebruikers of groepen, één keer per omgeving. Omdat CONFIG in geen deployment pipeline zit, blijven de ontvangers bij een promotie staan. Een handmatige run geeft geen e-mail.
 
 In de Monitor staat daarnaast **Configure notifications → Schedule failures (Preview)**. Of dat dezelfde melding is of een aanvulling, is niet uitgezocht.
 
@@ -67,10 +65,10 @@ In de Monitor staat daarnaast **Configure notifications → Schedule failures (P
 
 `PL_FMD_MAINTENANCE` wordt gepland via hetzelfde schedule-pipeline met `Target = MAINTENANCE`. Het ruimt verwerkte leveringen in de landingzone op die ouder zijn dan de bewaartermijn en draait `VACUUM` op Bronze en Silver. Eenmaal per week volstaat.
 
-- **Moment.** Kies een moment zonder laadrun in dezelfde omgeving, en met ruim marge voor en na de laatste en de eerste run. Een gelijktijdige schrijfactie op dezelfde tabellen kan falen (*aanname*, niet getest). Meestal is dat zondag, als er in het weekend niet wordt geladen.
+- **Moment.** Kies een moment zonder laadrun in dezelfde omgeving, en met ruim marge voor en na de laatste en de eerste run. Een gelijktijdige schrijfactie op dezelfde tabellen kan mogelijk falen. Meestal is dat zondag, als er in het weekend niet wordt geladen.
 - **Spreiding.** Plan de omgevingen op verschillende tijden als ze dezelfde capaciteit delen, zodat de Spark-sessies niet om dezelfde capaciteit strijden.
 - **Duur.** De duur hangt af van het aantal tabellen en hun grootte, en is vooraf niet te schatten. De schedule-pipeline geeft maintenance een time-out van 4 uur. Draai de eerste keer met de hand, meet de duur en pas de tijd zo nodig aan.
-- **Eerste run.** De opruiming van de landingzone verwijdert pas leveringen als ze ouder zijn dan de bewaartermijn (standaard 30 dagen). In een jonge installatie doet de eerste run dus waarschijnlijk niets op dat punt (*aanname*).
+- **Eerste run.** De opruiming van de landingzone verwijdert pas leveringen als ze ouder zijn dan de bewaartermijn (standaard 30 dagen). In een jonge installatie doet de eerste run dus waarschijnlijk niets op dat punt.
 
 ## Nog niet getest
 

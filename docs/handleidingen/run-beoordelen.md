@@ -7,11 +7,11 @@ sidebar_position: 3
 
 Deze handleiding beschrijft wat je doet nadat een run klaar is of is mislukt: de run in de Monitor bekijken, de falende tabel vinden, de soort fout bepalen en herstellen. Hoe je een run met de hand start, staat in [Een tabel of bron handmatig laden](handmatig-laden.md). De vaste controle na elke geplande run staat in [Dagelijkse routine en schedules](dagelijkse-routine.md).
 
-De labels *vastgesteld* (uit de code of de definitie gelezen), *getest in eigen omgeving* en *aanname* geven aan hoe zeker een bewering is. Waar de handleiding een scherm van de portal beschrijft dat nog niet is vastgelegd, staat dat erbij.
+Waar de handleiding een scherm van de portal beschrijft dat nog niet is vastgelegd, staat dat erbij.
 
 ## Wat je eerst moet weten
 
-- **Een groene run bewijst niet dat alles is geladen.** `PL_FMD_LOAD_ALL` ketent de lagen op `Completed`, niet op `Succeeded`. Bronze draait dus ook als Landingzone faalde, en Silver ook als Bronze faalde. Dat isoleert fouten per tabel: de tabellen die wel zijn geland, lopen door. Een groene run kan dus tabellen missen, en een rode run betekent niet dat er niets is geladen (*vastgesteld*, pipelinedefinitie).
+- **Een groene run bewijst niet dat alles is geladen.** `PL_FMD_LOAD_ALL` ketent de lagen op `Completed`, niet op `Succeeded`. Bronze draait dus ook als Landingzone faalde, en Silver ook als Bronze faalde. Dat isoleert fouten per tabel: de tabellen die wel zijn geland, lopen door. Een groene run kan dus tabellen missen, en een rode run betekent niet dat er niets is geladen.
 - **Een rode run is bijna altijd een echte fout.** De fout-activiteiten (`FA_THROW_ERROR_*`) maken de run pas rood nadat de fout in de logging is weggeschreven. Behandel ze als een incident.
 - **Een fout per tabel staat in de logging, niet alleen in de portal.** De Monitor toont de keten; de falende tabel en de reden staan in de configuratiedatabase.
 
@@ -19,14 +19,14 @@ De labels *vastgesteld* (uit de code of de definitie gelezen), *getest in eigen 
 
 1. Kies links **Monitor** en daarna **Activities**.
 2. Zoek de run met *Filter by keyword*, bijvoorbeeld op `PL_FMD_SCHEDULE` voor een geplande run of op `PL_FMD_LOAD_ALL` voor een handmatige. Open de run met de gewenste starttijd.
-3. Rechts staan de details van de run: eigenaar, starttijd, eindtijd, status en het aantal parameters. Onderaan staat de lijst *Activity runs*, met per activiteit de naam, de status, de starttijd, de duur en de pictogrammen *Input* en *Output* (*getest in eigen omgeving*, 10 november 2026).
+3. Rechts staan de details van de run: eigenaar, starttijd, eindtijd, status en het aantal parameters. Onderaan staat de lijst *Activity runs*, met per activiteit de naam, de status, de starttijd, de duur en de pictogrammen *Input* en *Output*.
 4. Bovenin staan de knoppen **Rerun**, **Cancel**, **Refresh** en **Update pipeline**, en een schakelaar tussen **List** en **Gantt**. Tijdens een run ververst de lijst vanzelf (de portal meldt dat voor 5 minuten).
 
-Een geplande run start eerst de schedule-pipeline, die de orchestratie aanroept, die weer `PL_FMD_LOAD_ALL` aanroept. Open bij een aangeroepen pipeline de bijbehorende run om te zien welke activiteit in die pipeline faalde (*aanname*: de portal toont een link van de aanroep naar de onderliggende run; nog niet vastgelegd).
+Een geplande run start eerst de schedule-pipeline, die de orchestratie aanroept, die weer `PL_FMD_LOAD_ALL` aanroept. Open bij een aangeroepen pipeline de bijbehorende run om te zien welke activiteit in die pipeline faalde. De portal toont naar verwachting een link van de aanroep naar de onderliggende run; dat is nog niet vastgelegd.
 
 ## Stap 2: lees de keten
 
-`PL_FMD_LOAD_ALL` bestaat uit de volgende onderdelen (*vastgesteld*, pipelinedefinitie):
+`PL_FMD_LOAD_ALL` bestaat uit de volgende onderdelen:
 
 | Activiteit | Wat hij doet |
 |---|---|
@@ -70,7 +70,7 @@ De reden van zo'n kind staat in `LogData` achter `Failed notebooks: [...]`.
 | Een run of notebook staat lang op `Queued` of `NotStarted` | Drukte op de capaciteit, geen storing. | Wacht. Duurt het langer dan 20 tot 25 minuten, overleg dan. |
 | Bronze logt `SourceFileName: FILE NOT FOUND` en de run is groen | Een run zonder wijzigingen bij een bron die parquet-bestanden schrijft. Dit is normaal. | Niets. |
 
-De eerste vier rijen zijn *vastgesteld* uit de werking van het framework en uit eerdere runs; de rij over de login-time-out en de capaciteit volgt uit de beschrijving van het framework en is niet apart opnieuw getest.
+De rij over de login-time-out en de capaciteit volgt uit de beschrijving van het framework en is niet apart opnieuw getest.
 
 ## Stap 5: herstellen
 

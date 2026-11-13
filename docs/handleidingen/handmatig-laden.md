@@ -7,7 +7,7 @@ sidebar_position: 1
 
 Deze handleiding beschrijft hoe je met de hand één tabel of één bron laadt, zonder te wachten op het schedule. Je start daarvoor `PL_FMD_LOAD_ALL` met de parameters `DataSourceName` en `Entities`, en volgt de run in de Monitor.
 
-De schermafbeeldingen komen uit een referentie-installatie van november 2026. In jouw omgeving kunnen knoppen of schermen iets anders uitzien, bijvoorbeeld als Microsoft de Monitor vernieuwt. De labels *vastgesteld* (uit de code of de definitie gelezen), *getest in eigen omgeving* en *aanname* geven aan hoe zeker een bewering is.
+De schermafbeeldingen komen uit een referentie-installatie van november 2026. In jouw omgeving kunnen knoppen of schermen iets anders uitzien, bijvoorbeeld als Microsoft de Monitor vernieuwt.
 
 ## Wanneer gebruik je dit
 
@@ -19,7 +19,7 @@ Voor een geplande load gebruik je het schedule, niet deze handleiding (zie [Dage
 
 ## Hoe het filter werkt
 
-`PL_FMD_LOAD_ALL`, `PL_FMD_LOAD_LANDINGZONE`, `PL_FMD_LOAD_BRONZE` en `PL_FMD_LOAD_SILVER` hebben deze parameters, alle standaard leeg (*vastgesteld*, pipelinedefinitie):
+`PL_FMD_LOAD_ALL`, `PL_FMD_LOAD_LANDINGZONE`, `PL_FMD_LOAD_BRONZE` en `PL_FMD_LOAD_SILVER` hebben deze parameters, alle standaard leeg:
 
 | Parameter | Betekenis |
 |---|---|
@@ -55,9 +55,9 @@ WHERE  le.[IsActive] = 1
 ORDER BY ds.[Name], le.[SourceSchema], le.[SourceName];
 ```
 
-De kolommen zijn gecontroleerd met een `SELECT` op de configuratiedatabase van de referentie-installatie (*getest in eigen omgeving*, 10 november 2026). Dezelfde tabel komt meerdere keren voor, eenmaal per omgeving. Kunnen meerdere bronnen dezelfde tabelnaam hebben, combineer dan `DataSourceName` en `Entities`.
+De kolommen zijn gecontroleerd met een `SELECT` op de configuratiedatabase van de referentie-installatie). Dezelfde tabel komt meerdere keren voor, eenmaal per omgeving. Kunnen meerdere bronnen dezelfde tabelnaam hebben, combineer dan `DataSourceName` en `Entities`.
 
-**3. Controleer dat er geen geplande run loopt** in dezelfde omgeving, en dat de wekelijkse maintenance niet draait. Een gelijktijdige schrijfactie op dezelfde tabellen kan falen (*aanname*, niet getest).
+**3. Controleer dat er geen geplande run loopt** in dezelfde omgeving, en dat de wekelijkse maintenance niet draait. Een gelijktijdige schrijfactie op dezelfde tabellen kan mogelijk falen.
 
 ## Stappen
 
@@ -124,7 +124,7 @@ ORDER  BY DurationSeconds DESC;
 
 ## Time-outs
 
-De framework-pipelines hebben vaste time-outs (*vastgesteld*, pipelinedefinities). De belangrijkste:
+De framework-pipelines hebben vaste time-outs). De belangrijkste:
 
 | Waar | Time-out |
 |---|---|
@@ -142,15 +142,15 @@ Heb je de verkeerde waarden gekozen, kies dan in de Monitor de run en kies boven
 
 *Afbeelding 5: een run annuleren. In de dialoog kies je OK.*
 
-- In een proef werd de run 28 seconden na de start geannuleerd. Er stond toen alleen de eerste activiteit (`SP_START_AUDIT_PIPELINE`) in de wachtrij van de activiteitenlijst onder het diagram, en er was niets geladen (*getest in eigen omgeving*, 10 november 2026).
-- Annuleer je later in de run, dan kunnen bestanden in de landingzone al zijn geschreven. Ze staan dan in de wachtrij met `IsProcessed = 0` en worden bij de volgende Bronze-run opgepakt (*vastgesteld*, uit de werking van de wachtrij; niet getest met een geannuleerde run).
+- In een proef werd de run 28 seconden na de start geannuleerd. Er stond toen alleen de eerste activiteit (`SP_START_AUDIT_PIPELINE`) in de wachtrij van de activiteitenlijst onder het diagram, en er was niets geladen.
+- Annuleer je later in de run, dan kunnen bestanden in de landingzone al zijn geschreven. Ze staan dan in de wachtrij met `IsProcessed = 0` en worden bij de volgende Bronze-run opgepakt (dit is niet getest met een geannuleerde run).
 - De pipeline is daarna niet kapot. Je kunt hem gewoon opnieuw starten.
 
 ## Veelgemaakte fouten
 
 | Symptoom | Oorzaak en oplossing |
 |---|---|
-| De run eindigt groen en er is niets geladen | De waarden komen niet overeen met een actieve entiteit (typfout, andere naam, entiteit staat uit). Controleer met de query bij *Voor je begint*. Dit is een *aanname*: het gedrag bij een niet-bestaande naam is niet apart getest. |
+| De run eindigt groen en er is niets geladen | De waarden komen niet overeen met een actieve entiteit (typfout, andere naam, entiteit staat uit). Controleer met de query bij *Voor je begint*. Het gedrag bij een niet-bestaande naam is niet apart getest. |
 | De gewenste tabel is niet verwerkt in Bronze of Silver | Een eerder mislukt bestand van dezelfde tabel houdt de latere bestanden tegen: Bronze verwerkt de bestanden van een tabel op volgorde. Herstel de oorzaak, of sla het bestand bewust over, en start opnieuw. |
 | Je hebt de verkeerde omgeving geladen | De pipeline in de workspace van die omgeving laadt de DATA-workspace van die omgeving. Annuleer de run en start hem in de juiste workspace. |
 | De run duurt veel langer dan verwacht | Drukte op de capaciteit, of een eerste full load van een grote tabel. Zie *Time-outs*. |
