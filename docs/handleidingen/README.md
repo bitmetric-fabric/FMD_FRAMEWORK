@@ -10,6 +10,7 @@ Stap-voor-stap handleidingen voor wie een FMD-installatie beheert. Ze zijn gener
 | [Een run beoordelen en een fout herstellen](run-beoordelen.md) | De run in de Monitor bekijken, de falende tabel vinden, de soort fout bepalen en herstellen (opnieuw starten, bestand overslaan, watermark resetten, Silver opnieuw verwerken). |
 | [Bronnen en tabellen registreren](registreren.md) | De registratie-editor in `NB_REGISTRATIE`: een bron kiezen, tabellen laden, een tabel selecteren en instellen (primary key, watermark, bronfilter, kolommen), controleren, proefdraaien en registreren. Met schermafbeeldingen. |
 | [Registratie overzetten en beheren](overzetten-en-beheren.md) | Omgevingen vergelijken, de registratie van D naar T en P overzetten, de laadstatus bekijken, een watermark resetten, de wachtrij opruimen en een tabel opruimen na een PK-wijziging. Met schermafbeeldingen. |
+| [Promoveren van Dev naar Test en Productie](promoveren.md) | De volgorde van een promotie, een promotie uitvoeren in de deployment pipeline (verschillen bekijken, deployen, geschiedenis), de controles na de promotie en herstel. Met schermafbeeldingen. |
 | [Veelvoorkomende meldingen](veelvoorkomende-meldingen.md) | Naslag per melding: wat hij betekent en wat je doet, voor een run, een geplande run, een promotie, een semantisch model en de registratie. |
 
 De interne documentatie van Bitmetric (kennisbasis, beslisregister, technische documentatie) staat in [`../intern/`](../intern/01_kennisbasis/index.md).
