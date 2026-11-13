@@ -392,6 +392,16 @@ uitkomst hebt gezien (voorheen telde een vinkje van vóór de proefdraai op tab 
   (P-019). *Vastgesteld* in de code; *getest in eigen omgeving* met een nepdoel in `scripts/test_registration_editor.py`,
   nog niet tegen een echte configdb.
 
+## Aanvulling 2026-11-13: kiezen wat je overzet, per databron, LoadGroup en tabel
+
+Tab 4 zette alles over wat nieuw en actief is in de bron (met de opties *bijwerken* en *uitgezette tabellen meenemen*). Bij een klant wil je vaak één databron, één LoadGroup of een paar tabellen doorzetten. `plan_copy` en `copy_registration` kunnen nu beperken, en de editor biedt dat aan.
+
+- **Drie filters naast `sources`** (de alias van een databron, zoals al bestond): `load_groups` (de *effectieve* LoadGroup: die van de tabel, anders die van haar databron, zoals in `vw_LoadSourceToLandingzone`; `''` is geen groep), `tables` (`Schema.Tabel`) en `only` (tabelidentiteiten: databron, schema en naam, zoals `entity_ident`; dit is wat de editor meegeeft, omdat dezelfde `Schema.Tabel` in twee databronnen kan voorkomen).
+- **De filters werken samen:** een tabel moet bij elk filter dat is opgegeven voldoen. `None` is geen filter. Een naam die niet in de bron staat is een fout, zodat een typefout niets kopieert in plaats van stil minder.
+- **Alleen de keuze verandert, niet de overname.** Een gekozen tabel wordt precies zo overgenomen als zonder selectie (connectie van het doel, dataselectie per omgeving, regels). Een tabel buiten de selectie telt niet als *al geregistreerd*, en een override voor zo'n tabel is geen fout en doet niets.
+- **De editor:** bij "Zet over: alleen een selectie" een lijst met per tabel de databron, de groep en of hij in een doel nog ontbreekt (uit `compare_environments`, dat daarvoor de identiteit, de databron, de effectieve groep en `IsActive` per omgeving in zijn rijen heeft). Filters op databron en LoadGroup, zoeken, en alles in de lijst selecteren (een hele databron of groep in een klik). De keuze blijft staan als een filter verandert; een andere bron of doelomgeving leegt de lijst en de keuze. De proefdraai en het overzetten gelden voor precies die selectie: een andere keuze maakt de proefdraai ongeldig, en zonder tabellen blijft overzetten uit.
+- *Getest in eigen omgeving* (FMD_TRIAL, 2026-11-13, alleen proefdraaien): met *bijwerken* aan en vijf gekozen tabellen meldt de proefdraai vijf tabellen voor T en voor P, niet alle tabellen van de omgeving. **Niet getest:** een echte overzetting met een selectie, het filter op LoadGroup in Fabric (de trial heeft geen LoadGroups; lokaal wel), en een selectie samen met overrides in Fabric.
+
 ## Aanvulling 2026-11-10: dagelijks beheer in de editor (tab 5)
 
 Een beheerder moet het watermark van een tabel kunnen resetten, open wachtrijrijen op verwerkt kunnen zetten en een tabel kunnen opruimen na een wijziging van de primary key, zonder directe SQL. Tab 5 "Beheer" doet dat, bovenop de SQL van de vorige PR (`execution.sp_ResetLandingzoneEntityLastLoadValue`, `sp_SkipPipelineLandingzoneFile`, `sp_SkipOpenPipelineQueue`, `integration.vw_LoadStatus`, `logging.ConfigChange`). De directe SQL in de configdb blijft een uitzondering.

@@ -914,7 +914,8 @@ def entity_ident(state, entity):
     return source_ident(source) + (entity['SourceSchema'], entity['SourceName'])
 
 
-def plan_copy(source, target, environment, sources=None, only_active=True, update=False, history_days=None, overrides=None):
+def plan_copy(source, target, environment, sources=None, only_active=True, update=False, history_days=None, overrides=None,
+              load_groups=None, tables=None, only=None):
     """
     What copy_registration would register in `target` (a load_registration state), as
     {'sources', 'entities', 'problems', 'skipped'}. No database access.
@@ -923,6 +924,10 @@ def plan_copy(source, target, environment, sources=None, only_active=True, updat
     unless update is set (then the target follows the source, except for SELECTION_FIELDS, which stay as they are in
     the target) or it has an override (then only the override fields change). `overrides` is
     {'*': {...}, 'Schema.Table': {...}} for this environment: SELECTION_FIELDS only, a table row beats '*'.
+
+    Which tables are considered: `sources` (source aliases), `load_groups` (the effective load group: the one of the table, else the one of its
+    source; '' is no group), `tables` ('Schema.Table') and `only` (table identities, see entity_ident) all narrow the choice, and a table must
+    meet every one that is given. None means no filter. A name that does not exist in `source` is an error, so a typo copies nothing.
     """
     overrides = overrides or {}
     problems, skipped = [], []
@@ -940,14 +945,25 @@ def plan_copy(source, target, environment, sources=None, only_active=True, updat
     unknown = set(sources or ()) - {s['Source'] for s in source['sources']}
     if unknown:
         problem(', '.join(sorted(unknown)), 'sources', f'not a source of {source["environment"]}')
+    source_group = {s['Source']: s['LoadGroup'] or '' for s in source['sources']}
+    group_of = lambda e: e['LoadGroup'] or source_group.get(e['Source'], '')
+    for group in sorted(set(load_groups or ()) - {group_of(e) for e in source['entities']}):
+        problem(group or '(geen groep)', 'load_groups', f'not a load group of {source["environment"]}')
+    for table in sorted(set(tables or ()) - names):
+        problem(table, 'tables', f'not a table of {source["environment"]}')
+    wanted = None if only is None else {tuple(i) for i in only}
 
     present = {entity_ident(target, e): e for e in target['entities']}
     target_sources = {source_ident(s): s for s in target['sources']}
     chosen = []
     for e in source['entities']:
+        name = f"{e['SourceSchema']}.{e['SourceName']}"
         if (sources and e['Source'] not in sources) or (only_active and not e['IsActive']):
             continue
-        name = f"{e['SourceSchema']}.{e['SourceName']}"
+        if (load_groups is not None and group_of(e) not in load_groups) or (tables is not None and name not in tables):
+            continue
+        if wanted is not None and entity_ident(source, e) not in wanted:
+            continue
         change = {**overrides.get('*', {}), **overrides.get(name, {})}
         existing = present.get(entity_ident(source, e))
         if existing is None:
@@ -991,7 +1007,8 @@ def compare_environments(states):
     Selection and Other list only the fields that differ, as {field: {env: value}}: Selection is the data selection that may
     differ per environment (SELECTION_FIELDS), Other is everything else that is registered (keys, rules, load mode).
     Connection is the connection per environment; a difference does not count, because P may use another gateway on purpose. Status is 'missing' (not in
-    every environment), 'differs' (Other differs), 'selection' (only the data selection differs) or 'same'.
+    every environment), 'differs' (Other differs), 'selection' (only the data selection differs) or 'same'. Ident is the identity of the table across
+    environments (entity_ident), Namespace its source's namespace, LoadGroup its effective load group and Active the IsActive per environment.
     """
     envs = list(states)
     found = {env: {entity_ident(state, e): (e, next(x for x in state['sources'] if x['Source'] == e['Source']))
@@ -1015,8 +1032,11 @@ def compare_environments(states):
         connection = {env: item[1]['ConnectionName'] for env, item in here.items() if item}
         status = 'missing' if not all(present.values()) else 'differs' if other else 'selection' if selection else 'same'
         schema, name = ident[3], ident[4]
+        entity0, source0 = next(item for item in here.values() if item)  # the first environment that has the table
         rows.append({'Table': f'{schema}.{name}' if schema else name, 'DataSource': ident[1], 'Present': present,
-                     'Selection': selection, 'Other': other, 'Connection': connection, 'Status': status})
+                     'Selection': selection, 'Other': other, 'Connection': connection, 'Status': status,
+                     'Ident': ident, 'Namespace': source0['Namespace'], 'LoadGroup': entity0['LoadGroup'] or source0['LoadGroup'] or '',
+                     'Active': {env: item[0]['IsActive'] for env, item in here.items() if item}})
     return rows
 
 
@@ -1065,7 +1085,7 @@ def compare(domain, environments):
 
 
 def copy_registration(domain, to_environments, from_environment='D', sources=None, only_active=True, update=False,
-                      history_days=None, overrides=None, dry_run=True):
+                      history_days=None, overrides=None, dry_run=True, load_groups=None, tables=None, only=None):
     """
     Registers what is registered in `from_environment` also in `to_environments` (e.g. ["T", "P"]), through
     register(), so the dry run shows New/Changed/Unchanged per table. Nothing is written when any environment has an
@@ -1075,6 +1095,8 @@ def copy_registration(domain, to_environments, from_environment='D', sources=Non
     in the source environment; update: also bring registered tables in line with the source (their SELECTION_FIELDS
     stay as they are in the target); history_days: start watermark for incremental tables that have none yet;
     overrides: {"T": {"*": {"IsActive": 0}, "Sales.Orders": {"IsActive": 1, "SourceFilter": "OrderDate >= '2025-01-01'"}}}.
+    load_groups, tables, only: copy only a selection, next to `sources`: the effective load groups (['dag']; '' is no group), 'Schema.Table' names, or
+    table identities (entity_ident, what the editor passes). They narrow each other; a name that does not exist is an error and nothing is copied.
     """
     stray = set(overrides or {}) - set(to_environments)
     if stray:
@@ -1083,7 +1105,7 @@ def copy_registration(domain, to_environments, from_environment='D', sources=Non
         raise ValueError(f"{from_environment} is both the source and a target")
     source = load_registration(domain, from_environment)
     plans = {env: plan_copy(source, load_registration(domain, env), env, sources, only_active, update, history_days,
-                            (overrides or {}).get(env)) for env in to_environments}
+                            (overrides or {}).get(env), load_groups=load_groups, tables=tables, only=only) for env in to_environments}
     failed = False
     for env, plan in plans.items():
         errors = [p for p in plan['problems'] if p['level'] == 'error']
@@ -1910,6 +1932,25 @@ class EnvironmentsPage:
         for env in self.ENVIRONMENTS:
             self.to_checks[env], row = _check(env != 'D', env, f'Zet over naar {env}', '50px')
             self.to_rows.append(row)
+        # -- what to copy: everything that is new, or a selection per data source, load group and table
+        self.mode = w.Dropdown(options=[('alles wat nieuw is', 'all'), ('alleen een selectie', 'selection')], value='all', layout=w.Layout(width='220px'))
+        self.sel_rows, self.sel_targets, self.sel_selected, self._sel_busy = [], [], set(), False
+        self.sel_load_btn = _tip(w.Button(layout=w.Layout(width='auto', min_width='150px', padding='0 14px'), description='Tabellen laden'),
+                                 'Leest de tabellen van de bronomgeving en van de doelen, en toont per tabel of hij in een doel nog ontbreekt. Schrijft niets.')
+        self.sel_source = w.Dropdown(options=[('alle databronnen', '*')], value='*', layout=w.Layout(width='300px'))
+        self.sel_group = w.Dropdown(options=[('alle groepen', '*')], value='*', layout=w.Layout(width='200px'))
+        self.sel_search = w.Text(placeholder='zoek een tabel', continuous_update=False, layout=w.Layout(width='260px'))
+        self.sel_list = w.SelectMultiple(options=[], rows=10, layout=w.Layout(width='100%'))
+        self.sel_select_all_btn = _tip(w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Alles in de lijst selecteren'),
+                                       'Selecteert alle tabellen die na de filters in de lijst staan, bijvoorbeeld een hele databron of LoadGroup.')
+        self.sel_clear_btn = w.Button(layout=w.Layout(width='auto', padding='0 12px'), description='Selectie wissen')
+        self.sel_count = w.HTML()
+        self.sel_hint = w.HTML()
+        self.sel_box = vbox([
+            w.HBox([self.sel_load_btn, w.HTML('&nbsp;&nbsp;'), self.sel_count]), self.sel_hint,
+            w.HBox([_label('Databron', 'Filter op databron (namespace en database)', '70px'), self.sel_source, w.HTML('&nbsp;&nbsp;'),
+                    _label('LoadGroup', 'Filter op de effectieve LoadGroup: die van de tabel, anders die van haar databron', '80px'), self.sel_group]),
+            self.sel_search, self.sel_list, w.HBox([self.sel_select_all_btn, self.sel_clear_btn])], width='100%', display='none')
         self.update_cb, update_row = _check(False, 'Ook tabellen bijwerken die er al staan (hun dataselectie blijft staan)',
                                             'Tabellen die in het doel al staan, krijgen de instellingen van de bron. Filter, kolommen, LoadGroup en actief blijven zoals ze in het doel zijn.')
         self.update_label = update_row.children[1]
@@ -1937,7 +1978,9 @@ class EnvironmentsPage:
         self.copy_view = vbox([
             _heading('Overzetten', 'Standaard alleen tabellen die in de doelomgeving nog ontbreken. Het watermark gaat nooit mee.',
                      'Watermark: het punt tot waar een incrementele tabel al geladen is. Elke omgeving houdt zijn eigen watermark.'),
-            w.HBox([self.from_label, self.from_dd, w.HTML('&nbsp;&nbsp;naar:&nbsp;&nbsp;'), *self.to_rows]), update_row, inactive_row,
+            w.HBox([self.from_label, self.from_dd, w.HTML('&nbsp;&nbsp;naar:&nbsp;&nbsp;'), *self.to_rows]),
+            _heading('Wat zet je over?', 'Standaard alles wat in de doelomgeving nog ontbreekt. Kies een selectie om alleen bepaalde databronnen, LoadGroups of tabellen over te zetten.'),
+            w.HBox([w.HTML('Zet over:&nbsp;&nbsp;'), self.mode]), self.sel_box, update_row, inactive_row,
             _heading('Eigen dataselectie per omgeving', 'Bijvoorbeeld een kortere periode in T. Een filter wijzigen verwijdert niets in Bronze en Silver.'),
             self.ov_enable, self.ov_box,
             _heading('Controleren en overzetten', 'Eerst een proefdraai: die schrijft niets en laat per omgeving zien wat er zou gebeuren.'),
@@ -1951,6 +1994,16 @@ class EnvironmentsPage:
         ui._guard(self.copy_btn, self.copy)
         self.to_copy_btn.on_click(lambda _: self.use_compared())
         self.show.observe(lambda _: self._render(), names='value')
+        self.mode.observe(lambda _: self._mode_changed(), names='value')
+        ui._guard(self.sel_load_btn, self.sel_load)
+        self.sel_select_all_btn.on_click(lambda _: self._sel_select(True))
+        self.sel_clear_btn.on_click(lambda _: self._sel_select(False))
+        for widget in (self.sel_source, self.sel_group, self.sel_search):
+            widget.observe(lambda _: None if self._sel_busy else self._sel_refresh(), names='value')
+        self.sel_list.observe(self._sel_on_list, names='value')
+        self.inactive_cb.observe(lambda _: self._sel_refresh() if self.sel_rows else None, names='value')
+        for widget in (self.from_dd, *self.to_checks.values()):
+            widget.observe(lambda _: self._sel_reset(), names='value')
         for widget in (self.from_dd, *self.to_checks.values(), self.update_cb, self.inactive_cb, self.ov_enable, self.confirm):
             widget.observe(lambda _: self.update_state(), names='value')
         self.from_dd.observe(lambda _: self._sync_from(), names='value')
@@ -1961,6 +2014,7 @@ class EnvironmentsPage:
         self._apply_view(0)
         self._sync_from()
         self._sync_targets()
+        self._sel_hint()
         self._show_value_widget(self.ov_field.value)
         self._render_overrides()
         self.update_state()
@@ -2034,6 +2088,93 @@ class EnvironmentsPage:
             check.value = env in self.envs and env != source
         self.show_view(1)
 
+    # ---- what to copy --------------------------------------------------------------------------------
+    def _mode_changed(self):
+        self.sel_box.layout.display = '' if self.mode.value == 'selection' else 'none'
+        self._sel_hint()
+        self.update_state()
+
+    def _sel_hint(self):
+        text = '' if self.sel_rows else 'Klik op Tabellen laden om te kiezen.'
+        self.sel_hint.value = f'<span style="color:#666">{html.escape(text)}</span>'
+
+    def sel_load(self):
+        """Reads the tables of the source and the targets; the list says per table where it is still missing."""
+        targets = self._targets()
+        if not targets:
+            return self.res.print('Vink aan naar welke omgeving je overzet.')
+        self.res.clear()
+        self.sel_targets = targets
+        self.sel_rows = compare(self._domain(), [self.from_dd.value, *targets])
+        self.sel_selected = set()  # a new list is a new choice
+        self._sel_hint()
+        self._sel_refresh()
+        self.update_state()
+
+    def _sel_reset(self):
+        """The list belongs to one source and its targets: when those change the list is gone, and so is the choice."""
+        had = bool(self.sel_rows or self.sel_selected)
+        self.sel_rows, self.sel_selected = [], set()
+        self._sel_refresh()
+        if had:  # a reset without anything to reset leaves the message alone: the source change and the unticked target both call this
+            self.sel_hint.value = '<span style="color:#666">De bron of de doelen zijn veranderd: klik opnieuw op Tabellen laden.</span>'
+            self.update_state()
+
+    def _sel_visible(self):
+        text = self.sel_search.value.strip().lower()
+        source = self.from_dd.value
+        out = []
+        for r in self.sel_rows:
+            if not r['Present'].get(source) or (not self.inactive_cb.value and not r['Active'].get(source)):
+                continue
+            if self.sel_source.value != '*' and f"{r['Namespace']} · {r['DataSource']}" != self.sel_source.value:
+                continue
+            if self.sel_group.value != '*' and r['LoadGroup'] != self.sel_group.value:
+                continue
+            if text and text not in r['Table'].lower():
+                continue
+            out.append(r)
+        return out
+
+    def _sel_label(self, row):
+        missing = [e for e in self.sel_targets if not row['Present'].get(e)]
+        status = f"nieuw in {', '.join(missing)}" if missing else 'staat al'
+        return f"{row['DataSource']} · {row['Table']} · {row['LoadGroup'] or 'geen groep'} · {status}"
+
+    def _sel_refresh(self):
+        self._sel_busy = True  # setting options clears the value of a widget: do not take that for a choice
+        try:
+            sources = sorted({f"{r['Namespace']} · {r['DataSource']}" for r in self.sel_rows})
+            groups = sorted({r['LoadGroup'] for r in self.sel_rows})
+            keep_source, keep_group = self.sel_source.value, self.sel_group.value
+            self.sel_source.options = [('alle databronnen', '*')] + [(x, x) for x in sources]
+            self.sel_source.value = keep_source if keep_source in ('*', *sources) else '*'
+            self.sel_group.options = [('alle groepen', '*')] + [(g or 'geen groep', g) for g in groups]
+            self.sel_group.value = keep_group if keep_group in ('*', *groups) else '*'
+            options = [(self._sel_label(r), r['Ident']) for r in self._sel_visible()]
+            self.sel_list.options = options
+            self.sel_list.value = tuple(i for _, i in options if i in self.sel_selected)
+        finally:
+            self._sel_busy = False
+        self._sel_count()
+
+    def _sel_on_list(self, change):
+        if self._sel_busy:
+            return
+        visible = {v for _, v in self.sel_list.options}
+        self.sel_selected = (self.sel_selected - visible) | set(change['new'])
+        self._sel_count()
+        self.update_state()
+
+    def _sel_select(self, everything):
+        visible = {v for _, v in self.sel_list.options}
+        self.sel_selected = (self.sel_selected | visible) if everything else (self.sel_selected - visible)
+        self.sel_list.value = tuple(i for _, i in self.sel_list.options if i in self.sel_selected)
+
+    def _sel_count(self):
+        shown = len(self.sel_list.options)
+        self.sel_count.value = f'<span style="color:#666">{len(self.sel_selected)} geselecteerd, {shown} tabel(len) in de lijst</span>'
+
     # ---- overrides -----------------------------------------------------------------------------------
     def add_override(self):
         env, table, field = self.ov_env.value, self.ov_table.value or '*', self.ov_field.value
@@ -2074,7 +2215,8 @@ class EnvironmentsPage:
         to = self._targets()
         use = {env: ov for env, ov in self.overrides.items() if env in to} if self.ov_enable.value else {}
         return {'domain': self._domain(), 'to_environments': to, 'from_environment': self.from_dd.value,
-                'update': bool(self.update_cb.value), 'only_active': not self.inactive_cb.value, 'overrides': use or None}
+                'update': bool(self.update_cb.value), 'only_active': not self.inactive_cb.value, 'overrides': use or None,
+                'only': sorted(self.sel_selected) if self.mode.value == 'selection' else None}
 
     def _fingerprint(self):
         return hashlib.sha1(json.dumps(self._args(), sort_keys=True, default=str).encode()).hexdigest()
@@ -2091,6 +2233,8 @@ class EnvironmentsPage:
             self.res.print('Er is iets gewijzigd sinds de proefdraai. Draai opnieuw proef voordat je overzet.')
         if not targets:
             hint = 'Vink aan naar welke omgeving je overzet.'
+        elif self.mode.value == 'selection' and not self.sel_selected:
+            hint = 'Kies minstens één tabel.'
         elif self.done_of == fingerprint:
             hint = 'Al overgezet. Wijzig iets om opnieuw over te zetten.'
         elif self.dry_of != fingerprint:
@@ -2105,6 +2249,8 @@ class EnvironmentsPage:
         args = self._args()
         if not args['to_environments']:
             return self.res.print('Vink aan naar welke omgeving je overzet.')
+        if args['only'] is not None and not args['only']:
+            return self.res.print('Kies minstens één tabel, of zet "Zet over" op alles wat nieuw is.')
         self.res.clear()
         self.res.capture(copy_registration, **args, dry_run=True)
         self.confirm.value = False  # confirming counts only after the result of this dry run has been seen
