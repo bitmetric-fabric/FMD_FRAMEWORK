@@ -176,10 +176,7 @@ Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad act
 
 Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet dus eerst naar Test.
 
-**Wat het model in Test nu doet.** Zonder rule neemt het model in Test de parameterwaarde van Dev mee en leest het dus uit Gold van Dev. Dat is vast te stellen in twee stappen:
-
-- De parameter in Test heeft de waarde van Gold van Dev (te lezen met `GET …/datasets/{id}/parameters`).
-- De **item lineage** van het model toont dezelfde bron. Kies in de lijst bij het model het menu **…** en daarna **View item lineage**. Het lakehouse `LH_GOLD_LAYER` staat dan in de workspace van **Dev** (*(D)*), terwijl het model zelf in Test staat. Gebruik de lineage als illustratie; de parameterwaarde hierboven is het bewijs.
+**Wat het model in Test nu doet.** Zonder rule neemt het model in Test de parameterwaarde van Dev mee en leest het dus uit Gold van Dev. Dat zie je in de **item lineage** van het model: kies in de lijst bij het model het menu **…** en daarna **View item lineage**. Het lakehouse `LH_GOLD_LAYER` staat dan in de workspace van **Dev** (*(D)*), terwijl het model zelf in Test staat.
 
 ![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat in de workspace van Dev, het model in die van Test](afbeeldingen/direct-lake-parameter/12-lineage-voor-de-rule.png)
 
@@ -229,20 +226,14 @@ De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijder
 
    *Afbeelding 18: de deployment is geslaagd. Het menu bij het model bevat View item lineage.*
 
-3. Controleer dat het model in Test het pad van Gold van Test gebruikt. Bewijs dat met de parameterwaarde:
-
-   ```
-   GET https://api.powerbi.com/v1.0/myorg/groups/{ws}/datasets/{id}/parameters
-   ```
-
-   Dat geeft het pad van Gold van Test. Ter illustratie toont **View item lineage** nu het lakehouse in de workspace van **Test**:
+3. Controleer in de lineage view dat het model in Test het lakehouse van Test gebruikt. Kies in de lijst bij het model het menu **…** en daarna **View item lineage**. Het lakehouse `LH_GOLD_LAYER` staat nu in de workspace van **Test**:
 
    ![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat nu in de workspace van Test](afbeeldingen/direct-lake-parameter/19-lineage-na-de-rule.png)
 
    *Afbeelding 19: na de rule. Het model leest uit het lakehouse in de workspace (T).*
 
 4. Ververs het model in Test (**Refresh → Data**); de verversing moet `Completed` zijn. Een verversing van het model in Test slaagt ook zonder dat het aan een connectie gekoppeld is; de verversing loopt dan onder de identiteit van de gebruiker.
-5. Een DAX-vergelijking bewijst alleen iets als de data in beide omgevingen verschilt. Gebruik de parameterwaarde als bewijs.
+5. Een DAX-vergelijking bewijst alleen iets als de data in beide omgevingen verschilt. Gebruik de lineage view als controle.
 6. Promoveer een rapport pas nadat het model in Test staat. Controleer daarna dat het `datasetId` van het rapport het model in Test is.
 
 ## Stap 6: een vaste identiteit instellen met een connectie
@@ -310,7 +301,7 @@ Controle: `GET …/datasets/{id}/datasources` toont de data source voor een geko
 | *Direct Lake mode requires a Direct Lake data source … Failed to save modifications* bij een Apply | Het script verwijst naar `OneLakeUrl` zonder dat de parameter in het model of in hetzelfde script staat. Neem de parameter in het script op. Dezelfde melding is eerder bij andere modellen gezien; de oorzaak is daar niet bekend. |
 | *Query Evaluation failed for query: DirectLake - LH_GOLD_LAYER* bij **Refresh → Schema** of **Schema and data** | Een tabel mist `sourceLineageTag`. Voeg hem toe (zie *Het schema bijwerken*). De parameter is niet de oorzaak. |
 | **Edit tables** faalt met *ConceptualSchemaSettings* | Op 26 oktober 2026 gezien; oorzaak onbekend. Op 10 november 2026 werkte Edit tables met de parameter actief. Controleer eerst de `sourceLineageTag` van de tabellen. |
-| Het model in Test leest uit Dev | Het letterlijke pad was actief tijdens de promotie, of de rule is nog niet van kracht. Controleer de parameterwaarde in Test, zet de parameter aan in Dev en promoveer opnieuw. |
+| Het model in Test leest uit Dev | Het letterlijke pad was actief tijdens de promotie, of de rule is nog niet van kracht. Controleer de lineage van het model in Test, zet de parameter aan in Dev en promoveer opnieuw. |
 | De deployment faalt na het hernoemen van de parameter | De rule is ongeldig. Maak de rule opnieuw. |
 | Parameter rules zijn niet zichtbaar | Het model is nog niet naar die stage gepromoveerd. Promoveer eerst. |
 | Een verversing faalt met *We cannot access the source Delta table* | Het SQL-endpoint van het lakehouse kent de nieuwe tabellen nog niet. Ververs de metadata van het endpoint. |
