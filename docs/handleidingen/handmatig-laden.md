@@ -154,9 +154,3 @@ Heb je de verkeerde waarden gekozen, kies dan in de Monitor de run en kies boven
 | De gewenste tabel is niet verwerkt in Bronze of Silver | Een eerder mislukt bestand van dezelfde tabel houdt de latere bestanden tegen: Bronze verwerkt de bestanden van een tabel op volgorde. Herstel de oorzaak, of sla het bestand bewust over, en start opnieuw. |
 | Je hebt de verkeerde omgeving geladen | De pipeline in de workspace van die omgeving laadt de DATA-workspace van die omgeving. Annuleer de run en start hem in de juiste workspace. |
 | De run duurt veel langer dan verwacht | Drukte op de capaciteit, of een eerste full load van een grote tabel. Zie *Time-outs*. |
-
-## Nog niet getest
-
-- Het gedrag bij een niet-bestaande `DataSourceName` of `Entities`.
-- Een gelijktijdige handmatige en geplande run op dezelfde tabellen.
-- Een run die laat in de keten wordt geannuleerd.

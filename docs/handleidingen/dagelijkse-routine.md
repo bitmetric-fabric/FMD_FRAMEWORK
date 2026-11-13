@@ -69,8 +69,3 @@ In de Monitor staat daarnaast **Configure notifications → Schedule failures (P
 - **Spreiding.** Plan de omgevingen op verschillende tijden als ze dezelfde capaciteit delen, zodat de Spark-sessies niet om dezelfde capaciteit strijden.
 - **Duur.** De duur hangt af van het aantal tabellen en hun grootte, en is vooraf niet te schatten. De schedule-pipeline geeft maintenance een time-out van 4 uur. Draai de eerste keer met de hand, meet de duur en pas de tijd zo nodig aan.
 - **Eerste run.** De opruiming van de landingzone verwijdert pas leveringen als ze ouder zijn dan de bewaartermijn (standaard 30 dagen). In een jonge installatie doet de eerste run dus waarschijnlijk niets op dat punt.
-
-## Nog niet getest
-
-- Een maintenance-run tegelijk met een laadrun op dezelfde tabellen.
-- Of *Schedule failures* in de Monitor de *Failure notifications* op de schedule-pipeline vervangt.

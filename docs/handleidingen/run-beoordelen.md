@@ -113,9 +113,3 @@ Verwijder de rij **niet**: zonder die rij komt de tabel na de volgende landing n
 2. Draai de query uit stap 3 en controleer dat er geen nieuwe fout voor de tabel staat.
 3. Controleer in `logging.vw_ExecutionSummary` dat de tabel in alle drie de lagen is geladen en dat het aantal rijen klopt (zie [Een tabel of bron handmatig laden](handmatig-laden.md#controleren)).
 4. Noteer de oorzaak en de oplossing, zeker bij een overgeslagen bestand of een rechtstreekse wijziging in de configuratiedatabase.
-
-## Nog niet getest of nog niet vastgelegd
-
-- De weergave van een falende activiteit in de Monitor (foutmelding, pictogrammen) en de link naar een onderliggende run: nog niet opgenomen in de portal.
-- Het herstel van een tabel met meerdere hangende bestanden, stap voor stap in een proefomgeving.
-- Een volledige herlading van een incrementele tabel na een watermark-reset, in de eigen omgeving.
