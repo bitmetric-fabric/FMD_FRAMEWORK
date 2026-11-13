@@ -726,6 +726,27 @@ def build_payload(state, original):
     return sources, entities
 
 
+def target_problems(new, taken, within_batch=True):
+    """
+    Problems for tables that are about to be registered (`new`) and whose target (TargetSchema.TargetName) is already the target of
+    another table: `taken` is {(schema, name) in lower case: 'Schema.Table' of that table}. Bronze and Silver belong to the target, not to
+    the source, so registering a second table with the same target takes over the Bronze and Silver rows of the first and leaves that table
+    without (found 2026-11-13 in FMD_TRIAL: sales_targets.xlsx next to sales_targets.csv with target fin.SalesTarget, testplan T-L03).
+    With within_batch, two tables of `new` that share a target clash as well.
+    """
+    problems, claimed = [], dict(taken)
+    for e in new:
+        name = f"{e['SourceSchema']}.{e['SourceName']}"
+        key = (e['TargetSchema'].lower(), e['TargetName'].lower())
+        if key in claimed:
+            problems.append({'table': name, 'field': 'TargetName', 'level': 'error',
+                             'message': f"the target {e['TargetSchema']}.{e['TargetName']} is already the target of {claimed[key]}: registering this table would "
+                                        f"take over its Bronze and Silver table and leave {claimed[key]} without. Give it its own TargetSchema or TargetName"})
+        elif within_batch:
+            claimed[key] = name
+    return problems
+
+
 def validate_state(state, original, discovered=None):
     """
     [{'table', 'field', 'level', 'message'}] for what would be registered. register(dry_run=True) stays the
@@ -750,6 +771,9 @@ def validate_state(state, original, discovered=None):
             add(s['Source'], 'DataSourceType', 'error', f"{s['DataSourceType']} does not fit connection type {ctype}")
         if s.get('HistoryDays') is not None and s['HistoryDays'] < 1:
             add(s['Source'], 'HistoryDays', 'error', 'must be 1 or more')
+    registered = {entity_key(o) for o in original['entities']}
+    problems += target_problems([e for e in entities_to_register(state, original) if entity_key(e) not in registered],
+                                {(o['TargetSchema'].lower(), o['TargetName'].lower()): f"{o['SourceSchema']}.{o['SourceName']}" for o in original['entities']})
     seen = set()
     for e in entities_to_register(state, original):
         name = f"{e['SourceSchema']}.{e['SourceName']}"
@@ -995,6 +1019,11 @@ def plan_copy(source, target, environment, sources=None, only_active=True, updat
     nothing_before = {'sources': [dict(s) for s in chosen_sources], 'entities': []}
     # A copy has no discovery to check against: that warning would repeat for every table.
     problems += [p for p in validate_state(state, nothing_before) if 'discovered tables' not in p['message']]
+    # The target environment is not `nothing_before`: a new table must not take the target of a table that is already registered there. The
+    # clashes within the copy itself are found by validate_state.
+    problems += target_problems([e for e in chosen if entity_ident(state, e) not in present],
+                                {(o['TargetSchema'].lower(), o['TargetName'].lower()): f"{o['SourceSchema']}.{o['SourceName']}" for o in target['entities']},
+                                within_batch=False)
     payload_sources, payload_entities = build_payload(state, nothing_before)
     return {'sources': payload_sources, 'entities': payload_entities, 'problems': problems, 'skipped': skipped}
 
@@ -2167,9 +2196,13 @@ class EnvironmentsPage:
         self.update_state()
 
     def _sel_select(self, everything):
+        # "Alles in de lijst selecteren" takes what the filters show; "Selectie wissen" clears the whole selection, also the tables a filter hides
+        # (found 2026-11-13: a hidden table stayed selected and a clean-up would have named it).
         visible = {v for _, v in self.sel_list.options}
-        self.sel_selected = (self.sel_selected | visible) if everything else (self.sel_selected - visible)
+        self.sel_selected = (self.sel_selected | visible) if everything else set()
         self.sel_list.value = tuple(i for _, i in self.sel_list.options if i in self.sel_selected)
+        self._sel_count()
+        self.update_state()
 
     def _sel_count(self):
         shown = len(self.sel_list.options)
@@ -2403,9 +2436,12 @@ class ManagePage:
         self.update_state()
 
     def _select(self, everything):
+        # "Selectie wissen" clears the whole selection, also the tables a filter hides (found 2026-11-13, see _sel_select).
         visible = {v for _, v in self.list.options}
-        self.selected = (self.selected | visible) if everything else (self.selected - visible)
+        self.selected = (self.selected | visible) if everything else set()
         self.list.value = tuple(i for _, i in self.list.options if i in self.selected)
+        self._count()
+        self.update_state()
 
     def _count(self):
         self.count.value = f'<span style="color:#666">{len(self.selected)} geselecteerd van {len(self.rows)}</span>'

@@ -280,6 +280,34 @@ plan = plan_copy(d_state, shifted, "T", overrides={"dbo.Orders": {"SourceFilter"
 orders_s = next(e for e in plan["entities"] if e["SourceName"] == "Orders")
 check(orders_s["Source"] in {s["Source"] for s in plan["sources"]}, "override op een bestaande tabel: de bron staat in de payload (alias van D)")
 
+# a new table must not take the target of a table that is already registered (T-L03, 2026-11-13)
+print("=== dubbel doel ===")
+src_xlsx = row("sales.xlsx", TargetSchema="fin", TargetName="SalesTarget", FileName="fin_SalesTarget", FileType="xlsx")
+src_csv = row("sales.csv", TargetSchema="fin", TargetName="SalesTarget", FileName="fin_SalesTarget", FileType="csv")
+x_state = scope["build_state"]("TEST", "D", "WS D", sources_rows, [src_xlsx])
+x_state["environment"] = "D"
+plan = plan_copy(x_state, target(src_csv), "T")
+clash = [p for p in plan["problems"] if p["field"] == "TargetName"]
+check(len(clash) == 1 and clash[0]["level"] == "error" and clash[0]["table"] == "dbo.sales.xlsx" and "dbo.sales.csv" in clash[0]["message"],
+      "kopie: een nieuwe tabel met het doel van een bestaande tabel in het doel is een fout, met de naam van die tabel")
+check(not [p for p in plan_copy(x_state, target(), "T")["problems"] if p["field"] == "TargetName"], "kopie: zonder bestaande tabel met dat doel geen fout")
+check(not [p for p in plan_copy(x_state, target(row("sales.xlsx", TargetSchema="fin", TargetName="SalesTarget", FileName="fin_SalesTarget", FileType="xlsx")), "T", update=True)["problems"]
+           if p["field"] == "TargetName"], "kopie: een tabel die er al staat, ook met update, geeft geen fout op zijn eigen doel")
+check([p for p in plan_copy(x_state, target(row("sales.csv", TargetSchema="FIN", TargetName="salestarget")), "T")["problems"] if p["field"] == "TargetName"],
+      "kopie: hoofdletters tellen niet (Delta-namen zijn niet hoofdlettergevoelig)")
+both = scope["build_state"]("TEST", "D", "WS D", sources_rows, [src_xlsx, src_csv])
+both["environment"] = "D"
+check(len([p for p in plan_copy(both, target(), "T")["problems"] if p["field"] == "TargetName"]) == 1, "kopie: twee nieuwe tabellen met hetzelfde doel: één fout, geen dubbele melding")
+# tab 3: registering by hand
+reg = scope["build_state"]("TEST", "D", "WS", sources_rows, [src_csv])
+reg_before = copy.deepcopy(reg)
+reg["entities"].append({**scope["new_entity"](reg["sources"][0], "dbo", "sales.xlsx"), "TargetSchema": "fin", "TargetName": "SalesTarget", "FileName": "fin_SalesTarget", "FileType": "xlsx",
+                        "Selected": True})
+found = [p for p in scope["validate_state"](reg, reg_before) if p["field"] == "TargetName"]
+check(len(found) == 1 and found[0]["level"] == "error", "tab 3: een nieuwe tabel met het doel van een geregistreerde tabel is een fout")
+reg["entities"][-1]["TargetName"] = "SalesTargetXlsx"
+check(not [p for p in scope["validate_state"](reg, reg_before) if p["field"] == "TargetName"], "tab 3: met een eigen doelnaam geen fout")
+
 # ---- compare D, T and P ----------------------------------------------------------------------------------
 print("=== omgevingen vergelijken ===")
 compare = scope["compare_environments"]
@@ -534,6 +562,12 @@ sp.sel_select_all_btn.click()
 check(sorted(sp._args()["only"]) == sorted([ident("Orders"), ident("Wide")]), "selectie: alles selecteren geldt voor wat het filter laat zien (alle tabellen in een groep)")
 sp.sel_group.value = "*"
 check(sorted(sp._args()["only"]) == sorted([ident("Orders"), ident("Wide")]) and "2 geselecteerd" in sp.sel_count.value, "selectie: de keuze blijft staan als het filter verandert")
+sp.sel_group.value = "dag"
+sp.sel_clear_btn.click()
+check(sp._args()["only"] == [] and "0 geselecteerd" in sp.sel_count.value, "selectie: selectie wissen wist ook wat het filter verbergt")
+sp.sel_group.value = "nacht"
+sp.sel_select_all_btn.click()
+sp.sel_group.value = "*"
 sp.dry_btn.click()
 kind, domain, to, kw = sel_calls[-1]
 check(kind == "copy" and kw["dry_run"] is True and sorted(kw["only"]) == sorted([ident("Orders"), ident("Wide")]) and to == ["T"], "selectie: de proefdraai geeft precies die tabellen mee als only")
@@ -687,6 +721,16 @@ check([v for _, v in mpage.list.options] == [4], "beheer: zoeken op tabelnaam")
 mpage.search.value = ""
 mpage.select_all_btn.click()
 check(sorted(mpage.list.value) == [1, 2, 3, 4], "beheer: alles in de lijst selecteren")
+mpage.clear_btn.click()
+mpage.status_filter.value = "Wachtrij"
+mpage.select_all_btn.click()
+mpage.status_filter.value = "all"
+check(sorted(mpage.selected) == [2] and "1 geselecteerd van 4" in mpage.count.value, "beheer: voorwaarde voor de volgende controle, een tabel is geselecteerd")
+mpage.search.value = "cur"
+mpage.clear_btn.click()
+check(sorted(mpage.selected) == [] and "0 geselecteerd van 4" in mpage.count.value, "beheer: selectie wissen wist ook wat het filter verbergt")
+mpage.search.value = ""
+mpage.select_all_btn.click()
 mpage.clear_btn.click()
 check(tuple(mpage.list.value) == (), "beheer: selectie wissen")
 check(mpage.run_btn.disabled and "proefdraaien" in mpage.hint.value.lower(), "beheer: uitvoeren staat uit voor een proefdraai, en de regel zegt waarom")
