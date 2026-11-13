@@ -301,13 +301,3 @@ Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebrui
 | De connectie wijst naar het lakehouse van de verkeerde omgeving | Een connectie hoort bij één pad. Maak per omgeving een eigen connectie en koppel elk model aan de connectie van zijn omgeving. |
 | De gekopieerde URL werkt niet als pad | De URL uit *Folder properties* eindigt op `/Tables`. Haal dat deel weg. |
 | Een Apply vraagt om een hoger compatibiliteitsniveau | Verhoog het niveau naar 1707. Dat is eenmalig en niet terug te draaien. |
-
-## Nog niet getest of nog niet vastgelegd
-
-- Of een geplande verversing of een rapportlezer zonder connectie werkt, en of die connectie daarvoor nodig is.
-- Of de portal een connectie met het pad van een andere omgeving toelaat voor een model.
-- Het koppelen van de connectie in Test: de schermafbeeldingen in stap 6 komen uit Dev; de stappen in Test zijn naar verwachting gelijk, maar dat is niet getest.
-- Promotie van Test naar Productie met dezelfde rule.
-- Parameter rules op een Direct Lake-expressie zijn niet door Microsoft beschreven; het werkt in onze referentie-installatie, maar is niet als ondersteund gedrag bevestigd.
-- **Edit tables** met de parameter actief na een promotie.
-- Meerdere rapporten op één model.
