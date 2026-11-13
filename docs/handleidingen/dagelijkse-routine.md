@@ -47,17 +47,57 @@ Doe dit na elke geplande run, per omgeving die je beheert. Het kost ongeveer vij
 
 ## Een schedule wijzigen
 
-Doe dit in de portal, op het item `PL_FMD_SCHEDULE_<omgeving>` in INTEGRATION CONFIG, één omgeving per keer.
+Doe dit in de portal, op het item `PL_FMD_SCHEDULE_<omgeving>` in INTEGRATION CONFIG, één omgeving per keer. De schermafbeeldingen zijn opgenomen in november 2026.
+
+### Het schedule-paneel openen
+
+1. Open het item `PL_FMD_SCHEDULE_<omgeving>` en kies op het tabblad **Home** de knop **Schedule**. Onder in beeld staan de parameters van de pipeline: `Target` (standaardwaarde `LOAD`), `LoadGroup` en `DataSourceName`. Dit zijn de namen die je in een schedule kunt meegeven.
+
+   ![De pipeline-editor van PL_FMD_SCHEDULE met de knop Schedule op het tabblad Home en de parameters Target, LoadGroup en DataSourceName onder in beeld gemarkeerd.](afbeeldingen/dagelijkse-routine/01-editor-schedule-knop.png)
+
+2. Het paneel **Schedule** opent rechts. Bovenaan staan de *Failure notifications* (zie [Meldingen bij een gefaalde run](#meldingen-bij-een-gefaalde-run)). Daaronder staat de lijst *Schedules*: per schedule de herhaling (bijvoorbeeld *Every day*), de status *Active*, de tijd, de volgende run (*Next update*) en de tijdzone, met de knoppen **Edit** en **Turn Off**. Onder de lijst staat **Add schedule**.
+
+   ![Het paneel Schedule van PL_FMD_SCHEDULE met het veld Failure notifications, één schedule met de status Active, de knoppen Edit en Turn Off, en de knop Add schedule gemarkeerd.](afbeeldingen/dagelijkse-routine/02-schedule-paneel.png)
+
+### Een schedule toevoegen
+
+1. Kies **Add schedule**. Kies bij **Repeat** een herhaling (*Daily* of *Weekly*; bij *Weekly* vink je de dagen aan), vul bij **Time of day** de tijd in en kies de **Time zone**. De start- en einddatum staan standaard op vandaag en 31-12-9999.
+2. Laat bij een gewone load het gedeelte **Parameters** leeg.
+3. Kies **Save**.
+
+![Het formulier Add schedule met de herhaling Daily, de tijd 03:00, de tijdzone en de knop Save gemarkeerd; het gedeelte Parameters is leeg.](afbeeldingen/dagelijkse-routine/03-nieuw-schedule.png)
+
+### Een schedule wijzigen of uitzetten
+
+1. Kies bij het schedule **Edit**. Het formulier opent met de opgeslagen waarden, hier de herhaling *Daily* en de tijd 03:00.
+
+   ![Het formulier Edit schedule met de opgeslagen herhaling Daily en de tijd 03:00 gemarkeerd.](afbeeldingen/dagelijkse-routine/04-schedule-bewerken.png)
+
+2. Pas de herhaling, de tijd of de parameters aan en kies **Save**. Hier is de tijd gewijzigd naar 05:00. De lijst toont daarna de nieuwe tijd.
+
+   ![Hetzelfde formulier met de tijd gewijzigd naar 05:00 en de knop Save gemarkeerd.](afbeeldingen/dagelijkse-routine/05-tijd-gewijzigd.png)
+
+3. Wil je het schedule tijdelijk niet laten draaien, kies dan **Turn Off** in de lijst (zie de tweede afbeelding onder [Het schedule-paneel openen](#het-schedule-paneel-openen)). Wil je het definitief weghalen, kies dan in het formulier **Delete schedule**.
+
+   ![Het formulier Edit schedule met de knop Delete schedule gemarkeerd.](afbeeldingen/dagelijkse-routine/06-schedule-verwijderen.png)
+
+### Parameters meegeven
+
+Voor een maintenance-schedule kies je bij **Repeat** *Weekly*, vink je een dag aan (hier *Sunday*) en vul je de tijd in. Kies daarna **Add parameter**, vul bij *Name* `Target` in, kies als *Type* **String** en vul bij *Value* `MAINTENANCE` in.
+
+![Het formulier voor een weekly schedule met herhaling Weekly, de dag Sunday, de tijd 10:00 en de parameter Target van het type String met de waarde MAINTENANCE gemarkeerd.](afbeeldingen/dagelijkse-routine/07-parameter-target.png)
 
 - Geef bij een load-schedule geen parameters op om alles te laden. Wil je een deel laden, vul dan `LoadGroup` of `DataSourceName` in. Zonder parameters gelden de standaardwaarden van de pipeline: `Target = LOAD` en geen filter.
 - Geef bij een maintenance-schedule altijd `Target = MAINTENANCE` mee. **Zonder die parameter draait het schedule een gewone load, met Gold, in plaats van maintenance**, omdat de standaardwaarde `LOAD` is.
-- Lees het schedule na het opslaan terug. De lijst met schedules via de REST API toont de parameters niet; de definitie van het item (`getDefinition`, onderdeel `.schedules`) wel.
+- De naam van een parameter moet precies overeenkomen met een parameter van de pipeline (let op hoofdletters en spelling). Het formulier waarschuwt hiervoor in een regel onder de parameters, maar controleert de naam niet bij het opslaan. Een typefout, zoals `Targe`, wordt naar verwachting genegeerd: het schedule draait dan met de standaardwaarde. Plak de naam daarom liever dan dat je hem typt, en controleer hem in het veld voor je opslaat.
+- Controleer na het opslaan in de lijst de herhaling, de tijd en de volgende run (*Next update*). Open **Edit** om de parameters terug te zien.
 - Een schedule heeft een eigen tijdzone. Kies bewust dezelfde tijdzone voor alle schedules van een omgeving.
+- Een nieuw schedule is direct actief en start op de ingestelde tijd een echte run. Zet een schedule dat je alleen test, daarna uit of verwijder het.
 - Leg elke wijziging vast: schedules staan niet in git en een promotie neemt ze niet mee. Een verwijderd of opnieuw aangemaakt schedule-pipeline-item verliest ze.
 
 ## Meldingen bij een gefaalde run
 
-Het framework stuurt zelf geen meldingen. Fabric kan dat wel voor een **geplande** pipeline: zet op `PL_FMD_SCHEDULE_<omgeving>` onder **Home → Schedule → Failure notifications** gebruikers of groepen, één keer per omgeving. Omdat CONFIG in geen deployment pipeline zit, blijven de ontvangers bij een promotie staan. Een handmatige run geeft geen e-mail.
+Het framework stuurt zelf geen meldingen. Fabric kan dat wel voor een **geplande** pipeline: zet op `PL_FMD_SCHEDULE_<omgeving>` onder **Home → Schedule → Failure notifications** gebruikers of groepen, één keer per omgeving. Het veld staat bovenaan het schedule-paneel (zie de tweede afbeelding onder [Het schedule-paneel openen](#het-schedule-paneel-openen)); typ een naam of e-mailadres en kies de persoon of groep uit de lijst. Omdat CONFIG in geen deployment pipeline zit, blijven de ontvangers bij een promotie staan. Een handmatige run geeft geen e-mail.
 
 In de Monitor staat daarnaast **Configure notifications → Schedule failures (Preview)**. Of dat dezelfde melding is of een aanvulling, is niet uitgezocht.
 
