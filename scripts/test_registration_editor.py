@@ -446,6 +446,202 @@ scope["RegistrationUI"].dry_run(tab3)
 check(registered == [True] and tab3.dry_run_of == "fp", "tab 3: de proefdraai draait met dry_run=True")
 check(tab3.confirm.value is False, "tab 3: een vinkje van vóór de proefdraai telt niet mee")
 
+# ---- manage: status, watermark, open queue, cleanup after a PK change -----------------------------------------------------
+print("=== beheer ===")
+exec(compile(cell_with("def plan_manage"), "registration manage", "exec"), scope)
+scope["print"] = lambda *a, **k: None  # manage() prints its technical log; keep the test output clean
+dp, vw, pm, mp, mg = scope["delta_paths"], scope["validate_watermark"], scope["plan_manage"], scope["manage_problems"], scope["manage"]
+
+info1 = {"LandingzoneEntityId": 1, "Namespace": "aw", "SourceSchema": "Sales", "SourceName": "Customer", "PrimaryKeys": "ID,LineNo", "IsHistorized": 1,
+         "BronzeWorkspace": "AAAA-WS", "BronzeLakehouse": "BBBB-LH", "BronzeSchema": "Sales", "BronzeName": "Customer",
+         "SilverWorkspace": "CCCC-WS", "SilverLakehouse": "DDDD-LH", "SilverSchema": "Sales", "SilverName": "Customer"}
+paths = dp(info1)
+check(paths["Bronze"] == ["abfss://aaaa-ws@onelake.dfs.fabric.microsoft.com/bbbb-lh/Tables/aw/Sales_Customer", "abfss://aaaa-ws@onelake.dfs.fabric.microsoft.com/bbbb-lh/Tables/aw_Sales_Customer"],
+      "paden: Bronze met en zonder schema's in de lakehouse (zoals de load-notebooks), GUID's in kleine letters")
+check(paths["Silver"][0].startswith("abfss://cccc-ws@") and "/dddd-lh/Tables/aw/Sales_Customer" in paths["Silver"][0], "paden: Silver in zijn eigen lakehouse")
+check(dp({**info1, "SilverName": None})["Silver"] == [] and dp({**info1, "BronzeLakehouse": None})["Bronze"] == [], "paden: een laag zonder tabel of lakehouse geeft geen paden")
+
+check(vw("2026-01-01 00:00:00.000") == "" and vw("2026-01-01") == "" and vw("12345") == "" and vw(" 7 ") == "", "watermark: een datum of een getal is goed")
+check(vw("") != "" and vw("gisteren") != "" and vw("x" * 51) != "", "watermark: leeg, tekst en te lang zijn fout")
+
+st = lambda i, **kw: {"LandingzoneEntityId": i, "DataSourceName": "AW", "SourceSchema": "Sales", "SourceName": f"T{i}", "IsActive": 1, "LoadValue": "2026-02-01 00:00:00.000",
+                      "PendingLandingzoneFiles": 0, "PendingBronzeFiles": 0, "Status": "OK", **kw}
+check(mp("reset", [], "x") and mp("reset", [1], "") and mp("reset_to", [1], "x", "") and not mp("reset", [1], "reden") and not mp("reset_to", [1], "reden", "2026-01-01"), "problemen: lege selectie, geen reden en een ongeldige waarde")
+check(mp("skip", [1], "r", layer="Silver") and mp("nope", [1], "r"), "problemen: een onbekende laag of actie")
+
+plan = pm("reset", [st(1), st(2, LoadValue=None, PendingLandingzoneFiles=3, PendingBronzeFiles=1)])
+check("2026-02-01" in plan[0]["Steps"][0] and "alles" in plan[0]["Steps"][0] and not plan[0]["Warnings"], "plan reset: oude waarde en 'de volgende load laadt alles'")
+check("(leeg)" in plan[1]["Steps"][0] and any("4 open" in x for x in plan[1]["Warnings"]), "plan reset: een leeg watermark, en een waarschuwing bij een open wachtrij")
+plan = pm("reset_to", [st(1)], value="2026-03-01 00:00:00.000")
+check("2026-02-01" in plan[0]["Steps"][0] and "2026-03-01" in plan[0]["Steps"][0], "plan reset_to: oud en nieuw")
+plan = pm("skip", [st(1, PendingLandingzoneFiles=2, PendingBronzeFiles=5)], layer="Both")
+check("2" in plan[0]["Steps"][0] and "5" in plan[0]["Steps"][0], "plan skip: aantallen per laag")
+plan = pm("skip", [st(1, PendingLandingzoneFiles=2, PendingBronzeFiles=5)], layer="Bronze")
+check("Bronze" in plan[0]["Steps"][0] and "Landingzone" not in plan[0]["Steps"][0] and "landingzone" not in plan[0]["Steps"][0], "plan skip: alleen de gekozen laag")
+check("(landingzone en Bronze)" in pm("skip", [st(1)], layer="Both")[0]["Steps"][0] and "Both" not in pm("skip", [st(1)], layer="Both")[0]["Steps"][0], "plan skip: de laag in gewone woorden, niet als codewoord")
+exists = {p: True for p in paths["Silver"][:1] + paths["Bronze"][1:]}
+plan = pm("rebuild", [st(1, SourceName="Customer")], {1: info1}, exists=exists)
+steps = " ".join(plan[0]["Steps"])
+check("Silver" in steps and "Bronze" in steps and "watermark" in steps.lower() and "wachtrij" in steps.lower(), "plan rebuild: Silver, Bronze, watermark en wachtrij")
+check(any("historie" in x.lower() for x in plan[0]["Warnings"]) and any("ID,LineNo" in x for x in plan[0]["Warnings"]), "plan rebuild: waarschuwing voor de Silver-historie en de primary key staat erbij")
+check(plan[0]["Delete"] == [paths["Silver"][0], paths["Bronze"][1]], "plan rebuild: alleen de paden die bestaan worden gewist")
+check(pm("rebuild", [st(1)], {1: {**info1, "IsHistorized": 0}}, exists={})[0]["Delete"] == [] and any("bestaat niet" in x for x in pm("rebuild", [st(1)], {1: {**info1, "IsHistorized": 0}}, exists={})[0]["Steps"]),
+      "plan rebuild: zonder bestaande tabellen alleen de configdb-stappen, en dat wordt gezegd")
+
+# manage(): the database and the lake are replaced by stubs, so the order of the calls can be checked
+log = []
+rows_db = [st(1), st(2, PendingLandingzoneFiles=2, PendingBronzeFiles=1)]
+scope["load_status"] = lambda domain, env: rows_db
+scope["read_config"] = lambda sql, *ids: [{**info1, "LandingzoneEntityId": int(i)} for i in ids]
+scope["resolve_config_database"] = lambda: ("drv", "srv", "db")
+present = set(dp(info1)["Silver"][:1] + dp(info1)["Bronze"][:1])
+
+
+def fake_proc(name, driver, connstring, database, **params):
+    log.append(("proc", name.split(".")[-1].strip("[]"), params))
+    return {"result_sets": [[{"Layer": "Landingzone", "OpenRows": 2, "Result": "dry run: would be skipped"}, {"Layer": "Bronze", "OpenRows": 1, "Result": "dry run: would be skipped"}]] if "SkipOpen" in name else [[]]}
+
+
+fs = types.SimpleNamespace(exists=lambda p: p in present, rm=lambda p, recurse: (log.append(("rm", p)), present.discard(p)))
+scope["execute_with_outputs"] = fake_proc
+scope["notebookutils"] = types.SimpleNamespace(fs=fs)
+
+res = mg("INTEGRATION", "D", "reset", [1, 2], "test", dry_run=True)
+check(not log and len(res["plan"]) == 2 and res["dry_run"], "manage reset proefdraai: niets aangeroepen, wel een plan")
+res = mg("INTEGRATION", "D", "reset", [1, 2], "test: volle load", dry_run=False)
+check([c[1] for c in log] == ["sp_ResetLandingzoneEntityLastLoadValue"] * 2 and log[0][2]["LandingzoneEntityId"] == 1 and log[0][2]["Reason"] == "test: volle load" and log[0][2].get("LoadValue") is None
+      and all(r["Ok"] for r in res["results"]), "manage reset echt: de procedure per tabel, met de reden, zonder waarde (NULL)")
+log.clear()
+mg("INTEGRATION", "D", "reset_to", [1], "test", value="2026-03-01 00:00:00.000", dry_run=False)
+check(log[0][2]["LoadValue"] == "2026-03-01 00:00:00.000", "manage reset_to echt: de waarde gaat mee")
+log.clear()
+res = mg("INTEGRATION", "D", "skip", [2], "test", layer="Bronze", dry_run=True)
+check(log and log[0][1] == "sp_SkipOpenPipelineQueue" and log[0][2]["DryRun"] == 1 and log[0][2]["Layer"] == "Bronze" and "zou op verwerkt gezet worden" in res["results"][0]["Result"],
+      "manage skip proefdraai: de procedure met DryRun = 1, en de uitkomst staat in het resultaat")
+log.clear()
+mg("INTEGRATION", "D", "skip", [2], "test", layer="Both", dry_run=False)
+check(log[0][2]["DryRun"] == 0 and log[0][2]["LandingzoneEntityId"] == 2, "manage skip echt: DryRun = 0")
+log.clear()
+res = mg("INTEGRATION", "D", "rebuild", [1], "pk gewijzigd", dry_run=True)
+check(not [c for c in log if c[0] == "rm"] and all(c[2].get("DryRun") == 1 for c in log if c[1] == "sp_SkipOpenPipelineQueue") and not [c for c in log if c[1].startswith("sp_Reset")],
+      "manage rebuild proefdraai: niets gewist, geen reset, de wachtrij alleen als proefdraai")
+log.clear()
+present.update(dp(info1)["Silver"][:1] + dp(info1)["Bronze"][:1])
+res = mg("INTEGRATION", "D", "rebuild", [1], "pk gewijzigd", dry_run=False)
+order = [c[0] if c[0] == "rm" else c[1] for c in log]
+check(order == ["rm", "rm", "sp_SkipOpenPipelineQueue", "sp_ResetLandingzoneEntityLastLoadValue"], "manage rebuild echt: eerst de tabellen wissen, dan de wachtrij, dan het watermark")
+check(log[0][1] == dp(info1)["Silver"][0] and log[1][1] == dp(info1)["Bronze"][0], "manage rebuild echt: Silver voor Bronze")
+check(log[2][2]["DryRun"] == 0 and log[2][2]["Layer"] == "Both" and res["results"][0]["Ok"], "manage rebuild echt: de wachtrij van beide lagen, en het resultaat is goed")
+log.clear()
+present.update(dp(info1)["Silver"][:1] + dp(info1)["Bronze"][:1])
+fs.rm = lambda p, recurse: (_ for _ in ()).throw(RuntimeError("geen rechten"))
+res = mg("INTEGRATION", "D", "rebuild", [1, 2], "pk gewijzigd", dry_run=False)
+check(not [c for c in log if c[0] == "proc"] and not any(r["Ok"] for r in res["results"]) and "geen rechten" in res["results"][0]["Result"],
+      "manage rebuild echt: faalt het wissen, dan gaat er niets in de configdb veranderen en staat de fout in het resultaat")
+for bad, kw in (([], {}), ([1], {"reason": ""}), ([99], {}), ([1], {"action": "reset_to", "value": "x"})):
+    try:
+        mg("INTEGRATION", "D", kw.get("action", "reset"), bad, kw.get("reason", "x"), value=kw.get("value"), dry_run=False)
+        check(False, f"manage: {bad} {kw} hoort een fout te geven")
+    except ValueError:
+        check(True, f"manage: een ongeldige aanvraag ({bad}, {kw}) geeft een fout en schrijft niets")
+check(not [c for c in log if c[0] == "proc"], "manage: een ongeldige aanvraag riep geen procedure aan")
+
+# ---- tab 5 Beheer -----------------------------------------------------------------------------------------------------------
+print("=== tab Beheer ===")
+real_manage = scope["manage"]
+manage_calls = []
+status_rows = [st(1, SourceName="Customer"), st(2, SourceName="Orders", Status="Wachtrij", PendingLandingzoneFiles=3, PendingBronzeFiles=0),
+               st(3, SourceName="Store", Status="Fout", LoadValue=None), st(4, SourceName="Currency", Status="Nooit geladen")]
+
+
+def fake_manage(domain, environment, action, ids, reason, value=None, layer="Both", dry_run=True):
+    manage_calls.append({"env": environment, "action": action, "ids": list(ids), "reason": reason, "value": value, "layer": layer, "dry_run": dry_run})
+    if not ids:
+        raise ValueError("Selecteer minstens één tabel.")
+    plan = [{"Id": i, "Table": f"Sales.T{i}", "Steps": [f"stap voor {i}"], "Warnings": ["pas op"] if i == 2 else [], "Delete": []} for i in ids]
+    ok = not fail_next[0]
+    return {"plan": plan, "dry_run": dry_run, "results": [{"Id": i, "Table": f"Sales.T{i}", "Ok": ok, "Result": "gedaan" if ok else "RuntimeError: stuk"} for i in ids]}
+
+
+fail_next = [False]
+scope["manage"] = fake_manage
+scope["load_status"] = lambda domain, env: status_rows
+mpage = scope["ManagePage"](ui)
+check(scope["status_label"](status_rows[1]) == "[Wachtrij] Sales.Orders · watermark 2026-02-01 00:00:00 · open 3/0" and "(leeg)" in scope["status_label"](status_rows[2]), "lijst: een regel met status, tabel, watermark en open wachtrij")
+mpage.load_btn.click()
+check(len(mpage.list.options) == 4 and "1 Wachtrij" in mpage.summary.value and "1 Fout" in mpage.summary.value and "4 tabel" in mpage.summary.value, "beheer: laden toont alle tabellen en een samenvatting per status")
+mpage.status_filter.value = "Wachtrij"
+check([v for _, v in mpage.list.options] == [2], "beheer: filter op status")
+mpage.status_filter.value = "all"
+mpage.search.value = "cur"
+check([v for _, v in mpage.list.options] == [4], "beheer: zoeken op tabelnaam")
+mpage.search.value = ""
+mpage.select_all_btn.click()
+check(sorted(mpage.list.value) == [1, 2, 3, 4], "beheer: alles in de lijst selecteren")
+mpage.clear_btn.click()
+check(tuple(mpage.list.value) == (), "beheer: selectie wissen")
+check(mpage.run_btn.disabled and "proefdraaien" in mpage.hint.value.lower(), "beheer: uitvoeren staat uit voor een proefdraai, en de regel zegt waarom")
+
+mpage.action.value = "reset_to"
+check(mpage.value.layout.display == "" and mpage.layer_row.layout.display == "none", "beheer: bij een waarde-actie een tekstveld, geen laagkeuze")
+mpage.action.value = "skip"
+check(mpage.layer_row.layout.display == "" and mpage.value.layout.display == "none", "beheer: bij overslaan een laagkeuze")
+mpage.action.value = "reset"
+check(mpage.layer_row.layout.display == "none" and mpage.value.layout.display == "none" and mpage.confirm_text.layout.display == "none", "beheer: bij een gewone reset in D geen extra bevestiging")
+
+mpage.dry_btn.click()
+check("Selecteer" in mpage.res.widget.value and mpage.dry_of is None and not manage_calls, "beheer: een proefdraai zonder selectie geeft een melding in het zichtbare vak en roept niets aan")
+mpage.list.value = (1, 2)
+mpage.dry_btn.click()
+check("reden" in mpage.res.widget.value.lower() and mpage.dry_of is None and not manage_calls, "beheer: een proefdraai zonder reden geeft een melding en roept niets aan")
+mpage.reason.value = "test: volle load"
+mpage.dry_btn.click()
+call = manage_calls[-1]
+check(call["dry_run"] is True and call["ids"] == [1, 2] and call["env"] == "D" and call["action"] == "reset" and call["reason"] == "test: volle load", "beheer: de proefdraai roept manage aan met dry_run=True en de keuzes")
+check("Sales.T1" in mpage.result.value and "stap voor 1" in mpage.result.value and "pas op" in mpage.result.value, "beheer: het resultaat toont per tabel de stappen en de waarschuwingen")
+check(not mpage.run_btn.disabled and "Klaar" in mpage.hint.value, "beheer: na de proefdraai kan uitvoeren, en de regel zegt het")
+n = len(manage_calls)
+mpage.reason.value = "test: andere reden"
+check(mpage.run_btn.disabled and mpage.dry_of is None and "gewijzigd" in mpage.hint.value.lower() + mpage.res.widget.value.lower(), "beheer: een wijziging na de proefdraai maakt hem ongeldig")
+mpage.dry_btn.click()
+mpage.list.value = (1,)
+check(mpage.run_btn.disabled and mpage.dry_of is None, "beheer: ook een andere selectie maakt de proefdraai ongeldig")
+mpage.dry_btn.click()
+mpage.run_btn.click()
+call = manage_calls[-1]
+check(call["dry_run"] is False and call["ids"] == [1] and call["reason"] == "test: andere reden", "beheer: uitvoeren roept manage aan met dry_run=False op precies de proefdraai-selectie")
+check("gedaan" in mpage.result.value and mpage.run_btn.disabled and "Al uitgevoerd" in mpage.hint.value, "beheer: het resultaat staat er, en niet nog een keer uitvoeren")
+n = len(manage_calls)
+mpage.run_btn.click()
+check(len(manage_calls) == n, "beheer: een tweede klik doet niets")
+
+fail_next[0] = True
+mpage.reason.value = "nog een"
+mpage.dry_btn.click()
+mpage.run_btn.click()
+check("stuk" in mpage.result.value and not mpage.run_btn.disabled and "mislukt" in mpage.hint.value.lower(), "beheer: een mislukte tabel staat in het resultaat en uitvoeren kan opnieuw (alle stappen zijn te herhalen)")
+fail_next[0] = False
+
+mpage.action.value = "rebuild"
+mpage.dry_btn.click()
+check(mpage.confirm_text.layout.display == "" and mpage.run_btn.disabled and "typ" in mpage.hint.value.lower(), "beheer: opruimen vraagt om de omgeving te typen")
+mpage.confirm_text.value = "p"
+check(mpage.run_btn.disabled, "beheer: de verkeerde omgeving typen is niet genoeg")
+mpage.confirm_text.value = "d"
+check(not mpage.run_btn.disabled, "beheer: de goede omgeving (hoofdletters maken niet uit) maakt uitvoeren mogelijk")
+mpage.action.value = "reset"
+mpage.env.value = "P"
+mpage.load_btn.click()
+mpage.list.value = (1,)
+mpage.dry_btn.click()
+check(mpage.confirm_text.layout.display == "" and mpage.run_btn.disabled, "beheer: in P vraagt elke actie om de omgeving te typen")
+mpage.confirm_text.value = "P"
+check(not mpage.run_btn.disabled, "beheer: P getypt")
+mpage.env.value = "D"
+check(mpage.rows == [] and mpage.run_btn.disabled and tuple(mpage.list.options) == (), "beheer: een andere omgeving leegt de lijst, tot je opnieuw laadt")
+scope["manage"] = real_manage
+del scope["print"]
+
 # ---- ColumnPicker -------------------------------------------------------------------------------------
 print("=== ColumnPicker ===")
 calls = []
