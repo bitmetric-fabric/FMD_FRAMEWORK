@@ -67,7 +67,7 @@ Kies **Vervangen door onderstaande regels** en klik op **Regel toevoegen**. De r
 
 Een regel bestaat uit een **Functie**, de **Kolommen** waarop ze werkt en de parameters van die functie. De knoppen ↑ en ↓ veranderen de volgorde, ✕ verwijdert de regel.
 
-De lijst met functies bevat onder meer `normalize_text`, `fill_nulls`, `parse_datetime`, `clamp_min_date`, `exclude_rows` en *(eigen functie)*. In het voorbeeld gebruikt Bronze `normalize_text` op de kolom `Name`, met de parameter `case` op `lower`.
+De lijst met functies bevat `normalize_text`, `fill_nulls`, `parse_datetime`, `clamp_min_date`, `exclude_rows`, `deduplicate_keys` en *(eigen functie)*. Wat elke functie doet en welke parameters ze heeft, staat in [Cleansing-functies](cleansing-functies.md). In het voorbeeld gebruikt Bronze `normalize_text` op de kolom `Name`, met de parameter `case` op `lower`.
 
 ![Het formulier voor een Bronze-regel: functie normalize_text, de kolom Name gekozen en de parameter case op lower.](afbeeldingen/tabel-wijzigen/03-regel-bronze.png)
 
