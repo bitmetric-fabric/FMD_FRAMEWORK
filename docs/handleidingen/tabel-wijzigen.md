@@ -30,7 +30,7 @@ De proefdraai schrijft niets. Hij toont per tabel wat er zou veranderen.
 
 - **Changed** met per veld `oud -> nieuw`, bijvoorbeeld `IsHistorized 1 -> 0` of `LoadGroup (from source) -> nacht`. Zie je een veld dat je niet hebt aangeraakt, ga dan terug naar tab 2.
 - **New** is een tabel die nog niet is geregistreerd.
-- **WARNING** wijst op een gevolg dat je niet kunt zien in het overzicht, bijvoorbeeld dat een gewijzigde Silver-regel alleen werkt op rijen die daarna veranderen.
+- **WARNING** wijst op een gevolg dat je niet kunt zien in het overzicht, bijvoorbeeld dat een gewijzigde Silver-regel alleen werkt op rijen die daarna veranderen. Voor de hele tabel kies je daarna op tab 5 de actie *Silver opnieuw laten verwerken*.
 - **Active in this workspace but not in this list (left as is)** is de lijst met tabellen die actief zijn maar niet in deze registratie voorkomen. De proefdraai laat ze ongemoeid. Dit is geen waarschuwing.
 
 Het overzicht erboven kleurt elke cel die afwijkt van de configdb oranje, met de oude waarde eronder (*was: ja*). Controleer dat alleen de cellen oranje zijn die je wilt wijzigen.
@@ -78,7 +78,7 @@ Silver gebruikt hier `clamp_min_date` op de kolom `ModifiedDate`. Die functie he
 Registreer en bekijk wat de regel doet:
 
 - **Een Bronze-regel** werkt vanaf de volgende levering.
-- **Een Silver-regel** werkt alleen op rijen die daarna veranderen. Moet de regel op de hele tabel gelden, zet de tabel dan opnieuw in de wachtrij van Silver. De volgende run van `PL_FMD_LOAD_SILVER` bouwt hem dan opnieuw op uit Bronze. Dat doe je met de procedure `execution.sp_RequeueSilverLayerEntities`, of met `register(…, dry_run=False, requeue_silver=True)` in de cel *Zonder editor (geavanceerd)* van het notebook. De knoppen van de editor hebben hiervoor geen keuze.
+- **Een Silver-regel** werkt alleen op rijen die daarna veranderen. Moet de regel op de hele tabel gelden, registreer dan eerst en kies daarna op tab 5 de actie **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)**. Die zet de tabel terug in de wachtrij van Silver; de volgende run van `PL_FMD_LOAD_SILVER` bouwt hem dan opnieuw op uit Bronze. Zie [Silver opnieuw laten verwerken](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken).
 - Verandert de regel het type van een kolom of de kolommen zelf, verwijder dan eerst de Silver-tabel.
 
 Een eigen cleansing-functie zet je eerst in `NB_FMD_CUSTOM_DQ_CLEANSING`, in Dev, en promoveer je daarna met de CODE-workspace.
