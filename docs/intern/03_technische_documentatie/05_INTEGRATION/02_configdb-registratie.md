@@ -62,7 +62,7 @@ ADR-018, aanvulling "Interactieve editor". Bron: `FMD/src/NB_FMD_REGISTRATION_FU
    - **Registreren** kan alleen na een proefdraai op precies deze wijzigingen en een bevestiging.
 6. Dezelfde editor gebruik je in elke stap van een feature: `DEV_<NAAM>`, `D`, `T`, `P`.
 
-**Beperkingen** (*vastgesteld*, uit de code): de editor kent `requeue_silver` niet (alleen via `register(...)` rechtstreeks) ~~en de lijst met
+**Beperkingen** (*vastgesteld*, uit de code): de editor kent `requeue_silver` niet (alleen via `register(...)` rechtstreeks) ~~en de lijst met *Correctie 2026-11-16 (reden: branch `feature/beheer-requeue-silver`): de editor kent nu een actie *Silver opnieuw laten verwerken* op tab 5 (*getest in eigen omgeving* 2026-11-16: proefdraai en echte run op een tabel in D van de trial, `logging.ConfigChange` regels 10 en 11; nog niet gemerged). De zin over `requeue_silver` hierboven geldt tot die merge.*
 cleansing-functies in de editor kent `exclude_rows` nog niet (kies "(eigen functie)")~~.
 *Correctie 2026-10-29 (reden: `FMD_FRAMEWORK#78`, `09f3eb1`): de editor kent `exclude_rows` en `clamp_min_date` wel (*vastgesteld*, `CLEANSING_FUNCTIONS` in `NB_FMD_REGISTRATION_FUNCTIONS` op `origin/main`). Ook nieuw sinds deze tekst (*vastgesteld* in de code): LoadGroup, kolomkeuze (`SourceColumns`, Snowflake met cast `naam::TYPE`) en bronfilter per tabel in tab 2 (#77, #83), voor `ASQL_01`, `ASQL_02`, `SNOWFLAKE_01` en `ODATA_01` (#84); `NB_REGISTRATIE` en de functies op een Python-kernel (#81, `4bd204c`). De klantversie van deze werkwijze: `klantdocumentatie/v3/bron/ontwikkeling/bronregistratie.md`.*
 
