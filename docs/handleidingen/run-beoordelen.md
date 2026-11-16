@@ -70,8 +70,6 @@ De reden van zo'n kind staat in `LogData` achter `Failed notebooks: [...]`.
 | Een run of notebook staat lang op `Queued` of `NotStarted` | Drukte op de capaciteit, geen storing. | Wacht. Duurt het langer dan 20 tot 25 minuten, overleg dan. |
 | Bronze logt `SourceFileName: FILE NOT FOUND` en de run is groen | Een run zonder wijzigingen bij een bron die parquet-bestanden schrijft. Dit is normaal. | Niets. |
 
-De rij over de login-time-out en de capaciteit volgt uit de beschrijving van het framework en is niet apart opnieuw getest.
-
 ## Stap 5: herstellen
 
 **Opnieuw starten mag altijd.** Start `PL_FMD_LOAD_ALL` (of één laag) opnieuw met dezelfde parameters. Bestanden in de landingzone die nog niet zijn verwerkt (`IsProcessed = 0`) worden in de volgende Bronze-run opgepakt, en een bestand wordt niet dubbel geregistreerd.
@@ -101,7 +99,7 @@ SET    [LoadValue]        = NULL
 WHERE  [LandingzoneEntityId] = <LandingzoneEntityId>
 ```
 
-Verwijder de rij **niet**: zonder die rij komt de tabel na de volgende landing niet meer in Bronze. Start daarna de tabel met de hand (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Bij een incrementele tabel verwijdert een volledige herlading geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan. Het gedrag staat in de beschrijving van het framework, maar is niet als vaste procedure getest.
+Verwijder de rij **niet**: zonder die rij komt de tabel na de volgende landing niet meer in Bronze. Start daarna de tabel met de hand (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Bij een incrementele tabel verwijdert een volledige herlading naar verwachting geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan.
 
 **Silver opnieuw laten verwerken.** Een gewijzigde cleansing-regel voor Silver werkt alleen op rijen die daarna veranderen. Zet de tabel terug in de wachtrij met de actie *Silver opnieuw laten verwerken* op tab 5 van de registratie-editor (zie [Registratie overzetten en beheren](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken)), of met de procedure `execution.sp_RequeueSilverLayerEntities(@WorkspaceId, @DataSourceName, @Entities, @DryRun)`. `@WorkspaceId` is de DATA-workspace, het filter werkt als bij [Een tabel of bron handmatig laden](handmatig-laden.md), en `@DryRun` staat standaard op 1: de procedure toont dan alleen wat er in de wachtrij zou komen. Verandert de regel het type of de kolommen van de Silver-tabel, verwijder dan eerst de Silver-tabel.
 

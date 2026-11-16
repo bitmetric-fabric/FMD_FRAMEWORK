@@ -232,7 +232,7 @@ De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijder
 
 ## Stap 6: een vaste identiteit instellen met een connectie
 
-Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebruiker (*Default: Single Sign-On (Entra ID)*). Wil je dat verversingen en lezers een vaste identiteit gebruiken, bijvoorbeeld een service principal, dan koppel je het model aan een **cloud connectie**. Zonder connectie slaagde de verversing in Test wel (zie stap 5); wat er zonder connectie gebeurt bij een geplande verversing of voor rapportlezers is niet getest.
+Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebruiker (*Default: Single Sign-On (Entra ID)*). Wil je dat verversingen en lezers een vaste identiteit gebruiken, bijvoorbeeld een service principal, dan koppel je het model aan een **cloud connectie**. Zonder connectie slaagde de verversing in Test wel (zie stap 5).
 
 **Hoe vaak.** Maak de connectie **één keer per omgeving**: een connectie hoort bij één pad, en elke omgeving heeft een eigen lakehouse en dus een eigen pad. De connectie voor Dev wijst naar het lakehouse van Dev en is dus niet bedoeld voor Test. Koppel **elk semantisch model** vervolgens zelf aan de connectie van zijn omgeving. Na de promotie is het model in Test niet aan een connectie gekoppeld, ook niet als het model in Dev dat wel is. Een connectie wordt dus niet meegepromoveerd. Bij elk nieuw semantisch model moet je die koppeling opnieuw leggen.
 
@@ -262,7 +262,7 @@ Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebrui
 
    *Afbeelding 25: tenant-ID, service principal-ID en credential type. De waarden zijn vervaagd.*
 
-5. Geef het client secret op. In onze opname deden we dat via een **Azure Key Vault-verwijzing** (het knopje naast *Service principal key*): kies de Key Vault, vul de naam van het secret in en kies **Apply**. Zo staat het secret zelf niet in het venster. Tik het secret nooit in een veld dat je laat zien in een schermafbeelding. Of het secret ook direct in te vullen is, hebben we niet getest.
+5. Geef het client secret op. Gebruik hiervoor een **Azure Key Vault-verwijzing** (het knopje naast *Service principal key*): kies de Key Vault, vul de naam van het secret in en kies **Apply**. Zo staat het secret zelf niet in het venster. Tik het secret nooit in een veld dat je laat zien in een schermafbeelding.
 
    ![Het onderdeel Azure Key Vault reference met de Key Vault en de naam van het secret en de knop Apply](afbeeldingen/direct-lake-parameter/26-key-vault.png)
 
