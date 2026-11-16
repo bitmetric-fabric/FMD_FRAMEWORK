@@ -4,6 +4,8 @@ CREATE PROCEDURE [execution].[sp_RequeueSilverLayerEntities]
     ,@DataSourceName NVARCHAR(100) = ''
     ,@Entities NVARCHAR(MAX) = ''
     ,@DryRun BIT = 1
+    ,@Reason NVARCHAR(500) = NULL
+    ,@ChangedBy NVARCHAR(256) = NULL
     )
 WITH EXECUTE AS CALLER
 AS
@@ -14,7 +16,10 @@ BEGIN
     -- fn_EntityInFilter (empty = no filter). @DryRun = 1 (default) only lists what would be queued.
     -- A change that alters the shape of the Silver table (a type, a new or renamed column) also needs the table
     -- dropped first: the merge writes the columns of the existing table only.
+    -- Every real run is written to logging.ConfigChange, one row per table that was put in the queue. @Reason is optional
+    -- (a caller from before it existed still works); without one the row says that none was given.
     SET NOCOUNT ON;
+    SET XACT_ABORT ON;
 
     DECLARE @Targets TABLE (
          [BronzeLayerEntityId] BIGINT
@@ -23,6 +28,7 @@ BEGIN
         ,[DataSourceName] VARCHAR(100)
         ,[SourceSchema] NVARCHAR(100)
         ,[SourceName] NVARCHAR(200)
+        ,[LandingzoneEntityId] BIGINT
         ,[AlreadyQueued] BIT
     );
 
@@ -33,6 +39,7 @@ BEGIN
           ,DS.[Name]
           ,LZE.[SourceSchema]
           ,LZE.[SourceName]
+          ,LZE.[LandingzoneEntityId]
           ,CASE WHEN EXISTS (SELECT 1
                              FROM [execution].[PipelineBronzeLayerEntity] PBLE
                              WHERE PBLE.[BronzeLayerEntityId] = BLE.[BronzeLayerEntityId]
@@ -55,11 +62,21 @@ BEGIN
 
     IF @DryRun = 0
     BEGIN
+        BEGIN TRANSACTION;
+
         -- Same row sp_UpsertPipelineBronzeLayerEntity adds after a Bronze load; one open row per entity.
         INSERT INTO [execution].[PipelineBronzeLayerEntity] ([BronzeLayerEntityId], [TableName], [SchemaName], [InsertDateTime], [IsProcessed])
         SELECT [BronzeLayerEntityId], [TableName], [SchemaName], GETDATE(), 0
         FROM @Targets
         WHERE [AlreadyQueued] = 0;
+
+        INSERT INTO [logging].[ConfigChange] ([ChangedBy], [Action], [ObjectType], [ObjectId], [OldValue], [NewValue], [Reason])
+        SELECT ISNULL(@ChangedBy, SUSER_SNAME()), 'RequeueSilver', 'LandingzoneEntity', [LandingzoneEntityId], NULL, 'queued',
+               ISNULL(NULLIF(@Reason, ''), 'Geen reden opgegeven')
+        FROM @Targets
+        WHERE [AlreadyQueued] = 0;
+
+        COMMIT TRANSACTION;
     END
 
     SELECT [DataSourceName]

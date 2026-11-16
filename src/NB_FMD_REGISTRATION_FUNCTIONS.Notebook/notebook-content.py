@@ -1251,10 +1251,13 @@ MANAGE_ACTIONS = {
     'reset_to': 'Watermark op een waarde zetten',
     'skip': 'Open wachtrij op verwerkt zetten',
     'rebuild': 'Opruimen na een PK-wijziging (Bronze en Silver wissen)',
+    'requeue': 'Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)',
 }
 MANAGE_LAYERS = ('Both', 'Landingzone', 'Bronze')
 _LAYER_TEXT = {'Both': 'landingzone en Bronze', 'Landingzone': 'landingzone', 'Bronze': 'Bronze'}
 # What execution.sp_SkipOpenPipelineQueue reports, in the language of the editor.
+# What execution.sp_RequeueSilverLayerEntities reports.
+_REQUEUE_RESULT = {'already queued': 'staat al in de wachtrij', 'dry run: would be queued': 'zou in de wachtrij gezet worden', 'queued': 'in de wachtrij gezet'}
 _QUEUE_RESULT = {'nothing open': 'niets open', 'dry run: would be skipped': 'zou op verwerkt gezet worden', 'skipped': 'op verwerkt gezet', 'not requested': 'niet gevraagd'}
 
 _SQL_STATUS = """
@@ -1356,6 +1359,13 @@ def plan_manage(action, status_rows, rebuild_info=None, value=None, layer='Both'
             if layer in ('Both', 'Bronze'):
                 parts.append(f'Bronze {open_br}')
             item['Steps'].append(f"Open wachtrijrijen op verwerkt zetten ({_LAYER_TEXT[layer]}): {', '.join(parts)}. Er wordt niets geladen.")
+        elif action == 'requeue':
+            item['Steps'].append('Silver in de wachtrij zetten: de volgende run van PL_FMD_LOAD_SILVER verwerkt de tabel opnieuw uit Bronze, zonder nieuwe levering.')
+            if not row.get('IsActive'):
+                item['Warnings'].append('De tabel is uitgeschakeld: ze komt niet in de wachtrij.')
+            if open_br:
+                item['Warnings'].append(f'Er staat al een open wachtrijrij voor Bronze ({open_br}); er komt er geen bij.')
+            item['Warnings'].append('Verandert de regel het type of de kolommen van de Silver-tabel, wis dan eerst de Silver-tabel: deze actie doet dat niet.')
         elif action == 'rebuild':
             info = (rebuild_info or {}).get(row['LandingzoneEntityId'], {})
             found = delta_paths(info) if info else {'Bronze': [], 'Silver': []}
@@ -1403,10 +1413,19 @@ def manage(domain, environment, action, ids, reason, value=None, layer='Both', d
         sets = call('[execution].[sp_SkipOpenPipelineQueue]', LandingzoneEntityId=item_id, Layer=layer_name, Reason=reason, DryRun=1 if dry else 0)['result_sets']
         return '; '.join(f"{r['Layer']}: {r['OpenRows']} open, {_QUEUE_RESULT.get(r['Result'], r['Result'])}" for r in sets[-1])
 
+    def requeue(row, dry):
+        sets = call('[execution].[sp_RequeueSilverLayerEntities]', WorkspaceId=workspace_guid, DataSourceName=row['DataSourceName'],
+                    Entities=f"{row['SourceSchema']}.{row['SourceName']}", DryRun=1 if dry else 0, Reason=reason)['result_sets']
+        # The procedure only returns active tables: no row means this one is switched off.
+        return '; '.join(_REQUEUE_RESULT.get(r['Result'], r['Result']) for r in sets[-1]) or 'niet in de wachtrij gezet: de tabel is uitgeschakeld'
+
+    workspace_guid = resolve_data_workspace(domain, environment)[1] if action == 'requeue' else None
     results = []
     for item in plan:
         try:
-            if action == 'reset':
+            if action == 'requeue':
+                text = ('proefdraai: ' if dry_run else '') + requeue(status[item['Id']], dry_run)
+            elif action == 'reset':
                 if dry_run:
                     text = 'proefdraai: niets geschreven'
                 else:
@@ -2333,8 +2352,8 @@ def manage_result_html(result):
 class ManagePage:
     """
     Tab 5: day-to-day management of the registered tables of one environment. It shows the load status and the open queue per table
-    (integration.vw_LoadStatus) and offers four actions: reset the watermark, set it to a value, set the open queue on processed, and the
-    cleanup after a change of the primary key. Every action starts with a dry run; the real run is only possible for exactly the
+    (integration.vw_LoadStatus) and offers five actions: reset the watermark, set it to a value, set the open queue on processed, the
+    cleanup after a change of the primary key, and putting Silver back in the queue after a changed Silver rule. Every action starts with a dry run; the real run is only possible for exactly the
     selection, action and reason of that dry run, and a cleanup or anything in P also asks to type the environment.
     """
     STATUS_FILTER = [('alle', 'all'), ('Fout', 'Fout'), ('Wachtrij', 'Wachtrij'), ('Nooit geladen', 'Nooit geladen'), ('OK', 'OK'), ('Uitgeschakeld', 'Uitgeschakeld')]

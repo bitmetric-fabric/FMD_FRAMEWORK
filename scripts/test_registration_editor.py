@@ -631,6 +631,14 @@ check(plan[0]["Delete"] == [paths["Silver"][0], paths["Bronze"][1]], "plan rebui
 check(pm("rebuild", [st(1)], {1: {**info1, "IsHistorized": 0}}, exists={})[0]["Delete"] == [] and any("bestaat niet" in x for x in pm("rebuild", [st(1)], {1: {**info1, "IsHistorized": 0}}, exists={})[0]["Steps"]),
       "plan rebuild: zonder bestaande tabellen alleen de configdb-stappen, en dat wordt gezegd")
 
+plan = pm("requeue", [st(1), st(2, IsActive=0), st(3, PendingBronzeFiles=2)])
+check("PL_FMD_LOAD_SILVER" in plan[0]["Steps"][0] and "Bronze" in plan[0]["Steps"][0] and not any("uitgeschakeld" in x for x in plan[0]["Warnings"]), "plan requeue: Silver terug in de wachtrij, verwerkt uit Bronze")
+check(any("uitgeschakeld" in x for x in plan[1]["Warnings"]) and any("al een open" in x for x in plan[2]["Warnings"]), "plan requeue: waarschuwing bij een uitgeschakelde tabel en bij een al open wachtrijrij")
+check(all(any("type of de kolommen" in x for x in p["Warnings"]) for p in plan) and not plan[0]["Delete"], "plan requeue: waarschuwing dat de Silver-tabel bij een nieuw type eerst gewist moet worden, en er wordt niets gewist")
+sql_req = (SQL / "execution/StoredProcedures/sp_RequeueSilverLayerEntities.sql").read_text(encoding="utf-8")
+check("@Reason" in sql_req and "'RequeueSilver'" in sql_req and "[logging].[ConfigChange]" in sql_req and "@Reason NVARCHAR(500) = NULL" in sql_req,
+      "sp_RequeueSilverLayerEntities: een optionele reden, en een echte run staat in logging.ConfigChange")
+
 # manage(): the database and the lake are replaced by stubs, so the order of the calls can be checked
 log = []
 rows_db = [st(1), st(2, PendingLandingzoneFiles=2, PendingBronzeFiles=1)]
@@ -642,6 +650,8 @@ present = set(dp(info1)["Silver"][:1] + dp(info1)["Bronze"][:1])
 
 def fake_proc(name, driver, connstring, database, **params):
     log.append(("proc", name.split(".")[-1].strip("[]"), params))
+    if "Requeue" in name:  # an active table gives one row; a switched-off one gives none
+        return {"result_sets": [[] if params["Entities"] == "Sales.T2" else [{"Result": "dry run: would be queued" if params["DryRun"] else "queued"}]]}
     return {"result_sets": [[{"Layer": "Landingzone", "OpenRows": 2, "Result": "dry run: would be skipped"}, {"Layer": "Bronze", "OpenRows": 1, "Result": "dry run: would be skipped"}]] if "SkipOpen" in name else [[]]}
 
 
@@ -664,6 +674,17 @@ check(log and log[0][1] == "sp_SkipOpenPipelineQueue" and log[0][2]["DryRun"] ==
 log.clear()
 mg("INTEGRATION", "D", "skip", [2], "test", layer="Both", dry_run=False)
 check(log[0][2]["DryRun"] == 0 and log[0][2]["LandingzoneEntityId"] == 2, "manage skip echt: DryRun = 0")
+log.clear()
+scope["resolve_data_workspace"] = lambda domain, env: ("FMD DATA (D)", "guid-d")
+res = mg("INTEGRATION", "D", "requeue", [1, 2], "regel gewijzigd", dry_run=True)
+check([c[1] for c in log] == ["sp_RequeueSilverLayerEntities"] * 2 and log[0][2] == {"WorkspaceId": "guid-d", "DataSourceName": "AW", "Entities": "Sales.T1", "DryRun": 1, "Reason": "regel gewijzigd"}
+      and res["results"][0]["Result"] == "proefdraai: zou in de wachtrij gezet worden" and "uitgeschakeld" in res["results"][1]["Result"],
+      "manage requeue proefdraai: de procedure per tabel met DryRun = 1, de DATA-workspace, het filter en de reden; een uitgeschakelde tabel wordt gemeld")
+log.clear()
+res = mg("INTEGRATION", "D", "requeue", [1], "regel gewijzigd", dry_run=False)
+check(len(log) == 1 and log[0][2]["DryRun"] == 0 and res["results"][0]["Result"] == "in de wachtrij gezet" and res["results"][0]["Ok"]
+      and not [c for c in log if c[0] == "rm" or c[1].startswith("sp_Reset") or c[1] == "sp_SkipOpenPipelineQueue"],
+      "manage requeue echt: alleen de wachtrij van Silver, DryRun = 0, geen tabel gewist en geen watermark gereset")
 log.clear()
 res = mg("INTEGRATION", "D", "rebuild", [1], "pk gewijzigd", dry_run=True)
 check(not [c for c in log if c[0] == "rm"] and all(c[2].get("DryRun") == 1 for c in log if c[1] == "sp_SkipOpenPipelineQueue") and not [c for c in log if c[1].startswith("sp_Reset")],
