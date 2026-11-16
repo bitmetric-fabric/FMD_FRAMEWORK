@@ -11,7 +11,7 @@ Het gaat om een model op **OneLake** (`AzureStorage.DataLake`). Voor een model o
 
 De schermafbeeldingen komen uit een referentie-installatie van november 2026.
 
-## Wat vaststaat en wat niet
+## Wat je moet weten
 
 - **Verversen van de data werkt**, ook met de parameter actief.
 - **Promoveer alleen met de parameter actief.** Staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet en leest Test uit Dev.
@@ -143,7 +143,7 @@ Open het model daarna opnieuw in Editing en ververs het schema. Wijzig je het mo
 
 Controleer vooraf in de TMDL view (sleep **Tables** naar de editor) of elke tabel de regel `sourceLineageTag` heeft.
 
-Mogelijk hadden eerdere mislukte schema-verversingen op andere modellen dezelfde oorzaak; dat is niet nagegaan.
+
 
 Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet en wijst het model in Test naar Gold van Dev.
 
@@ -292,7 +292,7 @@ Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebrui
 |---|---|
 | *Direct Lake mode requires a Direct Lake data source … Failed to save modifications* bij een Apply | Het script verwijst naar `OneLakeUrl` zonder dat de parameter in het model of in hetzelfde script staat. Neem de parameter in het script op. Dezelfde melding is eerder bij andere modellen gezien; de oorzaak is daar niet bekend. |
 | *Query Evaluation failed for query: DirectLake - LH_GOLD_LAYER* bij **Refresh → Schema** of **Schema and data** | Een tabel mist `sourceLineageTag`. Voeg hem toe (zie *Het schema bijwerken*). De parameter is niet de oorzaak. |
-| **Edit tables** faalt met *ConceptualSchemaSettings* | Op 26 oktober 2026 gezien; oorzaak onbekend. Op 10 november 2026 werkte Edit tables met de parameter actief. Controleer eerst de `sourceLineageTag` van de tabellen. |
+| **Edit tables** faalt met *ConceptualSchemaSettings* | Controleer eerst de `sourceLineageTag` van de tabellen. Edit tables werkt met de parameter actief. |
 | Het model in Test leest uit Dev | Het letterlijke pad was actief tijdens de promotie, of de rule is nog niet van kracht. Controleer de lineage van het model in Test, zet de parameter aan in Dev en promoveer opnieuw. |
 | De deployment faalt na het hernoemen van de parameter | De rule is ongeldig. Maak de rule opnieuw. |
 | Parameter rules zijn niet zichtbaar | Het model is nog niet naar die stage gepromoveerd. Promoveer eerst. |

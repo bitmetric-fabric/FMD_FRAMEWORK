@@ -79,7 +79,7 @@ Registreer en bekijk wat de regel doet:
 
 - **Een Bronze-regel** werkt vanaf de volgende levering.
 - **Een Silver-regel** werkt alleen op rijen die daarna veranderen. Moet de regel op de hele tabel gelden, registreer dan eerst en kies daarna op tab 5 de actie **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)**. Die zet de tabel terug in de wachtrij van Silver; de volgende run van `PL_FMD_LOAD_SILVER` bouwt hem dan opnieuw op uit Bronze. Zie [Silver opnieuw laten verwerken](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken).
-- Verandert de regel het type van een kolom of de kolommen zelf, verwijder dan eerst de Silver-tabel.
+- Verandert de regel het type van een kolom of de kolommen zelf, verwijder dan eerst de Silver-tabel uit de Silver-lakehouse.
 
 Een eigen cleansing-functie zet je eerst in `NB_FMD_CUSTOM_DQ_CLEANSING`, in Dev, en promoveer je daarna met de CODE-workspace.
 
