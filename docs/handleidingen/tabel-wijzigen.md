@@ -116,18 +116,49 @@ Vul bij **LoadGroup** de naam van de groep in. Leeg betekent: de groep van de br
 
 ## Een tabel volledig opnieuw laden
 
-- **Eenmalig:** ga naar tab **5. Beheer**, laad de omgeving, selecteer de tabel en kies de actie **Watermark resetten (de volgende load laadt alles)**. Start daarna `PL_FMD_LOAD_ALL` voor alleen deze tabel (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Verwijder de watermarkrij niet.
-- **Van incrementeel naar volledig:** haal het vinkje bij **Incrementeel** weg en registreer. Een volledige load markeert rijen die in de bron ontbreken als verwijderd.
-- **Let op bij Snowflake met `delta`:** een volledige load die 0 rijen oplevert, verwijdert alle rijen van die tabel in Bronze.
+**Eenmalig, bij een incrementele tabel** (bijvoorbeeld omdat een ruimer filter ook oudere rijen moet ophalen): maak het watermark leeg. De volgende load haalt dan de hele tabel op.
+
+1. Ga naar tab **5. Beheer**, kies de omgeving en klik op **Laden**. De lijst toont per tabel de status, het watermark en het aantal open regels in de wachtrij (`open 0/0`).
+2. Zoek de tabel en selecteer hem. Onder de lijst staat hoeveel tabellen zijn geselecteerd.
+
+![Tab 5 met de tabel geselecteerd. De lijst toont het watermark; onder Actie staat Watermark resetten, met het verplichte veld Reden en de knoppen Proefdraaien en Uitvoeren.](afbeeldingen/tabel-wijzigen/09-beheer-selecteren.png)
+
+3. Kies bij **Actie** **Watermark resetten (de volgende load laadt alles)** en vul bij **Reden** in waarom je dit doet. Het veld is verplicht; de reden komt in het logboek van de configuratie.
+4. Klik op **1. Proefdraaien**. De uitkomst toont per tabel wat er zou gebeuren, hier het huidige watermark en dat het leeg wordt. De knop **2. Uitvoeren** blijft uitgeschakeld tot je de proefdraai hebt gedaan.
+
+![De proefdraai van Watermark resetten: de tabel, het watermark dat leeg wordt en de melding dat er niets is geschreven.](afbeeldingen/tabel-wijzigen/10-watermark-proefdraai.png)
+
+5. Is de uitkomst goed, klik dan op **2. Uitvoeren**.
+6. Start `PL_FMD_LOAD_ALL` voor alleen deze tabel (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Verwijder de watermarkrij niet.
+
+**Van incrementeel naar volledig:** haal het vinkje bij **Incrementeel** weg en registreer. Een volledige load markeert rijen die in de bron ontbreken als verwijderd.
+
+**Let op bij Snowflake met `delta`:** een volledige load die 0 rijen oplevert, verwijdert alle rijen van die tabel in Bronze.
 
 ## Een primary key wijzigen
 
-Een andere primary key verandert hoe Bronze en Silver rijen herkennen. Ga zo te werk:
+Een andere primary key verandert hoe Bronze en Silver rijen herkennen. Daarom moeten Bronze en Silver van de tabel daarna opnieuw worden opgebouwd. Ga zo te werk:
 
-1. Kies op tab 2 de nieuwe sleutel bij **Primary key** en registreer.
-2. Ga naar tab 5, selecteer de tabel en kies de actie **Opruimen na een PK-wijziging (Bronze en Silver wissen)**. Draai eerst de proefdraai.
-3. Laad de tabel opnieuw volledig.
-4. Controleer de aantallen in Bronze en Silver. Doe dit eerst in Dev.
+1. **Kies de nieuwe sleutel.** Klik op tab 2 de tabel aan en kies bij **Primary key** de kolommen. Houd Ctrl ingedrukt om meer dan één kolom te kiezen (een samengestelde sleutel). In het voorbeeld is de sleutel uitgebreid van `CurrencyCode` naar `CurrencyCode` en `Name`.
+
+![Tab 2 met de lijst Primary key. CurrencyCode en Name zijn gekozen.](afbeeldingen/tabel-wijzigen/12-primary-key-kiezen.png)
+
+2. **Controleer en proefdraai op tab 3.** De cel *Primary key* is oranje, met de oude sleutel eronder. De proefdraai meldt `PrimaryKeys CurrencyCode -> CurrencyCode,Name`.
+
+![Tab 3 na de proefdraai. De cel Primary key is oranje (was: CurrencyCode) en de uitkomst meldt PrimaryKeys CurrencyCode -> CurrencyCode,Name.](afbeeldingen/tabel-wijzigen/13-primary-key-proefdraai.png)
+
+3. **Registreer** de nieuwe sleutel.
+4. **Ruim Bronze en Silver op.** Ga naar tab 5, laad de omgeving, selecteer de tabel, kies de actie **Opruimen na een PK-wijziging (Bronze en Silver wissen)** en vul een **Reden** in. Klik op **1. Proefdraaien**. De uitkomst toont wat er verdwijnt:
+   - de Silver- en de Bronze-tabel van de tabel;
+   - de open regels in de wachtrij van Landingzone en Bronze, die op verwerkt worden gezet;
+   - het watermark, dat leeg wordt.
+
+   Daaronder staan drie waarschuwingen: de Silver-historie van de tabel gaat verloren, de primary key staat in de configuratie zoals hij nu is (controleer dat dit de nieuwe sleutel is), en er mag tijdens het opruimen geen load van de tabel lopen.
+
+![De proefdraai van Opruimen na een PK-wijziging. Onder wat er gebeurt staan drie waarschuwingen; onderaan staat het veld Typ de omgeving en de knop Uitvoeren.](afbeeldingen/tabel-wijzigen/11-opruimen-proefdraai.png)
+
+5. **Voer uit.** Typ de omgeving (`D`, `T` of `P`) in het veld **Typ de omgeving** en klik op **2. Uitvoeren**. Een actie die iets wist vraagt hierom, en elke actie in `P` ook. **Dit is niet terug te draaien.**
+6. **Laad de tabel opnieuw volledig** (zie [Een tabel of bron handmatig laden](handmatig-laden.md)) en controleer de aantallen in Bronze en Silver. Doe dit eerst in Dev.
 
 ## Doorzetten naar Test en Productie
 
