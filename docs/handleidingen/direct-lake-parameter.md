@@ -91,7 +91,7 @@ De schermafbeeldingen komen uit een referentie-installatie van november 2026.
    - Laat de bestaande `lineageTag` en de annotaties (`PBI_IncludeFutureArtifacts`) staan. De editor beheert ze. Microsoft beschrijft `PBI_IncludeFutureArtifacts` niet; raak hem niet aan.
    - **De parameter moet in hetzelfde script staan** als de verwijzing erop. Staat `OneLakeUrl` niet in het model, dan geeft de Apply de foutmelding *Direct Lake mode requires a Direct Lake data source*.
    - De waarde achter het `=` bij `OneLakeUrl` is de huidige waarde van de parameter in Dev. Je hoeft hem nergens apart in te stellen.
-   - Plak het script in één keer: de editor springt bij typen vanzelf in.
+   - Plak het script in één keer: de editor springt bij typen vanzelf in. Staat een regel van het script in een PDF over meerdere regels verdeeld, voeg die dan samen tot één regel voor je plakt.
 
 5. Kies **Preview** om het verschil met het model te zien, en daarna **Apply**.
 
