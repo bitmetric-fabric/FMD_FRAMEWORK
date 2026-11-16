@@ -70,7 +70,9 @@ Het semantisch model en rapportlezers lezen via het SQL-endpoint. Open het SQL-e
 SELECT TOP 10 * FROM gold.d_currency
 ```
 
-De query geeft de eerste tien rijen. Een MLV die je net hebt aangemaakt of verwijderd, kan in het SQL-endpoint even achterlopen. Een verwijderde MLV staat daar dan nog een tijd in de lijst, en een nieuwe MLV kan *Invalid object name* geven tot het endpoint is bijgewerkt. Wacht even en probeer opnieuw voordat je iets aanpast.
+De query geeft de eerste tien rijen. Een MLV die je net hebt aangemaakt of verwijderd, kan in het SQL-endpoint even achterlopen: een verwijderde MLV staat daar dan nog een tijd in de lijst, en een nieuwe MLV kan *Invalid object name* geven. Werk het endpoint bij met de knop **Sync metadata from the Lakehouse**, het eerste pictogram in het lint van het SQL-endpoint. Wacht daarna even en probeer opnieuw.
+
+![Het lint van het SQL-endpoint met de knop Sync metadata from the Lakehouse gemarkeerd.](afbeeldingen/gold-mlv/09-sql-endpoint-sync.png)
 
 ![Het SQL-endpoint met de query op gold.d_currency en de eerste tien rijen als resultaat.](afbeeldingen/gold-mlv/04-sql-endpoint.png)
 
@@ -82,7 +84,35 @@ Een MLV die je in een notebook hebt aangemaakt, wordt niet vanzelf ververst als 
 - **Een eigen notebook** voeg je als notebook-activiteit toe aan `PL_FMD_LOAD_GOLD` in Dev, na de activiteit die al staat. Promoveer het notebook samen met de pipeline: een notebook dat nog niet in de doelstage staat, laat de promotie falen met *Missing Dependencies*.
 - **Hernoem `PL_FMD_LOAD_GOLD` niet.** De setup koppelt de pipeline van elk domein op naam aan de orchestratie. Een hernoemde pipeline valt uit de keten.
 
-Wil je alle MLV's met de hand verversen, bijvoorbeeld na een wijziging, draai dan de pipeline met de hand of voer de refresh-cel van `NB_MLV_EXAMPLE` uit. In de lakehouse staat ook een tabblad **Materialized lake views**; naar verwachting zie je daar de MLV's met hun afhankelijkheden en kun je ze met de hand verversen.
+Wil je alle MLV's met de hand verversen, bijvoorbeeld na een wijziging in Silver, draai dan de pipeline met de hand, voer de refresh-cel van `NB_MLV_EXAMPLE` uit of gebruik het overzicht van de lakehouse (zie [Verversen met de hand](#verversen-met-de-hand)).
+
+## Verversen met de hand
+
+De Gold-lakehouse heeft in het lint een tabblad **Materialized lake views**. Kies daar **Manage**: het overzicht toont de MLV's met hun bronnen en afhankelijkheden. Een MLV die van een andere MLV afhangt, staat rechts van zijn bron.
+
+In de werkbalk van het overzicht staan **Run** en **Manage schedules**. Met **Run** start je een verversing van de MLV's van deze lakehouse; naar verwachting ververst Fabric alleen de MLV's waarvan een bron is veranderd. Gebruik **Run** bij een eenmalige verversing, bijvoorbeeld na een correctie in Silver.
+
+![Het overzicht Manage materialized lake views met de MLV's en hun bronnen. De knoppen Run en Manage schedules zijn gemarkeerd.](afbeeldingen/gold-mlv/06-mlv-overzicht.png)
+
+**Manage schedules** opent een paneel om een verversing in te plannen. Gebruik dat niet naast `PL_FMD_LOAD_GOLD`: de pipeline ververst Gold na elke geplande load, en een tweede schedule kan ervoor zorgen dat twee verversingen elkaar overlappen. In een omgeving zonder schedule staat er *No schedules found*.
+
+![Het paneel Manage schedules met de melding No schedules found en de knop New schedule.](afbeeldingen/gold-mlv/07-mlv-schedules.png)
+
+**Recent run(s)** in het lint van het tabblad toont de verversingen van de laatste zeven dagen, met het aantal runs, het slagingspercentage, de gemiddelde duur en het aantal mislukte runs. Zonder run in die periode staat er *There are no runs to show*. De knop **Refresh** in dit scherm ververst alleen de lijst, niet de MLV's.
+
+![Het scherm Recent runs for materialized lake views met de kaarten Total runs, Success rate, Average duration en Failed runs, en de knop Refresh gemarkeerd.](afbeeldingen/gold-mlv/08-mlv-recente-runs.png)
+
+**Controleer de uitkomst in het SQL-endpoint.** Werk eerst de metadata bij (zie stap 5), en voer dan uit:
+
+```sql
+SELECT TOP 3 started_at, status, refresh_mode, total_nodes, succeeded_nodes
+FROM _mlv_system.sys_run_metrics
+ORDER BY started_at DESC
+```
+
+De bovenste regel is de laatste verversing: de starttijd, de status (*Completed*), de modus (*Optimal* ververst alleen wat nodig is) en hoeveel knooppunten er gelukt zijn.
+
+![Het SQL-endpoint met de query op sys_run_metrics en de drie laatste verversingen, elk met status Completed en modus Optimal.](afbeeldingen/gold-mlv/10-mlv-run-metrics.png)
 
 ## Een MLV verwijderen
 
@@ -112,8 +142,8 @@ Een MLV kun je ook in PySpark schrijven, met de decorator `@fmlv.materialized_la
 | Verschijnsel | Oorzaak en oplossing |
 |---|---|
 | De tabel staat niet in de lakehouse na het draaien | De lijst is niet ververst. Kies bij **Tables** de drie puntjes en dan **Refresh**. |
-| *Invalid object name* in het SQL-endpoint | Het endpoint loopt achter op de lakehouse. Wacht even en probeer opnieuw. |
-| De MLV heeft oude data na een wijziging in Silver | Een MLV ververst niet vanzelf. Draai de pipeline `PL_FMD_LOAD_GOLD` of de refresh-cel. |
+| *Invalid object name* in het SQL-endpoint | Het endpoint loopt achter op de lakehouse. Klik op **Sync metadata from the Lakehouse**, wacht even en probeer opnieuw. |
+| De MLV heeft oude data na een wijziging in Silver | Een MLV ververst niet vanzelf. Draai de pipeline `PL_FMD_LOAD_GOLD`, de refresh-cel of **Run** in het overzicht van de MLV's. |
 | Het notebook meldt een fout bij de eerste cellen | De `%%configure`-cel moet de eerste codecel van het notebook zijn. Zet geen andere cel ervoor. |
 | De MLV staat in Gold van een andere omgeving | Het notebook is niet aan de Gold van deze omgeving gebonden. Controleer de `%%configure`-cel en de Variable Library van de Gold. |
 | De promotie van de pipeline faalt met *Missing Dependencies* | Een notebook in de pipeline staat nog niet in de doelstage. Promoveer het notebook eerst, of in dezelfde deployment. |
