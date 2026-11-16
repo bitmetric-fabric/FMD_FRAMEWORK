@@ -74,7 +74,7 @@ Kies **Watermark resetten**, vul de reden in en klik op **1. Proefdraaien**. De 
 
 ![De actie Watermark resetten met de reden, de uitkomst van de proefdraai en de knop Uitvoeren gemarkeerd.](afbeeldingen/overzetten-en-beheren/05-watermark-proefdraai.png)
 
-Verwijder de watermark-rij nooit met de hand: zonder die rij komt de tabel na de volgende landing niet meer in Bronze. Bij een incrementele tabel verwijdert een volledige herlading geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan. Start na het resetten de tabel met de hand, zie [Een tabel of bron handmatig laden](handmatig-laden.md).
+Verwijder de watermark-rij nooit met de hand: zonder die rij komt de tabel na de volgende landing niet meer in Bronze. Bij een incrementele tabel verwijdert een volledige herlading na een watermark-reset geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan. Een tabel die je op volledig laden zet, werkt anders: een volledige load markeert rijen die in de bron ontbreken wel als verwijderd, zie [Een bestaande tabel wijzigen](tabel-wijzigen.md). Start na het resetten de tabel met de hand, zie [Een tabel of bron handmatig laden](handmatig-laden.md).
 
 ### Silver opnieuw laten verwerken
 
