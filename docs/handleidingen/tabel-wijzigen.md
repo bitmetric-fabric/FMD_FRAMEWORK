@@ -172,9 +172,3 @@ Een promotie neemt geen registraties mee. Zet een wijziging na het registreren o
 | Verwijderde Bronze- of Silver-tabel | Herhaal dit in het doel, vóór de load |
 
 Draai altijd eerst de proefdraai, en laad daarna in het doel.
-
-## Nog niet getest
-
-- Kolommen toevoegen aan een tabel die al in Bronze staat.
-- Alle functies van de lijst *Functie*. Dit zijn de schermen van `normalize_text` en `clamp_min_date`; de andere functies hebben eigen parameters.
-- De cleansing-keuze *Alle regels verwijderen* en de volgorde-knoppen ↑ en ↓.
