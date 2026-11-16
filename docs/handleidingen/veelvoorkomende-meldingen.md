@@ -64,3 +64,24 @@ De meldingen en oplossingen voor Direct Lake-modellen staan in de tabel *Valkuil
 | *Expected one Fabric connection named … found 0* | De naam klopt niet, of je hebt geen rechten op de connectie. Vraag de eigenaar je toe te voegen. |
 | *does not fit the type of connection* | Het FMD-type van de connectie of het brontype is verkeerd gekozen. |
 | *PrimaryKeys is empty* of *not found* | De tabel heeft geen primary key in de bron, of de sleutel staat niet in de ontdekking. Kies de sleutel samen met de eigenaar van de bron, en let bij Snowflake op hoofdletters. |
+
+## Beheer (tab 5)
+
+De meldingen van de acties op tab 5 van `NB_REGISTRATIE`. Hoe elke actie werkt, staat in [Registratie overzetten en beheren](overzetten-en-beheren.md).
+
+| Melding of verschijnsel | Betekenis en oplossing |
+|---|---|
+| **2. Uitvoeren** is uitgeschakeld, met de tekst *Eerst proefdraaien* | Je hebt nog geen proefdraai gedaan. Klik op **1. Proefdraaien**. |
+| *Er is iets gewijzigd sinds de proefdraai. Draai opnieuw proef voordat je uitvoert.* | Je hebt de selectie, de actie of de reden gewijzigd na de proefdraai. Uitvoeren kan alleen voor precies wat je hebt proefgedraaid. Draai de proefdraai opnieuw. |
+| *Typ D om te bevestigen* (of T of P) | Een actie die iets wist, en elke actie in P, vraagt om de omgeving te typen. Typ de letter in het veld **Typ de omgeving**. |
+| *Vul een reden in: die komt in logging.ConfigChange.* | De reden is verplicht, ook bij de proefdraai. Vul het veld **Reden** in. |
+| *Selecteer minstens één tabel.* | Er is geen tabel geselecteerd. Selecteer een of meer tabellen in de lijst. |
+| *Niet gevonden in D: …* | Een geselecteerde tabel staat niet meer in de laadstatus van deze omgeving. Klik op **Laden** en selecteer opnieuw. |
+| *Waarde: Een datum als yyyy-mm-dd hh:mi:ss.mmm, of een getal.* | Het watermark dat je opgeeft heeft een ongeldige vorm. Gebruik een datum met tijd of een getal. |
+| *Al uitgevoerd. Wijzig iets om opnieuw uit te voeren.* | De actie is voor deze keuzes al uitgevoerd. Klik op **Laden** voor de actuele stand. |
+| *Mislukt voor enkele tabellen: uitvoeren kan opnieuw, alle stappen zijn te herhalen.* | Een of meer tabellen zijn niet gelukt; de melding per tabel staat in de uitkomst. Los de oorzaak op en klik opnieuw op **2. Uitvoeren**. |
+| Bij *Opruimen*: *De Silver-historie (SCD2) van deze tabel gaat verloren.* | Opruimen wist ook de historie in Silver. Ga alleen door als dat de bedoeling is. |
+| Bij *Opruimen*: *Primary key in de configdb: …. Controleer of dat de nieuwe is.* | Registreer eerst de nieuwe primary key en ruim daarna op. Staat er nog de oude sleutel, dan bouwt de volgende load de tabel met de oude sleutel opnieuw op. |
+| Bij *Opruimen*: *Laat geen load van deze tabel lopen tijdens het opruimen.* | Een load die tegelijk loopt schrijft in de tabellen die je wist. Wacht tot de run klaar is of annuleer hem. |
+| Bij *Silver opnieuw laten verwerken*: *De tabel is uitgeschakeld: ze komt niet in de wachtrij.* | Een uitgeschakelde tabel wordt niet opnieuw verwerkt. Zet de tabel eerst aan (zie [Een bestaande tabel wijzigen](tabel-wijzigen.md#een-tabel-uitzetten-of-weer-aanzetten)). |
+| Bij *Silver opnieuw laten verwerken*: *Verandert de regel het type of de kolommen van de Silver-tabel, wis dan eerst de Silver-tabel.* | De actie wist niets. Verandert een Silver-regel het type van een kolom of de kolommen, wis dan eerst de Silver-tabel van die tabel. |

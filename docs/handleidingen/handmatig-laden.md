@@ -143,14 +143,14 @@ Heb je de verkeerde waarden gekozen, kies dan in de Monitor de run en kies boven
 *Afbeelding 5: een run annuleren. In de dialoog kies je OK.*
 
 - In een proef werd de run 28 seconden na de start geannuleerd. Er stond toen alleen de eerste activiteit (`SP_START_AUDIT_PIPELINE`) in de wachtrij van de activiteitenlijst onder het diagram, en er was niets geladen.
-- Annuleer je later in de run, dan kunnen bestanden in de landingzone al zijn geschreven. Ze staan dan in de wachtrij met `IsProcessed = 0` en worden bij de volgende Bronze-run opgepakt (dit is niet getest met een geannuleerde run).
+- Annuleer je later in de run, dan kunnen bestanden in de landingzone al zijn geschreven. Ze staan dan in de wachtrij met `IsProcessed = 0` en worden naar verwachting bij de volgende Bronze-run opgepakt.
 - De pipeline is daarna niet kapot. Je kunt hem gewoon opnieuw starten.
 
 ## Veelgemaakte fouten
 
 | Symptoom | Oorzaak en oplossing |
 |---|---|
-| De run eindigt groen en er is niets geladen | De waarden komen niet overeen met een actieve entiteit (typfout, andere naam, entiteit staat uit). Controleer met de query bij *Voor je begint*. Het gedrag bij een niet-bestaande naam is niet apart getest. |
+| De run eindigt groen en er is niets geladen | De waarden komen niet overeen met een actieve entiteit (typfout, andere naam, entiteit staat uit). Controleer met de query bij *Voor je begint*. |
 | De gewenste tabel is niet verwerkt in Bronze of Silver | Een eerder mislukt bestand van dezelfde tabel houdt de latere bestanden tegen: Bronze verwerkt de bestanden van een tabel op volgorde. Herstel de oorzaak, of sla het bestand bewust over, en start opnieuw. |
 | Je hebt de verkeerde omgeving geladen | De pipeline in de workspace van die omgeving laadt de DATA-workspace van die omgeving. Annuleer de run en start hem in de juiste workspace. |
 | De run duurt veel langer dan verwacht | Drukte op de capaciteit, of een eerste full load van een grote tabel. Zie *Time-outs*. |
