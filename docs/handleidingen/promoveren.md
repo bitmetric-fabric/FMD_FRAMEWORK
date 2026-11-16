@@ -5,7 +5,7 @@ sidebar_position: 7
 
 # Promoveren van Dev naar Test en Productie
 
-Een promotie zet de inhoud van een workspace in Dev via een **deployment pipeline** door naar Test, en daarna van Test naar Productie. Test en Productie hangen niet aan git: ze krijgen hun inhoud alleen via een promotie. Deze handleiding beschrijft de volgorde van een promotie, hoe je haar in de portal uitvoert en wat je daarna controleert. Doorloop haar voor Dev naar Test, en na akkoord van de klant opnieuw voor Test naar Productie. De schermafbeeldingen zijn opgenomen in november 2026.
+Een promotie zet de inhoud van een workspace in Dev via een **deployment pipeline** door naar Test, en daarna van Test naar Productie. Test en Productie hangen niet aan git: ze krijgen hun inhoud alleen via een promotie. Deze handleiding beschrijft de volgorde van een promotie, hoe je haar in de portal uitvoert en wat je daarna controleert. Doorloop haar voor Dev naar Test, en na akkoord van de eigenaar van Productie opnieuw voor Test naar Productie. De schermafbeeldingen zijn opgenomen in november 2026.
 
 ## Wat een promotie wel en niet doet
 
@@ -14,7 +14,7 @@ Een promotie zet de inhoud van een workspace in Dev via een **deployment pipelin
 | De definities van pipelines, notebooks, lakehouses, Variable Libraries, semantische modellen en rapporten | Data in tabellen en bestanden |
 | Shortcuts in Gold (omgezet naar Silver van het doel) | Registraties in de configuratiedatabase (per DATA-workspace) |
 | De default lakehouse van een notebook (omgezet naar het doel) | De configuratiedatabase zelf en de schedule-pipelines (de CONFIG-workspace zit in geen deployment pipeline) |
-| Verwijzingen naar items in andere workspaces (omgezet naar de tegenhanger in het doel) | De actieve value set van een Variable Library (blijft die van het doel) |
+| Verwijzingen naar items in andere workspaces (naar verwachting omgezet naar de tegenhanger in het doel; controleer dit na elke promotie) | De actieve value set van een Variable Library (blijft die van het doel) |
 | De standaardwaarden van een Variable Library | De koppeling van een Direct Lake-model aan Gold (alleen met een deployment rule) |
 
 Een promotie kopieert de **actuele** toestand van de bronstage: promoveer alleen wat in de bronomgeving is gecontroleerd. Er is geen rollback naar een eerdere versie. Herstel is een fix in Dev en opnieuw promoveren.
@@ -25,7 +25,7 @@ Een promotie kopieert de **actuele** toestand van de bronstage: promoveer alleen
 - Je weet welke workspaces gewijzigd zijn. Promoveer alleen die, en wel alles waarnaar een gewijzigd item verwijst.
 - Je bent Admin van de deployment pipelines, Contributor op de bron- en de doelworkspaces, en eigenaar van de semantische modellen waarvoor je een rule moet zetten.
 - Er draait geen load in de doelomgeving. Draai loads in verschillende omgevingen niet tegelijk: veel notebooks tegelijk tegen dezelfde configuratiedatabase kunnen een *Login timeout expired* geven.
-- Bij Test naar Productie: een go/no-go van de klant op Test.
+- Bij Test naar Productie: een go/no-go van de eigenaar van Productie op Test.
 
 ## De volgorde
 

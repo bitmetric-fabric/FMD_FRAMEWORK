@@ -11,7 +11,7 @@ Het gaat om een model op **OneLake** (`AzureStorage.DataLake`). Voor een model o
 
 De schermafbeeldingen komen uit een referentie-installatie van november 2026.
 
-## Wat vaststaat en wat niet
+## Wat je moet weten
 
 - **Verversen van de data werkt**, ook met de parameter actief.
 - **Promoveer alleen met de parameter actief.** Staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet en leest Test uit Dev.
@@ -29,13 +29,13 @@ De schermafbeeldingen komen uit een referentie-installatie van november 2026.
 
      ![Het Explorer-paneel van het lakehouse met het menu bij de map Tables en de keuze Properties](afbeeldingen/direct-lake-parameter/20-pad-ophalen-menu.png)
 
-     *Afbeelding 20: kies Properties bij de map Tables.*
+     *Afbeelding 1: kies Properties bij de map Tables.*
 
   2. Het paneel *Folder properties* toont de **URL**. Kies het kopieerknopje.
 
      ![Het paneel Folder properties met de URL en een kopieerknop, met de melding Copied](afbeeldingen/direct-lake-parameter/21-pad-ophalen-url.png)
 
-     *Afbeelding 21: kopieer de URL. Het ABFS-pad is vervaagd.*
+     *Afbeelding 2: kopieer de URL. Het ABFS-pad is vervaagd.*
 
   3. **De gekopieerde URL eindigt op `/Tables`. Haal dat deel weg**: het pad dat je in de parameter en in de rule gebruikt, eindigt op het lakehouse (`…/<LakehouseId>`). Het paneel toont de URL afgekapt; controleer het einde na het plakken.
 
@@ -45,19 +45,19 @@ De schermafbeeldingen komen uit een referentie-installatie van november 2026.
 
    ![Het menu rechtsboven in de modelweergave met de keuzes Editing, Viewing en Edit in Desktop](afbeeldingen/direct-lake-parameter/01-editing-modus.png)
 
-   *Afbeelding 1: schakel van Viewing naar Editing.*
+   *Afbeelding 3: schakel van Viewing naar Editing.*
 
 2. Kies onderaan **TMDL View**. Kies rechts in het paneel **Data** het tabblad **Model** en klap **Expressions** open. Er staat één expressie: `DirectLake - LH_GOLD_LAYER`. De melding *TMDL scripts are discarded on close* betekent dat een script niet wordt bewaard als je het venster sluit.
 
    ![De TMDL view met het paneel Data, tabblad Model en de knop om Expressions open te klappen](afbeeldingen/direct-lake-parameter/02-tmdl-view-expressions.png)
 
-   *Afbeelding 2: TMDL View, tabblad Model, onderdeel Expressions.*
+   *Afbeelding 4: TMDL View, tabblad Model, onderdeel Expressions.*
 
 3. Sleep **Expressions** naar de editor. Het script verschijnt met de bestaande expressie.
 
    ![Het script in de TMDL view na het slepen van Expressions, met alleen de bestaande expressie](afbeeldingen/direct-lake-parameter/03-script-na-slepen.png)
 
-   *Afbeelding 3: het script na het slepen. Het pad in `Source` is nog letterlijk; de ID's zijn afgedekt.*
+   *Afbeelding 5: het script na het slepen. Het pad in `Source` is nog letterlijk; de ID's zijn afgedekt.*
 
 4. Voeg boven de bestaande expressie de parameter toe, en laat in de expressie `DirectLake - LH_GOLD_LAYER` het letterlijke pad staan als commentaar. Het script wordt dan:
 
@@ -82,22 +82,22 @@ De schermafbeeldingen komen uit een referentie-installatie van november 2026.
 
    ![Het script met het parameterblok boven de bestaande expressie, de regel Source nog letterlijk](afbeeldingen/direct-lake-parameter/04-parameterblok-toegevoegd.png)
 
-   *Afbeelding 4: het parameterblok is toegevoegd; `Source` is nog letterlijk.*
+   *Afbeelding 6: het parameterblok is toegevoegd; `Source` is nog letterlijk.*
 
    ![Het script met Source op de parameter en het letterlijke pad in commentaar](afbeeldingen/direct-lake-parameter/05-source-aangepast.png)
 
-   *Afbeelding 5: `Source` gebruikt nu `OneLakeUrl`; het letterlijke pad staat in commentaar (met `//`).*
+   *Afbeelding 7: `Source` gebruikt nu `OneLakeUrl`; het letterlijke pad staat in commentaar (met `//`).*
 
    - Laat de bestaande `lineageTag` en de annotaties (`PBI_IncludeFutureArtifacts`) staan. De editor beheert ze. Microsoft beschrijft `PBI_IncludeFutureArtifacts` niet; raak hem niet aan.
    - **De parameter moet in hetzelfde script staan** als de verwijzing erop. Staat `OneLakeUrl` niet in het model, dan geeft de Apply de foutmelding *Direct Lake mode requires a Direct Lake data source*.
    - De waarde achter het `=` bij `OneLakeUrl` is de huidige waarde van de parameter in Dev. Je hoeft hem nergens apart in te stellen.
-   - Plak het script in één keer: de editor springt bij typen vanzelf in.
+   - Plak het script in één keer: de editor springt bij typen vanzelf in. Staat een regel van het script in een PDF over meerdere regels verdeeld, voeg die dan samen tot één regel voor je plakt.
 
 5. Kies **Preview** om het verschil met het model te zien, en daarna **Apply**.
 
    ![De TMDL view met het verschil tussen het huidige model en het script: links in rood de oude regel Source, rechts in groen de nieuwe regels](afbeeldingen/direct-lake-parameter/06-preview-verschil.png)
 
-   *Afbeelding 6: Preview toont het verschil. Rood is wat verdwijnt (de actieve letterlijke regel), groen is wat erbij komt (de uitgecommentarieerde letterlijke regel en de regel met `OneLakeUrl`). De ID's zijn afgedekt.*
+   *Afbeelding 8: Preview toont het verschil. Rood is wat verdwijnt (de actieve letterlijke regel), groen is wat erbij komt (de uitgecommentarieerde letterlijke regel en de regel met `OneLakeUrl`). De ID's zijn afgedekt.*
 
 6. Controleer dat het model de parameter kent. Onder **Expressions** staan nu twee items: de expressie en de parameter.
 
@@ -109,7 +109,7 @@ Kies in de modelweergave **Refresh** (het pijltje ernaast opent het menu). Er zi
 
 ![Het Refresh-menu met de opties Schema and data, Schema en Data](afbeeldingen/direct-lake-parameter/07-refresh-menu.png)
 
-*Afbeelding 7: het menu bij Refresh.*
+*Afbeelding 9: het menu bij Refresh.*
 
 | Optie | Met de parameter actief |
 |---|---|
@@ -127,7 +127,7 @@ Faalt het met de melding *Underlying Error: Query Evaluation failed for query: D
 
 ![De foutmelding Query Evaluation failed for query DirectLake - LH_GOLD_LAYER bij het verversen van het schema](afbeeldingen/direct-lake-parameter/08-schema-fout.png)
 
-*Afbeelding 8: de melding bij Refresh, Schema. Het Activity ID is afgedekt.*
+*Afbeelding 10: de melding bij Refresh, Schema. Het Activity ID is afgedekt.*
 
 **Oorzaak: een tabel zonder `sourceLineageTag`.** Met die tag koppelt de editor een tabel aan de tabel in het lakehouse. Een tabel die via een script of de API is aangemaakt, kan hem missen. Het gevolg: Refresh → Schema faalt met bovenstaande melding, ook als de parameter niet in het model staat. In ons referentiemodel was dat de enige afwijking: dezelfde tabel faalde zonder de tag en slaagde na het toevoegen ervan; een data-verversing slaagde in beide gevallen.
 
@@ -143,7 +143,7 @@ Open het model daarna opnieuw in Editing en ververs het schema. Wijzig je het mo
 
 Controleer vooraf in de TMDL view (sleep **Tables** naar de editor) of elke tabel de regel `sourceLineageTag` heeft.
 
-Mogelijk hadden eerdere mislukte schema-verversingen op andere modellen dezelfde oorzaak; dat is niet nagegaan.
+
 
 Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad actief tijdens de promotie, dan herkoppelt de parameter rule niet en wijst het model in Test naar Gold van Dev.
 
@@ -154,19 +154,19 @@ Promoveer ook hier alleen met de parameter actief: staat het letterlijke pad act
 
    ![De deployment pipeline met de stage Test en in de lijst het model aangevinkt dat alleen in Development bestaat](afbeeldingen/direct-lake-parameter/09-promotie-selecteren.png)
 
-   *Afbeelding 9: het model is aangevinkt (status Only in source). De namen van andere modellen zijn vervaagd.*
+   *Afbeelding 11: het model is aangevinkt (status Only in source). De namen van andere modellen zijn vervaagd.*
 
 3. Kies **Deploy**, vul eventueel een notitie in en bevestig in het venster *Deploy to this stage*. Onder **New (1)** staat het model.
 
    ![Het venster Deploy to this stage met onder New (1) het model dat wordt gedeployed](afbeeldingen/direct-lake-parameter/10-promotie-bevestigen.png)
 
-   *Afbeelding 10: bevestig de deployment.*
+   *Afbeelding 12: bevestig de deployment.*
 
 4. Wacht op de melding *Successful deployment* bij de stage Test. Het model staat nu in Test en heeft in de lijst de status *Same as source*.
 
    ![De deployment pipeline na de deployment: de stage Test toont Successful deployment en het model staat in de lijst](afbeeldingen/direct-lake-parameter/11-promotie-klaar.png)
 
-   *Afbeelding 11: de deployment is klaar.*
+   *Afbeelding 13: de deployment is klaar.*
 
 Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet dus eerst naar Test.
 
@@ -174,7 +174,7 @@ Een rule kan pas worden gemaakt als het model in Test bestaat. Het model moet du
 
 ![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat in de workspace van Dev, het model in die van Test](afbeeldingen/direct-lake-parameter/12-lineage-voor-de-rule.png)
 
-*Afbeelding 12: voor de rule. Het model in Test leest uit het lakehouse in de workspace (D).*
+*Afbeelding 14: voor de rule. Het model in Test leest uit het lakehouse in de workspace (D).*
 
 ## Stap 4: de parameter rule in Test
 
@@ -184,25 +184,25 @@ Deployment rules werken pas bij de volgende deployment naar die stage.
 
    ![Het paneel Deployment rules voor de stage Test met een lijst van de modellen in die stage](afbeeldingen/direct-lake-parameter/13-deployment-rules-lijst.png)
 
-   *Afbeelding 13: kies het model in de lijst. De namen van andere modellen zijn vervaagd.*
+   *Afbeelding 15: kies het model in de lijst. De namen van andere modellen zijn vervaagd.*
 
 2. Het model heeft de secties **Data source rules** en **Parameter rules**. Klap **Parameter rules** uit (niet *Data source rules*). Zonder rules staat er *No rules were added yet*. Kies **Add rule**.
 
    ![De sectie Parameter rules van het model met de tekst No rules were added yet en de knop Add rule](afbeeldingen/direct-lake-parameter/14-parameter-rules-leeg.png)
 
-   *Afbeelding 14: de sectie Parameter rules is nog leeg.*
+   *Afbeelding 16: de sectie Parameter rules is nog leeg.*
 
 3. Kies bij **From** de parameter `OneLakeUrl`. Open bij **To** de keuzelijst. Daar staat de huidige waarde (het pad van Dev) en de keuze **Other**. Kies **Other** en plak het pad van Gold van Test: `https://onelake.dfs.fabric.microsoft.com/<WorkspaceId Gold Test>/<LakehouseId Gold Test>`. Zo vind je dat pad: zie *Vooraf*.
 
    ![De regel voor de parameter OneLakeUrl met bij To een keuzelijst met de huidige waarde en de keuze Other](afbeeldingen/direct-lake-parameter/15-parameter-waarde-kiezen.png)
 
-   *Afbeelding 15: kies bij To de keuze Other en vul daarna het pad van Gold van Test in.*
+   *Afbeelding 17: kies bij To de keuze Other en vul daarna het pad van Gold van Test in.*
 
 4. Kies **Save**. De rule staat in de lijst en het icoon bij *Parameter rules* toont dat er een rule is.
 
    ![De opgeslagen parameter rule voor OneLakeUrl met een nieuwe waarde](afbeeldingen/direct-lake-parameter/16-rule-opgeslagen.png)
 
-   *Afbeelding 16: de rule is opgeslagen.*
+   *Afbeelding 18: de rule is opgeslagen.*
 
 De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijderd. De deployment faalt dan.
 
@@ -212,19 +212,19 @@ De rule wordt ongeldig als de parameter in het model wordt hernoemd of verwijder
 
    ![Het venster Deploy to this stage met onder Different (1) het model](afbeeldingen/direct-lake-parameter/17-opnieuw-promoveren.png)
 
-   *Afbeelding 17: deploy het model opnieuw.*
+   *Afbeelding 19: deploy het model opnieuw.*
 
 2. Wacht op de melding *Successfully deployed content to 'Test'*.
 
    ![De melding Successfully deployed content To Test en het menu bij het model](afbeeldingen/direct-lake-parameter/18-promotie-geslaagd.png)
 
-   *Afbeelding 18: de deployment is geslaagd. Het menu bij het model bevat View item lineage.*
+   *Afbeelding 20: de deployment is geslaagd. Het menu bij het model bevat View item lineage.*
 
 3. Controleer in de lineage view dat het model in Test het lakehouse van Test gebruikt. Kies in de lijst bij het model het menu **…** en daarna **View item lineage**. Het lakehouse `LH_GOLD_LAYER` staat nu in de workspace van **Test**:
 
    ![De item lineage van het model in Test: het lakehouse LH_GOLD_LAYER staat nu in de workspace van Test](afbeeldingen/direct-lake-parameter/19-lineage-na-de-rule.png)
 
-   *Afbeelding 19: na de rule. Het model leest uit het lakehouse in de workspace (T).*
+   *Afbeelding 21: na de rule. Het model leest uit het lakehouse in de workspace (T).*
 
 4. Ververs het model in Test (**Refresh → Data**); de verversing moet `Completed` zijn. Een verversing van het model in Test slaagt ook zonder dat het aan een connectie gekoppeld is; de verversing loopt dan onder de identiteit van de gebruiker.
 5. Een DAX-vergelijking bewijst alleen iets als de data in beide omgevingen verschilt. Gebruik de lineage view als controle.
@@ -292,7 +292,7 @@ Een Direct Lake-model op OneLake leest standaard met de identiteit van de gebrui
 |---|---|
 | *Direct Lake mode requires a Direct Lake data source … Failed to save modifications* bij een Apply | Het script verwijst naar `OneLakeUrl` zonder dat de parameter in het model of in hetzelfde script staat. Neem de parameter in het script op. Dezelfde melding is eerder bij andere modellen gezien; de oorzaak is daar niet bekend. |
 | *Query Evaluation failed for query: DirectLake - LH_GOLD_LAYER* bij **Refresh → Schema** of **Schema and data** | Een tabel mist `sourceLineageTag`. Voeg hem toe (zie *Het schema bijwerken*). De parameter is niet de oorzaak. |
-| **Edit tables** faalt met *ConceptualSchemaSettings* | Op 26 oktober 2026 gezien; oorzaak onbekend. Op 10 november 2026 werkte Edit tables met de parameter actief. Controleer eerst de `sourceLineageTag` van de tabellen. |
+| **Edit tables** faalt met *ConceptualSchemaSettings* | Controleer eerst de `sourceLineageTag` van de tabellen. Edit tables werkt met de parameter actief. |
 | Het model in Test leest uit Dev | Het letterlijke pad was actief tijdens de promotie, of de rule is nog niet van kracht. Controleer de lineage van het model in Test, zet de parameter aan in Dev en promoveer opnieuw. |
 | De deployment faalt na het hernoemen van de parameter | De rule is ongeldig. Maak de rule opnieuw. |
 | Parameter rules zijn niet zichtbaar | Het model is nog niet naar die stage gepromoveerd. Promoveer eerst. |

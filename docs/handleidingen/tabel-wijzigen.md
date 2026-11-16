@@ -41,7 +41,7 @@ Het overzicht erboven kleurt elke cel die afwijkt van de configdb oranje, met de
 
 ## Kolommen of bronfilter wijzigen
 
-De velden **Kolommen om te laden** en **Bronfilter** staan op tab 2 onder de eigenschappen van de tabel. Ze werken alleen voor bronnen waarvan de kolommen zijn ontdekt (SQL, Snowflake en OData).
+De velden **Kolommen om te laden** en **Bronfilter** staan op tab 2 onder de eigenschappen van de tabel. Ze bestaan alleen voor de brontypen SQL (`ASQL_01`, `ASQL_02`), Snowflake (`SNOWFLAKE_01`) en OData (`ODATA_01`).
 
 - **Een filter wijzigen** verwijdert niets uit Bronze en Silver. Een ruimer filter haalt bij een incrementele tabel de oudere rijen niet alsnog op: reset dan het watermark (zie [Een tabel volledig opnieuw laden](#een-tabel-volledig-opnieuw-laden)).
 - **De proefdraai voert het filter niet uit.** Controleer het filter eerst met een query op de bron.
@@ -79,7 +79,7 @@ Registreer en bekijk wat de regel doet:
 
 - **Een Bronze-regel** werkt vanaf de volgende levering.
 - **Een Silver-regel** werkt alleen op rijen die daarna veranderen. Moet de regel op de hele tabel gelden, registreer dan eerst en kies daarna op tab 5 de actie **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)**. Die zet de tabel terug in de wachtrij van Silver; de volgende run van `PL_FMD_LOAD_SILVER` bouwt hem dan opnieuw op uit Bronze. Zie [Silver opnieuw laten verwerken](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken).
-- Verandert de regel het type van een kolom of de kolommen zelf, verwijder dan eerst de Silver-tabel.
+- Verandert de regel het type van een kolom of de kolommen zelf, verwijder dan eerst de Silver-tabel uit de Silver-lakehouse.
 
 Een eigen cleansing-functie zet je eerst in `NB_FMD_CUSTOM_DQ_CLEANSING`, in Dev, en promoveer je daarna met de CODE-workspace.
 
@@ -111,7 +111,7 @@ Vul bij **LoadGroup** de naam van de groep in. Leeg betekent: de groep van de br
 
 ![Het veld LoadGroup, ingevuld met nacht.](afbeeldingen/tabel-wijzigen/06-loadgroup.png)
 
-- Controleer dat er een schema met die groep bestaat in de scheduler van elke omgeving (zie [Dagelijkse routine en schedules](dagelijkse-routine.md)). Anders laadt de tabel nergens op een schema.
+- Geven de schedules van een omgeving een `LoadGroup` mee, controleer dan dat er een schedule met de groep van deze tabel bestaat (zie [Dagelijkse routine en schedules](dagelijkse-routine.md)). Anders laadt de tabel in die omgeving niet op een schedule. Een schedule zonder parameters laadt alle tabellen, ook deze.
 - Een tabel in een andere groep dan haar bron laadt niet mee in een run voor de groep van de bron. Een run zonder groep laadt alles.
 
 ## Een tabel volledig opnieuw laden

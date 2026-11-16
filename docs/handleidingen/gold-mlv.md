@@ -41,7 +41,7 @@ WHERE IsCurrent AND NOT IsDeleted
 ```
 
 - **Filter op de huidige stand.** `IsCurrent` bestaat in Silver ook zonder historie. `IsDeleted` markeert rijen die in de bron zijn verwijderd. Wil je die ook zien, laat dat deel van het filter dan weg.
-- **Naam.** De afspraak is `gold.D_<Naam>` voor een dimensie en `gold.F_<Naam>` voor een feitentabel. Dit is een conventie en wordt niet afgedwongen. Fabric slaat de naam op in kleine letters (`gold.d_currency`). Verwijs in SQL naar de kleine letters; de naam met hoofdletters gebruik je in het semantisch model.
+- **Naam.** De afspraak is `gold.D_<Naam>` voor een dimensie en `gold.F_<Naam>` voor een feitentabel. Dit is een conventie en wordt niet afgedwongen. Fabric slaat de naam op in kleine letters (`gold.d_currency`). Verwijs in SQL naar de kleine letters. Een semantisch model dat je vanuit de lakehouse maakt, neemt die kleine letters over; wil je er een naam met hoofdletters (`F_Sales`), geef de tabel die dan in het model.
 - **Meerdere MLV's** zet je in aparte cellen, in de volgorde van hun afhankelijkheid: eerst de MLV die een andere nodig heeft.
 
 ## Stap 3: de MLV draaien

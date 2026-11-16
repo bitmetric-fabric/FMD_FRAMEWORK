@@ -14,7 +14,7 @@ Een schedule start een schedule-pipeline, die de rest aanroept:
 1. `PL_FMD_SCHEDULE_<omgeving>` in de workspace INTEGRATION CONFIG start met de parameter `Target = LOAD`.
 2. Die roept `PL_FMD_ORCHESTRATION` aan in de INTEGRATION CODE-workspace van de omgeving, met de parameters `LoadGroup` en `DataSourceName`.
 3. De orchestratie start `PL_FMD_LOAD_ALL`: Landingzone, Bronze en Silver.
-4. De setup van de business-domeinen hangt daarna per domein de Gold-pipeline `PL_<DOMEIN>_LOAD_GOLD` aan de orchestratie, met de conditie dat `PL_FMD_LOAD_ALL` **Succeeded** is. Na een fout in één entiteit draait Gold dan voor geen enkel domein. Een installatie kan die conditie aanpassen.
+4. De setup van de business-domeinen hangt daarna per domein de Gold-pipeline `PL_FMD_LOAD_GOLD` van dat domein aan de orchestratie (als activiteit `PL_<DOMEIN>_LOAD_GOLD`), met de conditie dat `PL_FMD_LOAD_ALL` **Succeeded** is. Na een fout in één entiteit draait Gold dan voor geen enkel domein. Een installatie kan die conditie aanpassen.
 5. Gold draait na elke run van de orchestratie, ook na een run met een filter op `LoadGroup` of `DataSourceName`.
 
 `PL_FMD_SCHEDULE_<omgeving>` heeft de parameters `Target` (`LOAD` of `MAINTENANCE`), `LoadGroup` en `DataSourceName`. Een andere waarde van `Target` laat de pipeline falen met `UnknownTarget`. De pipeline heeft `concurrency: 1`: een run wacht zolang een andere van dezelfde pipeline loopt.

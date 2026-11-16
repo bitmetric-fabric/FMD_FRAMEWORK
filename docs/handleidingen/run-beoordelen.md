@@ -78,30 +78,11 @@ De reden van zo'n kind staat in `LogData` achter `Failed notebooks: [...]`.
 
 **Herstel via de configuratie.** Is de oorzaak een registratiefout (bijvoorbeeld verkeerde `PrimaryKeys`), corrigeer die dan met `NB_REGISTRATIE` en start opnieuw. De wachtende bestanden worden dan op volgorde verwerkt.
 
-**Een bestand bewust overslaan.** Corrigeer eerst de bron en land opnieuw, of sla het bestand bewust over:
+**Een bestand bewust overslaan.** Corrigeer eerst de bron en land opnieuw, of zet de wachtrij bewust op verwerkt met de actie *Open wachtrij op verwerkt zetten* op tab 5 van de registratie-editor (zie [Registratie overzetten en beheren](overzetten-en-beheren.md)). De actie zet alle open regels van de tabel op verwerkt, in de gekozen laag, en niet één bestand. Je vult een reden in en de actie begint met een proefdraai. Leg het overslaan vast: de data uit die bestanden komt dan niet in Bronze.
 
-```sql
-UPDATE [execution].[PipelineLandingzoneEntity]
-SET    [IsProcessed]     = 1
-      ,[LoadEndDateTime] = GETDATE()
-WHERE  [LandingzoneEntityId] = <LandingzoneEntityId>
-  AND  [FileName]            = '<bestandsnaam>'
-```
+**Een tabel volledig opnieuw laden.** Kies de actie *Watermark resetten* op tab 5 (zie [Een watermark resetten](overzetten-en-beheren.md#een-watermark-resetten)). De registratie en de rij met het watermark blijven bestaan; alleen de opgeslagen waarde wordt leeg. Start daarna de tabel met de hand (zie [Een tabel of bron handmatig laden](handmatig-laden.md)) of wacht op het volgende schedule. Bij een incrementele tabel verwijdert een volledige herlading na een watermark-reset naar verwachting geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan. Een tabel die je op volledig laden zet, werkt anders: een volledige load markeert rijen die in de bron ontbreken wel als verwijderd, zie [Een bestaande tabel wijzigen](tabel-wijzigen.md).
 
-Leg het overslaan vast. De data uit dat bestand komt dan niet in Bronze.
-
-**Een tabel volledig opnieuw laden.** Maak de opgeslagen waarde van het watermark leeg:
-
-```sql
-UPDATE [execution].[LandingzoneEntityLastLoadValue]
-SET    [LoadValue]        = NULL
-      ,[LastLoadDatetime] = GETDATE()
-WHERE  [LandingzoneEntityId] = <LandingzoneEntityId>
-```
-
-Verwijder de rij **niet**: zonder die rij komt de tabel na de volgende landing niet meer in Bronze. Start daarna de tabel met de hand (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Bij een incrementele tabel verwijdert een volledige herlading naar verwachting geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan.
-
-**Silver opnieuw laten verwerken.** Een gewijzigde cleansing-regel voor Silver werkt alleen op rijen die daarna veranderen. Zet de tabel terug in de wachtrij met de actie *Silver opnieuw laten verwerken* op tab 5 van de registratie-editor (zie [Registratie overzetten en beheren](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken)), of met de procedure `execution.sp_RequeueSilverLayerEntities(@WorkspaceId, @DataSourceName, @Entities, @DryRun)`. `@WorkspaceId` is de DATA-workspace, het filter werkt als bij [Een tabel of bron handmatig laden](handmatig-laden.md), en `@DryRun` staat standaard op 1: de procedure toont dan alleen wat er in de wachtrij zou komen. Verandert de regel het type of de kolommen van de Silver-tabel, verwijder dan eerst de Silver-tabel.
+**Silver opnieuw laten verwerken.** Een gewijzigde cleansing-regel voor Silver werkt alleen op rijen die daarna veranderen. Zet de tabel terug in de wachtrij met de actie *Silver opnieuw laten verwerken* op tab 5 van de registratie-editor (zie [Registratie overzetten en beheren](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken)). Verandert de regel het type of de kolommen van de Silver-tabel, verwijder dan eerst de Silver-tabel uit de Silver-lakehouse.
 
 **Een tabel uitzetten.** Is een tabel niet meer nodig of kapot in de bron, zet haar dan uit via de registratie in plaats van elke nacht te laten falen. Zet de open bestanden in de wachtrij op verwerkt, zoals hierboven.
 
