@@ -388,7 +388,8 @@ def register(sources, entities, domain, environments, dry_run=True, requeue_silv
                     print(f"            WARNING: {row['Warning']}")
             if silver_changed(sets[-2]):
                 print("A changed Silver rule only reaches rows that change afterwards. To rebuild those "
-                      "entities from Bronze, register with dry_run=False, requeue_silver=True (drop the "
+                      "entities from Bronze, register with dry_run=False, requeue_silver=True, or use the action "
+                      "'Silver opnieuw laten verwerken' on tab 5 after registering (drop the "
                       "Silver table first if the rule changes a type or the columns).")
             orphans = sets[-1]
             if orphans and show_orphans:

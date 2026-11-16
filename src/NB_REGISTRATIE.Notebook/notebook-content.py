@@ -51,7 +51,7 @@
 # 
 # **Cleansing rules**: per laag kies je *ongewijzigd laten* (de bestaande regels blijven), *vervangen* (de lijst is de
 # waarheid) of *alles verwijderen*. Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen; voor de hele
-# tabel registreer je met `register(..., dry_run=False, requeue_silver=True)` (zie onderaan).
+# tabel kies je daarna op tab 5 de actie *Silver opnieuw laten verwerken*.
 # `exclude_rows` laat rijen met een bronvlag weg, bijvoorbeeld voor CDC-deletes: als Silver-regel
 # `{"function": "exclude_rows", "columns": "EVENT_CRUD", "parameters": {"values": ["delete"]}}`. Silver ziet de sleutel dan
 # als verdwenen en zet hem op `IsDeleted = 1, IsCurrent = 0`. Niet als Bronze-regel gebruiken. De lijst met functies in de
@@ -111,9 +111,10 @@ registration_ui(domain="INTEGRATION", environment="D")
 # De editor roept `register(sources, entities, domain, environments, dry_run, requeue_silver)` aan; je kunt dat ook
 # rechtstreeks doen. `table("""...""")` maakt de lijsten van een geplakte tabel (kolommen gescheiden door een tab of
 # `|`), en `print_entity_list(...)` print de ontdekte tabellen als tabel. De velden staan in de docstring van `register`.
-# Een Silver-regel voor de hele tabel opnieuw toepassen: `register(..., dry_run=False, requeue_silver=True)`; dat zet de
-# entiteiten met een gewijzigde Silver-regel terug in de wachtrij (`execution.sp_RequeueSilverLayerEntities`). Verwijder
-# de Silver-tabel eerst als de regel een type of de kolommen verandert (de editor kent `requeue_silver` niet).
+# Een Silver-regel voor de hele tabel opnieuw toepassen: in de editor met de actie *Silver opnieuw laten verwerken* op tab 5,
+# of hier met `register(..., dry_run=False, requeue_silver=True)`; dat zet de entiteiten met een gewijzigde Silver-regel terug
+# in de wachtrij (`execution.sp_RequeueSilverLayerEntities`). Verwijder de Silver-tabel eerst als de regel een type of de
+# kolommen verandert.
 # 
 # De ontdekking starten zonder de editor: `start_discovery(...)` (hieronder) start `PL_FMD_DISCOVER_SOURCE` in de
 # CODE-workspace van deze omgeving en wacht tot hij klaar is. Je hebt een rol nodig die items in die workspace mag uitvoeren.
