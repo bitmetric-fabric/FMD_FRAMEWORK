@@ -182,7 +182,7 @@ Ga naar tab **3. Controleren en registreren**.
 3. Klik op **Proefdraaien (dry_run=True)**. Dit voert de volledige registratie uit in de database en draait die daarna terug. De uitkomst staat onder de knoppen: per tabel *New*, *Changed* of *Unchanged*, bij een wijziging wat er verandert (`oud -> nieuw`), eventuele waarschuwingen en de tabellen die in deze workspace actief zijn maar niet in je lijst staan. Die laatste blijven ongemoeid: registreren schakelt ze niet uit.
 4. Lees de uitkomst. Staat er een fout, ga dan terug naar tab 1 of 2, los hem op en draai de proefdraai opnieuw. Alle fouten worden tegelijk getoond.
 5. Vink de bevestiging aan en klik op **Registreren**. De knop is geblokkeerd tot er een proefdraai is gedaan op precies deze wijzigingen. Wijzig je daarna nog iets, dan is de proefdraai ongeldig.
-6. Na het registreren toont de editor het resultaat als een tekst met `table("""...""")`. Bewaar die tekst in het projectlog of in git: zo is terug te vinden wat er wanneer is geregistreerd.
+6. Na het registreren toont de editor het resultaat als een tekst met `table("""...""")`. Bewaar die tekst in git of in je eigen beheerlogboek: zo is terug te vinden wat er wanneer is geregistreerd.
 
 **Terug naar begin** gaat naar tab 1 en wist de meldingen. De wijzigingen blijven staan.
 
@@ -204,7 +204,7 @@ Ga naar tab **3. Controleren en registreren**.
 | De tabel is geregistreerd, maar er landt niets | Het brontype past niet bij het connectietype, of de tabel of een laag staat uit. Controleer het brontype en **Actief**. |
 | **Registreren** blijft geblokkeerd | Je hebt na de proefdraai nog iets gewijzigd, of de bevestiging niet aangevinkt. Draai de proefdraai opnieuw. |
 | Een fout in het bronfilter verschijnt pas bij de load | De proefdraai voert het filter niet uit. Test het filter in de bron. |
-| De Bronze-merge faalt nadat je kolommen hebt weggehaald bij een tabel die al in Bronze staat | Verwijder eerst de Bronze- en Silver-tabel van die tabel, of kies de kolommen vóór de eerste load. |
+| De Bronze-merge faalt nadat je kolommen hebt weggehaald bij een tabel die al in Bronze staat | Gebruik eerst op tab 5 de actie *Opruimen na een PK-wijziging (Bronze en Silver wissen)*, zie [Registratie overzetten en beheren](overzetten-en-beheren.md); die wist ook de Silver-historie. Kies de kolommen bij voorkeur vóór de eerste load. |
 | Een gewijzigde Silver-cleansingregel werkt alleen op rijen die daarna veranderen | Zet de tabel opnieuw in de wachtrij van Silver met de actie *Silver opnieuw laten verwerken* op tab 5, zie [Registratie overzetten en beheren](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken). |
 | Je registreert een andere bron voor dezelfde tabel (bijvoorbeeld `ASQL_02` in plaats van `ASQL_01`) | Dit maakt een nieuwe registratie en laat de oude achter. Zet de oude tabel uit. |
 | Een andere namespace geeft andere tabelnamen | De namespace verandert na de eerste registratie niet meer. |

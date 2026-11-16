@@ -55,7 +55,7 @@ WHERE  le.[IsActive] = 1
 ORDER BY ds.[Name], le.[SourceSchema], le.[SourceName];
 ```
 
-De kolommen zijn gecontroleerd met een `SELECT` op de configuratiedatabase van de referentie-installatie). Dezelfde tabel komt meerdere keren voor, eenmaal per omgeving. Kunnen meerdere bronnen dezelfde tabelnaam hebben, combineer dan `DataSourceName` en `Entities`.
+Dezelfde tabel komt meerdere keren voor, eenmaal per omgeving. Kunnen meerdere bronnen dezelfde tabelnaam hebben, combineer dan `DataSourceName` en `Entities`.
 
 **3. Controleer dat er geen geplande run loopt** in dezelfde omgeving, en dat de wekelijkse maintenance niet draait. Een gelijktijdige schrijfactie op dezelfde tabellen kan mogelijk falen.
 
