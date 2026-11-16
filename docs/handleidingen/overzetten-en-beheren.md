@@ -55,6 +55,7 @@ Onder **Actie** kies je wat je met de geselecteerde tabellen doet:
 | Actie | Wat ze doet |
 |---|---|
 | **Watermark resetten (de volgende load laadt alles)** | Maakt het watermark leeg, zodat de volgende load de hele tabel ophaalt. De registratie blijft staan. |
+| **Watermark op een waarde zetten** | Zet het watermark op een waarde die je zelf invult: een datum (`jjjj-mm-dd uu:mm:ss.mmm`) of een geheel getal. De registratie blijft staan. |
 | **Open wachtrij op verwerkt zetten** | Zet de open regels van de tabel in de wachtrij op verwerkt, in de gekozen laag (Landingzone, Bronze of allebei). Er wordt niets geladen. Gebruik dit om een bestand bewust over te slaan. |
 | **Opruimen na een PK-wijziging (Bronze en Silver wissen)** | Wist de Bronze- en Silver-tabel, zet de open wachtrij op verwerkt en maakt het watermark leeg. De volgende load bouwt de tabel opnieuw op. |
 | **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)** | Zet de tabel terug in de wachtrij van Silver, zodat de volgende run van `PL_FMD_LOAD_SILVER` haar opnieuw uit Bronze opbouwt. Er wordt niets gewist en het watermark blijft staan. |
