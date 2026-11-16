@@ -23,7 +23,7 @@ Per laag is het een lijst van regels. De regels draaien na elkaar, in de volgord
 
 - Bronze draait de regels op de gelezen data, vóór de merge naar Bronze.
 - Silver draait de regels op wat uit Bronze komt.
-- Een Silver-regel werkt alleen op rijen die daarna veranderen. Zie [Een cleansing rule wijzigen](tabel-wijzigen.md#een-cleansing-rule-wijzigen).
+- Een Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel zet je Silver opnieuw in de wachtrij met de actie *Silver opnieuw laten verwerken* op tab 5. Zie [Een cleansing rule wijzigen](tabel-wijzigen.md#een-cleansing-rule-wijzigen).
 
 ## Overzicht
 
