@@ -205,6 +205,6 @@ Ga naar tab **3. Controleren en registreren**.
 | **Registreren** blijft geblokkeerd | Je hebt na de proefdraai nog iets gewijzigd, of de bevestiging niet aangevinkt. Draai de proefdraai opnieuw. |
 | Een fout in het bronfilter verschijnt pas bij de load | De proefdraai voert het filter niet uit. Test het filter in de bron. |
 | De Bronze-merge faalt nadat je kolommen hebt weggehaald bij een tabel die al in Bronze staat | Verwijder eerst de Bronze- en Silver-tabel van die tabel, of kies de kolommen vóór de eerste load. |
-| Een gewijzigde Silver-cleansingregel werkt alleen op rijen die daarna veranderen | Zet de tabel opnieuw in de wachtrij van Silver, zie [Een run beoordelen en een fout herstellen](run-beoordelen.md#stap-5-herstellen). |
+| Een gewijzigde Silver-cleansingregel werkt alleen op rijen die daarna veranderen | Zet de tabel opnieuw in de wachtrij van Silver met de actie *Silver opnieuw laten verwerken* op tab 5, zie [Registratie overzetten en beheren](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken). |
 | Je registreert een andere bron voor dezelfde tabel (bijvoorbeeld `ASQL_02` in plaats van `ASQL_01`) | Dit maakt een nieuwe registratie en laat de oude achter. Zet de oude tabel uit. |
 | Een andere namespace geeft andere tabelnamen | De namespace verandert na de eerste registratie niet meer. |

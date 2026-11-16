@@ -5,7 +5,7 @@ sidebar_position: 5
 
 # Registratie overzetten en beheren
 
-Een promotie neemt geen registraties mee. Wat je in Dev hebt geregistreerd, moet je dus ook in Test en Productie registreren, vóór je de DATA-workspace van een domein promoveert. Dat doe je op tab 4 van de registratie-editor. Tab 5 is voor het dagelijks beheer: de laadstatus bekijken, een watermark resetten, de wachtrij opruimen en een tabel opruimen na een wijziging van de primary key. Hoe je de editor opent en een bron registreert, staat in [Bronnen en tabellen registreren](registreren.md). De schermafbeeldingen zijn opgenomen in november 2026.
+Een promotie neemt geen registraties mee. Wat je in Dev hebt geregistreerd, moet je dus ook in Test en Productie registreren, vóór je de DATA-workspace van een domein promoveert. Dat doe je op tab 4 van de registratie-editor. Tab 5 is voor het dagelijks beheer: de laadstatus bekijken, een watermark resetten, de wachtrij opruimen, Silver opnieuw laten verwerken en een tabel opruimen na een wijziging van de primary key. Hoe je de editor opent en een bron registreert, staat in [Bronnen en tabellen registreren](registreren.md). De schermafbeeldingen zijn opgenomen in november 2026.
 
 **Elke actie begint met een proefdraai.** Een proefdraai schrijft en wist niets: hij toont per omgeving of tabel wat er zou gebeuren. Pas daarna wordt de knop voor het echte werk actief.
 
@@ -57,6 +57,7 @@ Onder **Actie** kies je wat je met de geselecteerde tabellen doet:
 | **Watermark resetten (de volgende load laadt alles)** | Maakt het watermark leeg, zodat de volgende load de hele tabel ophaalt. De registratie blijft staan. |
 | **Open wachtrij op verwerkt zetten** | Zet de open regels van de tabel in de wachtrij op verwerkt, in de gekozen laag (Landingzone, Bronze of allebei). Er wordt niets geladen. Gebruik dit om een bestand bewust over te slaan. |
 | **Opruimen na een PK-wijziging (Bronze en Silver wissen)** | Wist de Bronze- en Silver-tabel, zet de open wachtrij op verwerkt en maakt het watermark leeg. De volgende load bouwt de tabel opnieuw op. |
+| **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)** | Zet de tabel terug in de wachtrij van Silver, zodat de volgende run van `PL_FMD_LOAD_SILVER` haar opnieuw uit Bronze opbouwt. Er wordt niets gewist en het watermark blijft staan. |
 
 Bij elke actie vul je een **Reden** in. Die is verplicht en wordt vastgelegd in het logboek van de configuratiedatabase.
 
@@ -74,6 +75,25 @@ Kies **Watermark resetten**, vul de reden in en klik op **1. Proefdraaien**. De 
 
 Verwijder de watermark-rij nooit met de hand: zonder die rij komt de tabel na de volgende landing niet meer in Bronze. Bij een incrementele tabel verwijdert een volledige herlading geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan. Start na het resetten de tabel met de hand, zie [Een tabel of bron handmatig laden](handmatig-laden.md).
 
+### Silver opnieuw laten verwerken
+
+Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Moet de regel voor de hele tabel gelden, bijvoorbeeld een nieuwe `clamp_min_date` of `exclude_rows`, dan moet Silver de tabel opnieuw uit Bronze opbouwen. Met deze actie zet je de tabel daarvoor terug in de wachtrij van Silver.
+
+1. Selecteer de tabel en kies **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)**.
+2. Vul de reden in en klik op **1. Proefdraaien**. De uitkomst zegt dat Silver in de wachtrij zou komen en dat de volgende run van `PL_FMD_LOAD_SILVER` de tabel opnieuw uit Bronze verwerkt, zonder nieuwe levering. De waarschuwing herinnert eraan dat je bij een regel die het type of de kolommen van de Silver-tabel verandert, eerst de Silver-tabel moet wissen. Dat doet deze actie niet.
+
+![De actie Silver opnieuw laten verwerken met de reden, de uitkomst van de proefdraai en de waarschuwing gemarkeerd.](afbeeldingen/overzetten-en-beheren/06-silver-opnieuw-proefdraai.png)
+
+3. Klik op **2. Uitvoeren**. Het resultaat meldt dat de tabel in de wachtrij is gezet. Alleen een actie in P vraagt daarna om de omgeving te typen.
+
+![Het resultaat van het uitvoeren: de tabel staat in de wachtrij.](afbeeldingen/overzetten-en-beheren/07-silver-opnieuw-resultaat.png)
+
+4. Klik op **Laden**. De tabel heeft nu de status *Wachtrij* en `open 0/1`: er staat één open regel in de wachtrij van Bronze, en dat is de regel waarmee Silver de tabel opnieuw verwerkt.
+
+![De lijst na het uitvoeren: de tabel heeft de status Wachtrij en open 0/1.](afbeeldingen/overzetten-en-beheren/08-silver-opnieuw-wachtrij.png)
+
+De actie start zelf geen load. Silver bouwt de tabel op bij de volgende run van `PL_FMD_LOAD_SILVER`, of bij een run die je met de hand start (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Een uitgeschakelde tabel komt niet in de wachtrij.
+
 ## Valkuilen
 
 | Verschijnsel | Oorzaak en oplossing |
@@ -82,4 +102,5 @@ Verwijder de watermark-rij nooit met de hand: zonder die rij komt de tabel na de
 | De proefdraai meldt *Nothing registered* | Een omgeving heeft een fout, dus is er nergens iets geschreven. Los de fout op en draai opnieuw. |
 | **Uitvoeren** blijft uitgeschakeld | Je hebt nog geen proefdraai gedaan, of je hebt de selectie of de reden daarna gewijzigd. Draai de proefdraai opnieuw. |
 | Na een watermark-reset laadt de tabel niet vanzelf alles | De volgende load laadt alles. Start de tabel met de hand of wacht op het volgende schedule. |
+| Na *Silver opnieuw laten verwerken* is Silver nog niet veranderd | De actie zet alleen de wachtrij. De tabel wordt pas opnieuw opgebouwd bij de volgende run van `PL_FMD_LOAD_SILVER`. |
 | Je wilt een tabel in P opruimen | Een actie in P vraagt om de omgeving te typen. Doe dit pas na akkoord, en laat tijdens het opruimen geen load van de tabel lopen. |
