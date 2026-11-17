@@ -19,7 +19,7 @@ Alleen de dataselectie mag per omgeving verschillen: het bronfilter, de kolommen
 
 ![Tab 4 in de weergave Vergelijken, met de omgevingen, de knop Vergelijken en de tabel met verschillen gemarkeerd.](afbeeldingen/overzetten-en-beheren/01-omgevingen-vergelijken.png)
 
-**Naar Overzetten →** onder de tabel vult de omgevingen voor je in en start niets.
+Met de knop **Naar Overzetten →** onder de tabel worden de omgevingen voor je ingevuld. Er start niets.
 
 ## Registratie overzetten (tab 4)
 
@@ -29,16 +29,16 @@ Alleen de dataselectie mag per omgeving verschillen: het bronfilter, de kolommen
 2. Vink de doelomgevingen aan. De bronomgeving is niet te kiezen als doel.
 3. Twee keuzes bepalen hoever het overzetten gaat:
    - **Ook tabellen bijwerken die er al staan** trekt bestaande tabellen gelijk met de bron. Hun dataselectie blijft in elke omgeving zoals ze is.
-   - **Ook tabellen meenemen die in de bron uit staan** neemt ook uitgezette tabellen mee.
+   - **Ook tabellen meenemen die in de bron uit staan** neemt het overzetten ook de uitgezette tabellen mee.
 4. Wil een omgeving een andere dataselectie dan Dev, bijvoorbeeld in Test alleen een korte periode? Vink dan **Voor een omgeving een eigen filter of instelling gebruiken** aan en vul de waarden per omgeving in.
 5. Klik op **1. Proefdraaien**. De uitkomst staat per omgeving onder de knop.
 6. Is de uitkomst goed, vink dan de bevestiging aan en kies de knop voor het echte overzetten.
 
-Een watermark wordt nooit meegenomen. Een nieuwe incrementele tabel in de doelomgeving laadt bij de eerste load dus alles, tenzij je bij het registreren een aantal dagen (*HistoryDays*) hebt opgegeven.
+Een watermark wordt nooit meegenomen. Een nieuwe incrementele tabel in de doelomgeving laadt bij het eerste laden dus alles, tenzij je bij het registreren een aantal dagen (*HistoryDays*) hebt opgegeven.
 
 ![De weergave Overzetten met de keuze Zet over, de knop Proefdraaien en een foutmelding van de proefdraai gemarkeerd.](afbeeldingen/overzetten-en-beheren/02-overzetten-proefdraai.png)
 
-**Een fout stopt alles.** Heeft één omgeving een fout, dan wordt in geen enkele omgeving iets geschreven. De proefdraai hierboven meldt dat de nieuwe tabel hetzelfde doel (`TargetSchema` en `TargetName`) heeft als een tabel die al in het doel staat. Overzetten zou dan de Bronze- en Silver-tabel van die bestaande tabel overnemen. Geef de nieuwe tabel een eigen `TargetSchema` of `TargetName` en draai de proefdraai opnieuw.
+**Een fout stopt alles.** Heeft één omgeving een fout, dan wordt in geen enkele omgeving iets geschreven. De proefdraai hierboven meldt dat de nieuwe tabel hetzelfde doel (`TargetSchema` en `TargetName`) heeft als een tabel die al in het doel staat. Overzetten zou dan de Bronze- en Silver-tabel van die bestaande tabel overschrijven. Geef de nieuwe tabel een eigen `TargetSchema` of `TargetName` en draai de proefdraai opnieuw.
 
 ## De laadstatus bekijken (tab 5)
 
@@ -54,34 +54,34 @@ Onder **Actie** kies je wat je met de geselecteerde tabellen doet:
 
 | Actie | Wat ze doet |
 |---|---|
-| **Watermark resetten (de volgende load laadt alles)** | Maakt het watermark leeg, zodat de volgende load de hele tabel ophaalt. De registratie blijft staan. |
+| **Watermark resetten (de volgende load laadt alles)** | Maakt het watermark leeg, zodat het volgende laden de hele tabel ophaalt. De registratie blijft staan. |
 | **Watermark op een waarde zetten** | Zet het watermark op een waarde die je zelf invult: een datum (`jjjj-mm-dd uu:mm:ss.mmm`) of een geheel getal. De registratie blijft staan. |
-| **Open wachtrij op verwerkt zetten** | Zet de open regels van de tabel in de wachtrij op verwerkt, in de gekozen laag (Landingzone, Bronze of allebei). Er wordt niets geladen. Gebruik dit om een bestand bewust over te slaan. |
-| **Opruimen na een PK-wijziging (Bronze en Silver wissen)** | Wist de Bronze- en Silver-tabel, zet de open wachtrij op verwerkt en maakt het watermark leeg. De volgende load bouwt de tabel opnieuw op. |
-| **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)** | Zet de tabel terug in de wachtrij van Silver, zodat de volgende run van `PL_FMD_LOAD_SILVER` haar opnieuw uit Bronze opbouwt. Er wordt niets gewist en het watermark blijft staan. |
+| **Open wachtrij op verwerkt zetten** | Markeer de open regels van de tabel als verwerkt, in de gekozen laag (Landingzone, Bronze of allebei). Er wordt niets geladen. Gebruik dit om een bestand bewust over te slaan. |
+| **Opruimen na een PK-wijziging (Bronze en Silver wissen)** | Wist de Bronze- en Silver-tabel, markeert de open wachtrij als verwerkt en maakt het watermark leeg. De volgende laadactie bouwt de tabel opnieuw op. |
+| **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)** | Zet de tabel terug in de wachtrij van Silver, zodat de volgende uitvoering van `PL_FMD_LOAD_SILVER` haar opnieuw uit Bronze opbouwt. Er wordt niets gewist en het watermark blijft staan. |
 
 Bij elke actie vul je een **Reden** in. Die is verplicht en wordt vastgelegd in het logboek van de configuratiedatabase.
 
 ### Een tabel opruimen
 
-Kies de actie, vul de reden in en klik op **1. Proefdraaien**. De proefdraai toont per tabel wat er gebeurt en welke waarschuwingen er zijn, bijvoorbeeld dat de Silver-historie van de tabel verloren gaat, dat je de primary key in de configuratiedatabase moet controleren en dat er tijdens het opruimen geen load van deze tabel mag lopen. Een actie die iets wist, of een actie in P, vraagt daarna om de omgeving te typen (hier *D*). Pas dan wordt **2. Uitvoeren** actief.
+Kies de actie, vul de reden in en klik op **1. Proefdraaien**. De proefdraai toont per tabel wat er gebeurt en welke waarschuwingen er zijn, bijvoorbeeld dat de Silver-historie van de tabel verloren gaat, dat je de primary key in de configuratiedatabase moet controleren en dat er tijdens het opruimen geen laadactie van deze tabel mag lopen. Een actie die iets wist, of een actie in P, vraagt daarna om de omgeving te typen (hier *D*). Pas dan wordt **2. Uitvoeren** actief.
 
 ![De actie Opruimen met de reden, de uitkomst van de proefdraai met waarschuwingen en het veld om de omgeving te bevestigen gemarkeerd.](afbeeldingen/overzetten-en-beheren/04-opruimen-proefdraai.png)
 
 ### Een watermark resetten
 
-Kies **Watermark resetten**, vul de reden in en klik op **1. Proefdraaien**. De uitkomst toont het huidige watermark en dat het leeg wordt. Meldt de proefdraai dat er niets is geschreven, dan wordt **2. Uitvoeren** actief. Klik pas op **2. Uitvoeren** als je de volgende load met alle rijen wilt.
+Kies **Watermark resetten**, vul de reden in en klik op **1. Proefdraaien**. De uitkomst toont het huidige watermark en dat het leeg wordt. Meldt de proefdraai dat er niets is geschreven, dan wordt **2. Uitvoeren** actief. Klik pas op **2. Uitvoeren** als je het volgende laden met alle rijen wilt.
 
 ![De actie Watermark resetten met de reden, de uitkomst van de proefdraai en de knop Uitvoeren gemarkeerd.](afbeeldingen/overzetten-en-beheren/05-watermark-proefdraai.png)
 
-Verwijder de watermark-rij nooit met de hand: zonder die rij komt de tabel na de volgende landing niet meer in Bronze. Bij een incrementele tabel verwijdert een volledige herlading na een watermark-reset geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan. Een tabel die je op volledig laden zet, werkt anders: een volledige load markeert rijen die in de bron ontbreken wel als verwijderd, zie [Een bestaande tabel wijzigen](tabel-wijzigen.md). Start na het resetten de tabel met de hand, zie [Een tabel of bron handmatig laden](handmatig-laden.md).
+Verwijder de watermarkrij nooit met de hand: zonder die rij komt de tabel na de volgende aanlevering niet meer in Bronze. Bij een incrementele tabel verwijdert een volledige herlading na een watermark-reset geen rijen die in de bron zijn verwijderd; die blijven in Bronze staan. Een tabel die je op volledig laden zet, werkt anders: een volledige load markeert rijen die in de bron ontbreken wel als verwijderd, zie [Een bestaande tabel wijzigen](tabel-wijzigen.md). Start na het resetten de tabel met de hand, zie [Een tabel of bron handmatig laden](handmatig-laden.md).
 
 ### Silver opnieuw laten verwerken
 
 Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Moet de regel voor de hele tabel gelden, bijvoorbeeld een nieuwe `clamp_min_date` of `exclude_rows`, dan moet Silver de tabel opnieuw uit Bronze opbouwen. Met deze actie zet je de tabel daarvoor terug in de wachtrij van Silver.
 
 1. Selecteer de tabel en kies **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)**.
-2. Vul de reden in en klik op **1. Proefdraaien**. De uitkomst zegt dat Silver in de wachtrij zou komen en dat de volgende run van `PL_FMD_LOAD_SILVER` de tabel opnieuw uit Bronze verwerkt, zonder nieuwe levering. De waarschuwing herinnert eraan dat je bij een regel die het type of de kolommen van de Silver-tabel verandert, eerst de Silver-tabel moet wissen. Dat doet deze actie niet.
+2. Vul de reden in en klik op **1. Proefdraaien**. De uitkomst zegt dat Silver in de wachtrij zou komen en dat de volgende uitvoering van `PL_FMD_LOAD_SILVER` de tabel opnieuw uit Bronze verwerkt, zonder nieuwe levering. De waarschuwing herinnert eraan dat je bij een regel die het type of de kolommen van de Silver-tabel verandert, eerst de Silver-tabel moet wissen. Dat doet deze actie niet.
 
 ![De actie Silver opnieuw laten verwerken met de reden, de uitkomst van de proefdraai en de waarschuwing gemarkeerd.](afbeeldingen/overzetten-en-beheren/06-silver-opnieuw-proefdraai.png)
 
@@ -93,7 +93,7 @@ Een gewijzigde Silver-regel werkt alleen op rijen die daarna veranderen. Moet de
 
 ![De lijst na het uitvoeren: de tabel heeft de status Wachtrij en open 0/1.](afbeeldingen/overzetten-en-beheren/08-silver-opnieuw-wachtrij.png)
 
-De actie start zelf geen load. Silver bouwt de tabel op bij de volgende run van `PL_FMD_LOAD_SILVER`, of bij een run die je met de hand start (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Een uitgeschakelde tabel komt niet in de wachtrij.
+De actie start zelf niets. Silver bouwt de tabel op bij de volgende uitvoering van `PL_FMD_LOAD_SILVER`, of bij een uitvoering die je met de hand start (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Een uitgeschakelde tabel komt niet in de wachtrij.
 
 ## Valkuilen
 
@@ -102,6 +102,6 @@ De actie start zelf geen load. Silver bouwt de tabel op bij de volgende run van 
 | De proefdraai meldt een fout over een bestaand doel | Een nieuwe tabel heeft hetzelfde doel als een bestaande tabel. Geef haar een eigen `TargetSchema` of `TargetName`. |
 | De proefdraai meldt *Nothing registered* | Een omgeving heeft een fout, dus is er nergens iets geschreven. Los de fout op en draai opnieuw. |
 | **Uitvoeren** blijft uitgeschakeld | Je hebt nog geen proefdraai gedaan, of je hebt de selectie of de reden daarna gewijzigd. Draai de proefdraai opnieuw. |
-| Na een watermark-reset laadt de tabel niet vanzelf alles | De volgende load laadt alles. Start de tabel met de hand of wacht op het volgende schedule. |
-| Na *Silver opnieuw laten verwerken* is Silver nog niet veranderd | De actie zet alleen de wachtrij. De tabel wordt pas opnieuw opgebouwd bij de volgende run van `PL_FMD_LOAD_SILVER`. |
-| Je wilt een tabel in P opruimen | Een actie in P vraagt om de omgeving te typen. Doe dit pas na akkoord, en laat tijdens het opruimen geen load van de tabel lopen. |
+| Na een watermarkreset laadt de tabel niet vanzelf alles | Het volgende laden haalt alles op. Start de tabel met de hand of wacht op de volgende planning. |
+| Na *Silver opnieuw laten verwerken* is Silver nog niet veranderd | De actie zet alleen de wachtrij. De tabel wordt pas opnieuw opgebouwd bij de volgende uitvoering van `PL_FMD_LOAD_SILVER`. |
+| Je wilt een tabel in P opruimen | Een actie in P vraagt om de omgeving te typen. Doe dit pas na akkoord, en laat tijdens het opruimen geen laadactie van de tabel lopen. |

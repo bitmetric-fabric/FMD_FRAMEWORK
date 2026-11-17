@@ -5,13 +5,13 @@ sidebar_position: 8
 
 # Een nieuwe Gold-tabel (MLV) maken
 
-De Gold-laag van een business-domein bouw je met de hand, met materialized lake views (MLV's). Een MLV is een tabel die Fabric bijhoudt op basis van een query. Landingzone, Bronze en Silver zijn config-driven; Gold niet. Er staat geen configuratie voor Gold in de configuratiedatabase. Deze handleiding laat zien hoe je een nieuwe Gold-tabel schrijft, draait en controleert, in de CODE-workspace van het domein. Het semantisch model en het rapport komen daarna. De schermafbeeldingen zijn opgenomen in november 2026.
+De Gold-laag van een business-domein bouw je met de hand, met materialized lake views (MLV's). Een MLV is een tabel die Fabric bijhoudt op basis van een query. Landingzone, Bronze en Silver zijn configuratiegedreven; Gold niet. Er staat geen configuratie voor Gold in de configuratiedatabase. Deze handleiding laat zien hoe je een nieuwe Gold-tabel schrijft, draait en controleert, in de CODE-workspace van het domein. Het semantisch model en het rapport komen daarna. De schermafbeeldingen zijn opgenomen in november 2026.
 
 **De volgorde is altijd: Silver → Gold → semantisch model → rapport.** Een stap verder in de keten kan pas als de stap ervoor bestaat en gevuld is, in elke omgeving.
 
 ## Voor je begint
 
-- De brontabellen staan in Silver en zijn in Gold zichtbaar via de shortcuts. Een nieuwe bron-namespace vraagt eerst een run van `NB_CREATE_SHORTCUTS` in de CODE-workspace van het domein. In de voorbeelden hieronder staat de Silver-tabel van een bron in het schema `aw`.
+- De brontabellen staan in Silver en zijn in Gold zichtbaar via de shortcuts. Een nieuwe naamruimte van een bron vraagt eerst een uitvoering van `NB_CREATE_SHORTCUTS` in de CODE-workspace van het domein. In de voorbeelden hieronder staat de Silver-tabel van een bron in het schema `aw`.
 - Je werkt in Dev (omgeving D) of in je eigen developer-workspace, nooit eerst in Test of Productie.
 - Je mag notebooks maken in de CODE-workspace en de Gold-lakehouse in de DATA-workspace lezen.
 
@@ -42,13 +42,13 @@ WHERE IsCurrent AND NOT IsDeleted
 
 - **Filter op de huidige stand.** `IsCurrent` bestaat in Silver ook zonder historie. `IsDeleted` markeert rijen die in de bron zijn verwijderd. Wil je die ook zien, laat dat deel van het filter dan weg.
 - **Naam.** De afspraak is `gold.D_<Naam>` voor een dimensie en `gold.F_<Naam>` voor een feitentabel. Dit is een conventie en wordt niet afgedwongen. Fabric slaat de naam op in kleine letters (`gold.d_currency`). Verwijs in SQL naar de kleine letters. Een semantisch model dat je vanuit de lakehouse maakt, neemt die kleine letters over; wil je er een naam met hoofdletters (`F_Sales`), geef de tabel die dan in het model.
-- **Meerdere MLV's** zet je in aparte cellen, in de volgorde van hun afhankelijkheid: eerst de MLV die een andere nodig heeft.
+- **Meerdere MLV's** zet je in aparte cellen, in de volgorde van hun afhankelijkheid: eerst de MLV waarop een andere MLV bouwt.
 
 ## Stap 3: de MLV draaien
 
 Voer **alleen deze cel** uit met **Run cell**. Voer niet het hele notebook uit als de refresh-cel onderaan staat: die ververst alle MLV's van de Gold-lakehouse.
 
-De eerste keer start de sessie, wat even duurt. Daarna toont de cel de uitkomst van het aanmaken, met onder meer de naam van de MLV, het ververs-beleid en het aantal verwerkte rijen. Bij een nieuwe MLV is dat een volledige verversing van alle rijen van de bron, in het voorbeeld 105.
+De eerste keer start de sessie, wat even duurt. Daarna toont de cel de uitkomst van het aanmaken, met onder meer de naam van de MLV, het verversingsbeleid en het aantal verwerkte rijen. Bij een nieuwe MLV is dat een volledige verversing van alle rijen van de bron, in het voorbeeld 105.
 
 ![De cel met de MLV en haar uitkomst: MLVName D_Currency, RefreshPolicy FullRefresh en TotalRowsProcessed 105. De knop Run cell is gemarkeerd.](afbeeldingen/gold-mlv/02-mlv-cel.png)
 
@@ -80,8 +80,8 @@ De query geeft de eerste tien rijen. Een MLV die je net hebt aangemaakt of verwi
 
 Een MLV die je in een notebook hebt aangemaakt, wordt niet vanzelf ververst als de bron verandert. De verversing van een MLV is een aparte handeling.
 
-- **De Gold-pipeline.** `PL_FMD_LOAD_GOLD` draait eerst `NB_LOAD_GOLD` en, als dat slaagt, `NB_MLV_EXAMPLE`. Die laatste bevat onderaan een cel die de verversing van alle MLV's van de Gold-lakehouse start en wacht tot ze klaar is. De pipeline hangt aan de orchestratie van de load, dus Gold wordt na elke geplande load ververst.
-- **Een eigen notebook** voeg je als notebook-activiteit toe aan `PL_FMD_LOAD_GOLD` in Dev, na de activiteit die al staat. Promoveer het notebook samen met de pipeline: een notebook dat nog niet in de doelstage staat, laat de promotie falen met *Missing Dependencies*.
+- **De Gold-pipeline.** `PL_FMD_LOAD_GOLD` draait eerst `NB_LOAD_GOLD` en, als dat slaagt, `NB_MLV_EXAMPLE`. Die laatste bevat onderaan een cel die de verversing van alle MLV's van de Gold-lakehouse start en wacht tot ze klaar is. De pipeline hangt aan de orchestratie van het laden, dus Gold wordt na elk gepland laden ververst.
+- **Een eigen notebook** voeg je als notebook-activiteit toe aan `PL_FMD_LOAD_GOLD` in Dev, na de activiteit die al staat. Promoveer het notebook samen met de pipeline: een notebook dat nog niet in de doelomgeving staat, laat de promotie falen met *Missing Dependencies*.
 - **Hernoem `PL_FMD_LOAD_GOLD` niet.** De setup koppelt de pipeline van elk domein op naam aan de orchestratie. Een hernoemde pipeline valt uit de keten.
 
 Wil je alle MLV's met de hand verversen, bijvoorbeeld na een wijziging in Silver, draai dan de pipeline met de hand, voer de refresh-cel van `NB_MLV_EXAMPLE` uit of gebruik het overzicht van de lakehouse (zie [Verversen met de hand](#verversen-met-de-hand)).
@@ -94,11 +94,11 @@ In de werkbalk van het overzicht staan **Run** en **Manage schedules**. Met **Ru
 
 ![Het overzicht Manage materialized lake views met de MLV's en hun bronnen. De knoppen Run en Manage schedules zijn gemarkeerd.](afbeeldingen/gold-mlv/06-mlv-overzicht.png)
 
-**Manage schedules** opent een paneel om een verversing in te plannen. Gebruik dat niet naast `PL_FMD_LOAD_GOLD`: de pipeline ververst Gold na elke geplande load, en een tweede schedule kan ervoor zorgen dat twee verversingen elkaar overlappen. In een omgeving zonder schedule staat er *No schedules found*.
+**Manage schedules** opent een paneel om een verversing in te plannen. Gebruik dat niet naast `PL_FMD_LOAD_GOLD`: de pipeline ververst Gold na elk gepland laden, en een tweede planning kan ervoor zorgen dat twee verversingen elkaar overlappen. In een omgeving zonder planning staat er *No schedules found*.
 
 ![Het paneel Manage schedules met de melding No schedules found en de knop New schedule.](afbeeldingen/gold-mlv/07-mlv-schedules.png)
 
-**Recent run(s)** in het lint van het tabblad toont de verversingen van de laatste zeven dagen, met het aantal runs, het slagingspercentage, de gemiddelde duur en het aantal mislukte runs. Zonder run in die periode staat er *There are no runs to show*. De knop **Refresh** in dit scherm ververst alleen de lijst, niet de MLV's.
+**Recent run(s)** in het lint van het tabblad toont de verversingen van de laatste zeven dagen, met het aantal uitvoeringen, het slagingspercentage, de gemiddelde duur en het aantal mislukte uitvoeringen. Zonder uitvoering in die periode staat er *There are no runs to show*. De knop **Refresh** in dit scherm ververst alleen de lijst, niet de MLV's.
 
 ![Het scherm Recent runs for materialized lake views met de kaarten Total runs, Success rate, Average duration en Failed runs, en de knop Refresh gemarkeerd.](afbeeldingen/gold-mlv/08-mlv-recente-runs.png)
 
@@ -127,11 +127,11 @@ De cel is klaar in een paar seconden. Daarna verdwijnt de tabel uit de lakehouse
 
 ![De cel met DROP MATERIALIZED LAKE VIEW IF EXISTS en het vinkje dat hij is uitgevoerd.](afbeeldingen/gold-mlv/05-mlv-verwijderen.png)
 
-Hangt een andere MLV, een semantisch model of een rapport van de tabel af, verwijder die dan eerst of pas ze aan. Verwijder een MLV niet in Test of Productie zonder dat de wijziging eerst in Dev is getest en gepromoveerd.
+Hangt een andere MLV, een semantisch model of een rapport van de tabel af, verwijder die dan eerst of pas ze aan. Verwijder een MLV niet in Test of Productie zonder dat de wijziging eerst in Dev is gecontroleerd en gepromoveerd.
 
 ## Een MLV in PySpark
 
-Een MLV kun je ook in PySpark schrijven, met de decorator `@fmlv.materialized_lake_view`. Het verschil doet ertoe bij de verversing: een PySpark-MLV wordt bij elke verversing opnieuw uitgevoerd vanuit het notebook waarin hij is gemaakt, in een sessie zonder `notebookutils` en zonder gemounte standaard-lakehouse.
+Een MLV kun je ook in PySpark schrijven, met de decorator `@fmlv.materialized_lake_view`. Het verschil doet ertoe bij de verversing: een PySpark-MLV wordt bij elke verversing opnieuw uitgevoerd vanuit het notebook waarin hij is gemaakt, in een sessie zonder `notebookutils` en zonder gekoppelde standaard-lakehouse.
 
 - Zet de naam **letterlijk** in de decorator, bijvoorbeeld `@fmlv.materialized_lake_view(name="gold.d_klant")`. Met een variabele als naam vindt de verversing de cel niet.
 - Bewaak elke andere cel die `notebookutils` of een bijwerking nodig heeft, bijvoorbeeld met `if "notebookutils" in globals():`. Het vangnet en de refresh-cel van het sjabloon doen dat niet.
@@ -145,6 +145,6 @@ Een MLV kun je ook in PySpark schrijven, met de decorator `@fmlv.materialized_la
 | *Invalid object name* in het SQL-endpoint | Het endpoint loopt achter op de lakehouse. Klik op **Sync metadata from the Lakehouse**, wacht even en probeer opnieuw. |
 | De MLV heeft oude data na een wijziging in Silver | Een MLV ververst niet vanzelf. Draai de pipeline `PL_FMD_LOAD_GOLD`, de refresh-cel of **Run** in het overzicht van de MLV's. |
 | Het notebook meldt een fout bij de eerste cellen | De `%%configure`-cel moet de eerste codecel van het notebook zijn. Zet geen andere cel ervoor. |
-| De MLV staat in Gold van een andere omgeving | Het notebook is niet aan de Gold van deze omgeving gebonden. Controleer de `%%configure`-cel en de Variable Library van de Gold. |
-| De promotie van de pipeline faalt met *Missing Dependencies* | Een notebook in de pipeline staat nog niet in de doelstage. Promoveer het notebook eerst, of in dezelfde deployment. |
-| Een nieuwe bron-namespace is in Gold niet zichtbaar | Draai `NB_CREATE_SHORTCUTS` in de CODE-workspace van het domein. |
+| De MLV staat in Gold van een andere omgeving | Het notebook is niet aan de Gold van deze omgeving gekoppeld. Controleer de `%%configure`-cel en de Variable Library van de Gold. |
+| De promotie van de pipeline faalt met *Missing Dependencies* | Een notebook in de pipeline staat nog niet in de doelomgeving. Promoveer het notebook eerst, of in dezelfde promotie. |
+| Een nieuwe naamruimte van een bron is in Gold niet zichtbaar | Draai `NB_CREATE_SHORTCUTS` in de CODE-workspace van het domein. |
