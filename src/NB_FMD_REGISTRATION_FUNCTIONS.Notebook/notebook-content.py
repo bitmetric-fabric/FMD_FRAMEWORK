@@ -269,7 +269,7 @@ def print_entity_list(connection_name, data_source_name, schema=None, source_ali
 # CELL ********************
 
 # Same list sp_RegisterEntities uses to check that a DataSourceType fits the connection's Type.
-CONNECTION_TYPES = ('SQL', 'AZURESQLMI', 'ORACLE', 'ADLS', 'ONELAKE', 'SFTP', 'FTP', 'ADF', 'NOTEBOOK', 'SNOWFLAKE', 'ODATA')
+CONNECTION_TYPES = ('SQL', 'AZURESQLMI', 'ORACLE', 'ADLS', 'ONELAKE', 'SFTP', 'FTP', 'ADF', 'NOTEBOOK', 'SNOWFLAKE', 'ODATA', 'MYSQL')
 
 
 def register_connection(name, type, is_active=True):
@@ -351,7 +351,7 @@ def register(sources, entities, domain, environments, dry_run=True, requeue_silv
       with name::TYPE (TYPE letters, digits, underscore): TIJD::VARCHAR, needed for a TIME column, which Delta
       cannot hold. SourceFilter (optional): a predicate
       without WHERE, e.g. OrderDate >= '2024-01-01', added to the copy query and to the watermark query.
-      SourceColumns and SourceFilter only for ASQL_01, ASQL_02, SNOWFLAKE_01 and ODATA_01. Like IsActive, the list is the
+      SourceColumns and SourceFilter only for ASQL_01, ASQL_02, SNOWFLAKE_01, ODATA_01, MYSQL_01 and AZUREMYSQL_01. Like IsActive, the list is the
       truth: an entity without these fields gets them emptied.
       An entity is found by data source + SourceSchema + SourceName; another SourceName is a new one.
     """
@@ -455,7 +455,7 @@ def read_config(sql, *params):
 SOURCE_TYPES_BY_CONNECTION = {
     'SQL': ['ASQL_01', 'ASQL_02'], 'AZURESQLMI': ['SQLMI_01'], 'ORACLE': ['ORACLE_01'], 'ADLS': ['ADLS_01'],
     'ONELAKE': ['ONELAKE_TABLES_01', 'ONELAKE_FILES_01'], 'SFTP': ['SFTP_01'], 'FTP': ['FTP_01'], 'ADF': ['ADF'],
-    'NOTEBOOK': ['NOTEBOOK'], 'SNOWFLAKE': ['SNOWFLAKE_01'], 'ODATA': ['ODATA_01'],
+    'NOTEBOOK': ['NOTEBOOK'], 'SNOWFLAKE': ['SNOWFLAKE_01'], 'ODATA': ['ODATA_01'], 'MYSQL': ['MYSQL_01', 'AZUREMYSQL_01'],
 }
 
 _SQL_SOURCES = """
@@ -567,7 +567,7 @@ ENTITY_FIELDS = ('TargetSchema', 'TargetName', 'FileName', 'FileType', 'IsIncrem
                  'CustomNotebookName', 'PrimaryKeys', 'IsActive', 'IsHistorized', 'LoadGroup', 'SourceColumns', 'SourceFilter')
 
 # The types whose copy query takes SourceColumns and SourceFilter. Keep in step with sp_RegisterEntities.
-SOURCE_FILTER_TYPES = ('ASQL_01', 'ASQL_02', 'SNOWFLAKE_01', 'ODATA_01')
+SOURCE_FILTER_TYPES = ('ASQL_01', 'ASQL_02', 'SNOWFLAKE_01', 'ODATA_01', 'MYSQL_01', 'AZUREMYSQL_01')
 
 
 def split_column(item):

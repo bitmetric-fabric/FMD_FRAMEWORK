@@ -142,6 +142,10 @@ check(not [p for p in problems({"SourceColumns": "ID,Amount", "LoadGroup": "dag"
 check(("PrimaryKeys", "error") in problems({"SourceColumns": "id", "PrimaryKeys": "ID"}, source_type="SNOWFLAKE_01"), "validate: Snowflake is hoofdlettergevoelig")
 check(("SourceColumns", "error") not in problems({"SourceColumns": "ID"}, source_type="ODATA_01"), "validate: kolommen wel voor OData")
 check(("SourceFilter", "error") not in problems({"SourceFilter": "Amount gt 0"}, source_type="ODATA_01"), "validate: filter wel voor OData")
+for _t in ("MYSQL_01", "AZUREMYSQL_01"):
+    check(("SourceColumns", "error") not in problems({"SourceColumns": "ID"}, source_type=_t), f"validate: kolommen wel voor {_t}")
+    check(("SourceFilter", "error") not in problems({"SourceFilter": "Amount > 0"}, source_type=_t), f"validate: filter wel voor {_t}")
+    check(("SourceColumns", "error") in problems({"SourceColumns": "ID::VARCHAR"}, source_type=_t), f"validate: een cast mag niet voor {_t}")
 check(("SourceColumns", "warning") in problems({"SourceColumns": "ID,Amount"}), "validate: kolommen wijzigen bij een geregistreerde tabel waarschuwt (Bronze-merge)")
 
 # ---- a cast per column (Snowflake, TIME) --------------------------------------------------------------
@@ -853,8 +857,8 @@ check("[SourceColumns] = @SC" in proc and "[SourceFilter] = @SF" in proc and "[L
 landing = (SQL / "execution/Views/vw_LoadSourceToLandingzone.sql").read_text(encoding="utf-8")
 check(landing.count("QF.[Filter]") >= 5 and "QF.[Columns]" in landing, "vw_LoadSourceToLandingzone: filter in de kopie- en de watermarkquery, kolommen in de kopie")
 # CONCAT_WS of only NULLs is '', not NULL: without the NULLIF the first load of an incremental table (no watermark, no filter)
-# gets a WHERE without a condition.
-check(landing.count("NULLIF(CONCAT_WS(' AND ',") == 2, "vw_LoadSourceToLandingzone: geen WHERE zonder voorwaarde (eerste load van een incrementele tabel)")
+# gets a WHERE without a condition. Three: SQL, Snowflake and MySQL (OData builds a URL with ' and ' and has its own NULLIF).
+check(landing.count("NULLIF(CONCAT_WS(' AND ',") == 3,"vw_LoadSourceToLandingzone: geen WHERE zonder voorwaarde (eerste load van een incrementele tabel)")
 
 # A cast per column: the view builds "name"::TYPE AS "name" for Snowflake only, with TYPE restricted to a bare word; the procedure
 # and the notebook refuse the rest. The SQL itself ran against SQL Server 2022 (ADR-020, aanvulling 2026-10-26).

@@ -130,6 +130,16 @@
         "type": "DataPipeline"
     },
     {
+        "name": "PL_FMD_LDZ_COPY_FROM_MYSQL_01.DataPipeline",
+        "id": "64e4145b-1ce4-4a90-b950-2a20ef39b1a3",
+        "type": "DataPipeline"
+    },
+    {
+        "name": "PL_FMD_LDZ_COMMAND_MYSQL.DataPipeline",
+        "id": "ba57dff2-0e9f-422f-bd26-7df472999de8",
+        "type": "DataPipeline"
+    },
+    {
         "name": "PL_FMD_MAINTENANCE.DataPipeline",
         "id": "1c32755b-03db-43e5-b79e-52e81c79c1bc",
         "type": "DataPipeline"

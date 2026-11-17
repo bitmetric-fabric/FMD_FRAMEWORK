@@ -41,6 +41,13 @@
                 THEN 'MAX("' + REPLACE(LZE.[IsIncrementalColumn], '"', '""') + '")::TIMESTAMP_NTZ, ''YYYY-MM-DD HH24:MI:SS.FF3'') AS "LastLoadValue" FROM ' + SF.[SourceObject] + ISNULL(' WHERE ' + QF.[Filter], '')
                 ELSE 'CURRENT_TIMESTAMP()::TIMESTAMP_NTZ, ''YYYY-MM-DD HH24:MI:SS.FF3'') AS "LastLoadValue"'
             END
+        -- MySQL: backticks, en de waarde als tekst (CAST ... AS CHAR) zodat DATETIME en numerieke kolommen allebei werken.
+        -- Een volledige load (of een entiteit zonder watermarkkolom) neemt de laadtijd en leest geen tabel.
+        WHEN C.[Type] = 'MYSQL' THEN
+            CASE WHEN LZE.[IsIncremental] = 1 AND ISNULL(LZE.[IsIncrementalColumn], '') <> ''
+                THEN 'SELECT CAST(MAX(`' + REPLACE(LZE.[IsIncrementalColumn], '`', '``') + '`) AS CHAR) AS `LastLoadValue` FROM ' + MY.[SourceObject] + ISNULL(' WHERE ' + QF.[Filter], '')
+                ELSE 'SELECT CAST(NOW(3) AS CHAR) AS `LastLoadValue`'
+            END
         -- OData: een kolom is niet te hernoemen, dus de query selecteert de watermarkkolom zelf en de pipeline leest die op naam.
         -- Een volledige load (of een entiteit zonder watermarkkolom) krijgt alleen $top=1: de pipeline neemt dan de laadtijd.
         WHEN C.[Type] = 'ODATA' THEN
@@ -59,6 +66,14 @@
             ISNULL(' WHERE ' + NULLIF(CONCAT_WS(' AND ',
                 CASE WHEN LZE.[IsIncremental] = 1 AND ISNULL(LZE.[IsIncrementalColumn], '') <> '' AND LZELV.[LoadValue] IS NOT NULL THEN
                     '"' + REPLACE(LZE.[IsIncrementalColumn], '"', '""') + '" > ''' + REPLACE(LZELV.[LoadValue], '''', '''''') + ''''
+                END, QF.[Filter]), ''), '')
+        -- MySQL: SourceSchema is de MySQL-database (MySQL kent geen schemalaag). In een tekstwaarde is de backslash in MySQL een
+        -- escapeteken, dus die wordt verdubbeld naast de aanhalingstekens. Dat geldt ook voor het watermark, dat uit de bron komt.
+        WHEN C.[Type] = 'MYSQL' THEN
+            'SELECT ' + QF.[Columns] + ' FROM ' + MY.[SourceObject] +
+            ISNULL(' WHERE ' + NULLIF(CONCAT_WS(' AND ',
+                CASE WHEN LZE.[IsIncremental] = 1 AND ISNULL(LZE.[IsIncrementalColumn], '') <> '' AND LZELV.[LoadValue] IS NOT NULL THEN
+                    '`' + REPLACE(LZE.[IsIncrementalColumn], '`', '``') + '` > ''' + REPLACE(REPLACE(LZELV.[LoadValue], CHAR(92), CHAR(92) + CHAR(92)), '''', '''''') + ''''
                 END, QF.[Filter]), ''), '')
         -- OData: $select (SourceColumns) en $filter (SourceFilter, plus de incrementele voorwaarde met 'and'); leeg = de hele entiteit.
         -- 'ge' en niet 'gt': een rij met precies de watermarkwaarde die na de vorige run wijzigt, zou anders blijven liggen.
@@ -100,8 +115,11 @@ LEFT JOIN [execution].[LandingzoneEntityLastLoadValue] LZELV
 CROSS APPLY (SELECT '"' + REPLACE(DS.[Name], '"', '""') + '"."'
     + REPLACE(ISNULL(CASE WHEN LZE.[SourceSchema] != '' THEN LZE.[SourceSchema] END, 'Unknown'), '"', '""') + '"."'
     + REPLACE(LZE.[SourceName], '"', '""') + '"' AS [SourceObject]) SF
+-- MySQL: `database`.`tabel`; zonder SourceSchema alleen `tabel`, dan geldt de database van de connectie.
+CROSS APPLY (SELECT CASE WHEN ISNULL(LZE.[SourceSchema], '') <> '' THEN '`' + REPLACE(LZE.[SourceSchema], '`', '``') + '`.' ELSE '' END
+    + '`' + REPLACE(LZE.[SourceName], '`', '``') + '`' AS [SourceObject]) MY
 -- Kolomlijst en filter van deze tabel. Kolommen: SourceColumns, gescheiden door komma's, in die volgorde; leeg = '*'.
--- Een naam wordt geciteerd zoals de bron dat wil (SQL: [naam]; Snowflake: "naam", hoofdlettergevoelig; OData: zonder quotes). Een filter is een predicaat zonder WHERE.
+-- Een naam wordt geciteerd zoals de bron dat wil (SQL: [naam]; Snowflake: "naam", hoofdlettergevoelig; MySQL: `naam`; OData: zonder quotes). Een filter is een predicaat zonder WHERE.
 -- Snowflake: 'naam::TYPE' geeft "naam"::TYPE AS "naam", voor een type dat Delta niet kent (TIME). TYPE is alleen [A-Za-z0-9_]; een andere
 -- tekst na '::' blijft deel van de naam, zodat Snowflake de kolom afwijst in plaats van de tekst uit te voeren.
 CROSS APPLY (SELECT
@@ -109,6 +127,7 @@ CROSS APPLY (SELECT
         SELECT STRING_AGG(q.[Name], ', ') WITHIN GROUP (ORDER BY q.[Nr])
         FROM (SELECT CAST(j.[key] AS INT) AS [Nr],
                      CASE WHEN C.[Type] = 'ODATA' THEN p.[Raw]
+                          WHEN C.[Type] = 'MYSQL' THEN '`' + REPLACE(p.[Raw], '`', '``') + '`'
                           WHEN C.[Type] <> 'SNOWFLAKE' THEN QUOTENAME(p.[Raw])
                           WHEN p.[Base] <> '' AND p.[CastType] <> '' AND p.[CastType] COLLATE Latin1_General_100_BIN2 NOT LIKE '%[^A-Za-z0-9_]%'
                           THEN '"' + REPLACE(p.[Base], '"', '""') + '"::' + p.[CastType] + ' AS "' + REPLACE(p.[Base], '"', '""') + '"'
