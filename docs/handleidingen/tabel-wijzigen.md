@@ -5,7 +5,7 @@ sidebar_position: 6
 
 # Een bestaande tabel wijzigen
 
-Een tabel die al is geregistreerd wijzig je in de registratie-editor op tab 2. Dit gaat over de wijzigingen die het vaakst voorkomen: kolommen of een bronfilter, cleansing rules, historie in Silver, een andere LoadGroup, een tabel uit- of aanzetten, een tabel volledig opnieuw laden en een andere primary key. Hoe je de editor opent en een tabel voor het eerst registreert, staat in [Bronnen en tabellen registreren](registreren.md). De schermafbeeldingen zijn opgenomen in november 2026.
+Een tabel die al is geregistreerd wijzig je in de registratie-editor op tab 2. Dit gaat over de wijzigingen die het vaakst voorkomen: kolommen of een bronfilter, cleansingregels, historie in Silver, een andere LoadGroup, een tabel uit- of aanzetten, een tabel volledig opnieuw laden en een andere primary key. Hoe je de editor opent en een tabel voor het eerst registreert, staat in [Bronnen en tabellen registreren](registreren.md). De schermafbeeldingen zijn opgenomen in november 2026.
 
 ## Het patroon
 
@@ -18,7 +18,7 @@ Elke wijziging verloopt hetzelfde:
 5. Laad de tabel en controleer het resultaat (zie [Een tabel of bron handmatig laden](handmatig-laden.md)).
 6. Zet de wijziging door naar Test en Productie (zie [Doorzetten naar Test en Productie](#doorzetten-naar-test-en-productie)).
 
-Zo ziet de tabel eruit voor je iets wijzigt. In deze handleiding is dat een tabel die geregistreerd, actief en niet incrementeel is, met historie in Silver en zonder LoadGroup of cleansing rules.
+Zo ziet de tabel eruit voor je iets wijzigt. In deze handleiding is dat een tabel die geregistreerd, actief en niet incrementeel is, met historie in Silver en zonder LoadGroup of cleansingregels.
 
 ![Tab 2 met een geregistreerde tabel geselecteerd. Rechts de eigenschappen; de LoadGroup en de vinkjes Actief, Historie in Silver en Incrementeel zijn gemarkeerd.](afbeeldingen/tabel-wijzigen/01-tabel-kiezen.png)
 
@@ -45,11 +45,11 @@ De velden **Kolommen om te laden** en **Bronfilter** staan op tab 2 onder de eig
 
 - **Een filter wijzigen** verwijdert niets uit Bronze en Silver. Een ruimer filter haalt bij een incrementele tabel de oudere rijen niet alsnog op: reset dan het watermark (zie [Een tabel volledig opnieuw laden](#een-tabel-volledig-opnieuw-laden)).
 - **De proefdraai voert het filter niet uit.** Controleer het filter eerst met een query op de bron.
-- **Kolommen weghalen bij een tabel die al in Bronze staat** laat de Bronze-merge falen. Gebruik daarom eerst op tab 5 de actie **Opruimen na een PK-wijziging (Bronze en Silver wissen)**: die wist de Bronze- en Silver-tabel van de tabel, zet de open wachtrij op verwerkt en maakt het watermark leeg. Registreer daarna de nieuwe kolommen en laad de tabel opnieuw volledig. Die actie staat beschreven in [Registratie overzetten en beheren](overzetten-en-beheren.md).
-- **Kolommen erbij** is niet apart gedocumenteerd. Probeer het eerst in Dev.
+- **Kolommen weghalen bij een tabel die al in Bronze staat** laat de Bronze-merge falen. Gebruik daarom eerst op tab 5 de actie **Opruimen na een PK-wijziging (Bronze en Silver wissen)**: die wist de Bronze- en Silver-tabel van de tabel, markeert de open wachtrij als verwerkt en maakt het watermark leeg. Registreer daarna de nieuwe kolommen en laad de tabel opnieuw volledig. Die actie staat beschreven in [Registratie overzetten en beheren](overzetten-en-beheren.md).
+- **Kolommen erbij** is hier niet apart beschreven. Probeer het eerst in Dev.
 - **Per omgeving verschillend?** Kolommen en filter mogen per omgeving verschillen. Hoe je ze in Test of Productie zet, staat bij [Doorzetten naar Test en Productie](#doorzetten-naar-test-en-productie).
 
-## Een cleansing rule wijzigen
+## Een cleansingregel wijzigen
 
 Onderaan de eigenschappen staan twee keuzelijsten: **Bronze-cleansing** en **Silver-cleansing**. Elke laag heeft drie keuzes:
 
@@ -67,7 +67,7 @@ Kies **Vervangen door onderstaande regels** en klik op **Regel toevoegen**. De r
 
 Een regel bestaat uit een **Functie**, de **Kolommen** waarop ze werkt en de parameters van die functie. De knoppen ↑ en ↓ veranderen de volgorde, ✕ verwijdert de regel.
 
-De lijst met functies bevat `normalize_text`, `fill_nulls`, `parse_datetime`, `clamp_min_date`, `exclude_rows`, `deduplicate_keys` en *(eigen functie)*. Wat elke functie doet en welke parameters ze heeft, staat in [Cleansing-functies](cleansing-functies.md). In het voorbeeld gebruikt Bronze `normalize_text` op de kolom `Name`, met de parameter `case` op `lower`.
+De lijst met functies bevat `normalize_text`, `fill_nulls`, `parse_datetime`, `clamp_min_date`, `exclude_rows`, `deduplicate_keys` en *(eigen functie)*. Wat elke functie doet en welke parameters ze heeft, staat in [Cleansing-functies](cleansing-functies.md). In het voorbeeld gebruikt Bronze `normalize_text` op de kolom `Name`, met de parameter `case` ingesteld op `lower`.
 
 ![Het formulier voor een Bronze-regel: functie normalize_text, de kolom Name gekozen en de parameter case op lower.](afbeeldingen/tabel-wijzigen/03-regel-bronze.png)
 
@@ -78,7 +78,7 @@ Silver gebruikt hier `clamp_min_date` op de kolom `ModifiedDate`. Die functie he
 Registreer en bekijk wat de regel doet:
 
 - **Een Bronze-regel** werkt vanaf de volgende levering.
-- **Een Silver-regel** werkt alleen op rijen die daarna veranderen. Moet de regel op de hele tabel gelden, registreer dan eerst en kies daarna op tab 5 de actie **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)**. Die zet de tabel terug in de wachtrij van Silver; de volgende run van `PL_FMD_LOAD_SILVER` bouwt hem dan opnieuw op uit Bronze. Zie [Silver opnieuw laten verwerken](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken).
+- **Een Silver-regel** werkt alleen op rijen die daarna veranderen. Moet de regel op de hele tabel gelden, registreer dan eerst en kies daarna op tab 5 de actie **Silver opnieuw laten verwerken (na een gewijzigde Silver-regel)**. Die zet de tabel terug in de wachtrij van Silver; de volgende uitvoering van `PL_FMD_LOAD_SILVER` bouwt hem dan opnieuw op uit Bronze. Zie [Silver opnieuw laten verwerken](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken).
 - Verandert de regel het type van een kolom of de kolommen zelf, verwijder dan eerst de Silver-tabel uit de Silver-lakehouse.
 
 Een eigen cleansing-functie zet je eerst in `NB_FMD_CUSTOM_DQ_CLEANSING`, in Dev, en promoveer je daarna met de CODE-workspace.
@@ -90,7 +90,7 @@ Het vinkje **Historie in Silver** staat tussen **Actief** en **Incrementeel**. H
 ![Het vinkje Historie in Silver is uitgezet en gemarkeerd.](afbeeldingen/tabel-wijzigen/05-historie-uit.png)
 
 - **Aanzetten:** de historie begint vanaf dat moment.
-- **Uitzetten:** de bestaande historie blijft staan. Ruim haar zelf op (`IsCurrent = 0 AND IsDeleted = 0`) als je de opslag terug wilt.
+- **Uitzetten:** de bestaande historie blijft staan. Ruim haar zelf op (`IsCurrent = 0 AND IsDeleted = 0`) als je de opslagruimte wilt vrijmaken.
 - Een Gold-query op `IsCurrent = 1` werkt in beide standen.
 
 ## Een tabel uitzetten of weer aanzetten
@@ -107,16 +107,16 @@ Op tab 3 is dan alleen de cel *Actief* oranje, en de proefdraai meldt `IsActive 
 
 ## Een tabel in een andere LoadGroup zetten
 
-Vul bij **LoadGroup** de naam van de groep in. Leeg betekent: de groep van de bron. De waarde slaat op als je het veld verlaat.
+Vul bij **LoadGroup** de naam van de groep in. Leeg betekent: de groep van de bron. De waarde wordt opgeslagen zodra je het veld verlaat.
 
 ![Het veld LoadGroup, ingevuld met nacht.](afbeeldingen/tabel-wijzigen/06-loadgroup.png)
 
 - Geven de schedules van een omgeving een `LoadGroup` mee, controleer dan dat er een schedule met de groep van deze tabel bestaat (zie [Dagelijkse routine en schedules](dagelijkse-routine.md)). Anders laadt de tabel in die omgeving niet op een schedule. Een schedule zonder parameters laadt alle tabellen, ook deze.
-- Een tabel in een andere groep dan haar bron laadt niet mee in een run voor de groep van de bron. Een run zonder groep laadt alles.
+- Een tabel in een andere groep dan haar bron laadt niet mee in een uitvoering voor de groep van de bron. Een uitvoering zonder groep laadt alles.
 
 ## Een tabel volledig opnieuw laden
 
-**Eenmalig, bij een incrementele tabel** (bijvoorbeeld omdat een ruimer filter ook oudere rijen moet ophalen): maak het watermark leeg. De volgende load haalt dan de hele tabel op.
+**Eenmalig, bij een incrementele tabel** (bijvoorbeeld omdat een ruimer filter ook oudere rijen moet ophalen): maak het watermark leeg. Het volgende laden haalt dan de hele tabel op.
 
 1. Ga naar tab **5. Beheer**, kies de omgeving en klik op **Laden**. De lijst toont per tabel de status, het watermark en het aantal open regels in de wachtrij (`open 0/0`).
 2. Zoek de tabel en selecteer hem. Onder de lijst staat hoeveel tabellen zijn geselecteerd.
@@ -131,15 +131,15 @@ Vul bij **LoadGroup** de naam van de groep in. Leeg betekent: de groep van de br
 5. Is de uitkomst goed, klik dan op **2. Uitvoeren**.
 6. Start `PL_FMD_LOAD_ALL` voor alleen deze tabel (zie [Een tabel of bron handmatig laden](handmatig-laden.md)). Verwijder de watermarkrij niet.
 
-**Van incrementeel naar volledig:** haal het vinkje bij **Incrementeel** weg en registreer. Een volledige load markeert rijen die in de bron ontbreken als verwijderd.
+**Van incrementeel naar volledig:** haal het vinkje bij **Incrementeel** weg en registreer. Een volledig laden markeert rijen die in de bron ontbreken als verwijderd.
 
-**Let op bij Snowflake met `delta`:** een volledige load die 0 rijen oplevert, verwijdert alle rijen van die tabel in Bronze.
+**Let op bij Snowflake met `delta`:** een volledig laden dat 0 rijen oplevert, verwijdert alle rijen van die tabel in Bronze.
 
 ## Een primary key wijzigen
 
 Een andere primary key verandert hoe Bronze en Silver rijen herkennen. Daarom moeten Bronze en Silver van de tabel daarna opnieuw worden opgebouwd. Ga zo te werk:
 
-1. **Kies de nieuwe sleutel.** Klik op tab 2 de tabel aan en kies bij **Primary key** de kolommen. Houd Ctrl ingedrukt om meer dan één kolom te kiezen (een samengestelde sleutel). In het voorbeeld is de sleutel uitgebreid van `CurrencyCode` naar `CurrencyCode` en `Name`.
+1. **Kies de nieuwe sleutel.** Ga naar tab 2, klik de tabel aan en kies bij **Primary key** de kolommen. Houd Ctrl ingedrukt om meer dan één kolom te kiezen (een samengestelde sleutel). In het voorbeeld is de sleutel uitgebreid van `CurrencyCode` naar `CurrencyCode` en `Name`.
 
 ![Tab 2 met de lijst Primary key. CurrencyCode en Name zijn gekozen.](afbeeldingen/tabel-wijzigen/12-primary-key-kiezen.png)
 
@@ -153,7 +153,7 @@ Een andere primary key verandert hoe Bronze en Silver rijen herkennen. Daarom mo
    - de open regels in de wachtrij van Landingzone en Bronze, die op verwerkt worden gezet;
    - het watermark, dat leeg wordt.
 
-   Daaronder staan drie waarschuwingen: de Silver-historie van de tabel gaat verloren, de primary key staat in de configuratie zoals hij nu is (controleer dat dit de nieuwe sleutel is), en er mag tijdens het opruimen geen load van de tabel lopen.
+   Daaronder staan drie waarschuwingen: de Silver-historie van de tabel gaat verloren, de primary key staat in de configuratie zoals hij nu is (controleer dat dit de nieuwe sleutel is), en er mag tijdens het opruimen geen laadactie van de tabel lopen.
 
 ![De proefdraai van Opruimen na een PK-wijziging. Onder wat er gebeurt staan drie waarschuwingen; onderaan staat het veld Typ de omgeving en de knop Uitvoeren.](afbeeldingen/tabel-wijzigen/11-opruimen-proefdraai.png)
 
@@ -169,6 +169,6 @@ Een promotie neemt geen registraties mee. Zet een wijziging na het registreren o
 | Nieuwe tabel | Weergave **Overzetten**, *alles wat nieuw is* |
 | Gewijzigde laadwijze, primary key, cleansing of historie | Vink **Ook tabellen bijwerken die er al staan** aan |
 | Kolommen, filter, *Actief* of LoadGroup in het doel | Vink **Voor een omgeving een eigen filter of instelling gebruiken** aan, of registreer in de editor met omgeving `T` of `P` |
-| Verwijderde Bronze- of Silver-tabel | Herhaal dit in het doel, vóór de load |
+| Verwijderde Bronze- of Silver-tabel | Herhaal dit in het doel, vóór het laden |
 
 Draai altijd eerst de proefdraai, en laad daarna in het doel.

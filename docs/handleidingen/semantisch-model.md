@@ -5,7 +5,7 @@ sidebar_position: 9
 
 # Een semantisch model maken en uitbreiden
 
-Het semantisch model is de laag tussen Gold en het rapport. Het framework levert geen model: de setup maakt per business-domein alleen de SEMANTIC- en REPORTING-workspaces. Het model bouw je zelf, als **Direct Lake**-model op de Gold-lakehouse van het domein. Er is geen kopie van de data: het model leest de Delta-tabellen die de Gold-notebooks maken. Deze handleiding laat zien hoe je een model maakt, er een relatie en een maat aan toevoegt, er later een tabel bij zet en het resultaat controleert. De schermafbeeldingen zijn opgenomen in november 2026.
+Het semantisch model is de laag tussen Gold en het rapport. Het framework levert geen model: de setup maakt per business-domein alleen de SEMANTIC- en REPORTING-workspaces. Het model bouw je zelf, als **Direct Lake-model** op de Gold-lakehouse van het domein. Er is geen kopie van de data: het model leest de Delta-tabellen die de Gold-notebooks maken. Deze handleiding laat zien hoe je een model maakt, er een relatie en een measure aan toevoegt, er later een tabel bij zet en het resultaat controleert. De schermafbeeldingen zijn opgenomen in november 2026.
 
 **De volgorde is altijd: Silver → Gold → semantisch model → rapport.** De tabellen die je in het model wilt, moeten in Gold bestaan (zie [Een nieuwe Gold-tabel (MLV) maken](gold-mlv.md)).
 
@@ -28,7 +28,7 @@ Open de Gold-lakehouse in de DATA-workspace van het domein (het type *Lakehouse*
 
 ![De dialoog New semantic model met de naam, de workspace en de tabellen van het schema gold aangevinkt.](afbeeldingen/semantisch-model/01-nieuw-model.png)
 
-De dialoog maakt een **Direct Lake-model op OneLake**. Dat zie je aan de melding in de dialoog (*SQL views cannot be selected for Direct Lake on OneLake*): een tabel die op een SQL-view is gebaseerd, kun je niet kiezen. Voor een promotie heeft zo'n model een parameter en een parameter rule nodig, zie [Een Direct Lake-model laten verwijzen naar het juiste lakehouse na promotie](direct-lake-parameter.md).
+De dialoog maakt een **Direct Lake-model op OneLake**. Dat zie je aan de melding in de dialoog (*SQL views cannot be selected for Direct Lake on OneLake*): een tabel die op een SQL-view is gebaseerd, kun je niet kiezen. Voor een promotie heeft zo'n model een parameter en een parameterregel nodig, zie [Een Direct Lake-model laten verwijzen naar het juiste lakehouse na promotie](direct-lake-parameter.md).
 
 Het model opent in de web-editor, in de modus **Editing**. Bovenin staat de melding dat het model het grote opslagformaat heeft en dat de versiegeschiedenis beschikbaar is.
 
@@ -53,7 +53,7 @@ Klik op **Save**. In het diagram staat daarna een lijn met een `1` bij de dimens
 
 ![Het venster New relationship met de tabellen d_territory en f_salesvstarget en de kolom TerritoryID gekozen.](afbeeldingen/semantisch-model/03-nieuwe-relatie.png)
 
-## Stap 4: een maat toevoegen
+## Stap 4: een measure toevoegen
 
 Kies **New measure** in het lint, of de drie puntjes bij de feitentabel. In de formulebalk typ je de naam en de formule:
 
@@ -61,11 +61,11 @@ Kies **New measure** in het lint, of de drie puntjes bij de feitentabel. In de f
 Omzet EUR = SUM(f_salesvstarget[SalesAmountEUR])
 ```
 
-Bevestig met het vinkje (**Commit**). De maat staat daarna in het deelvenster **Data** bij de feitentabel, met een eigen pictogram. In **Properties** stel je de naam, de **Home table**, een beschrijving, een **Display folder** en de opmaak in.
+Bevestig met het vinkje (**Commit**). De measure staat daarna in het deelvenster **Data** bij de feitentabel, met een eigen pictogram. In **Properties** stel je de naam, de **Home table**, een beschrijving, een **Display folder** en de opmaak in.
 
-![De formulebalk met de maat Omzet EUR, het diagram met de relatie en het deelvenster Properties van de maat.](afbeeldingen/semantisch-model/04-maat.png)
+![De formulebalk met de measure Omzet EUR, het diagram met de relatie en het deelvenster Properties van de measure.](afbeeldingen/semantisch-model/04-maat.png)
 
-Een maat hoort in de feitentabel. Geef de kolommen die je alleen voor een berekening nodig hebt een verborgen status in **Properties** (**Is hidden**), zodat gebruikers alleen de maten zien.
+Een measure hoort in de feitentabel. Zet bij de kolommen die je alleen voor een berekening nodig hebt de eigenschap **Verborgen** aan in **Properties** (*Is hidden*), zodat gebruikers alleen de measures zien.
 
 ## Stap 5: een tabel toevoegen
 
@@ -73,13 +73,13 @@ Staat er een tabel niet in het model die je nodig hebt, bijvoorbeeld een nieuwe 
 
 ![De dialoog Edit semantic model met de tabel d_currencyrate extra aangevinkt.](afbeeldingen/semantisch-model/05-edit-tables.png)
 
-Leg daarna zo nodig de relaties van de nieuwe tabel (stap 3) en voeg maten toe (stap 4). Tabellen die al in het model staan, kun je in dezelfde dialoog uitvinken om ze te verwijderen.
+Leg daarna zo nodig de relaties van de nieuwe tabel (stap 3) en voeg measures toe (stap 4). Tabellen die al in het model staan, kun je in dezelfde dialoog uitvinken om ze te verwijderen.
 
 Staat de tabel niet in de lijst, controleer dan dat hij in Gold bestaat en data bevat. Een tabel op basis van een SQL-view kun je voor een model op OneLake niet kiezen.
 
 ## Stap 6: controleren met een DAX-query
 
-Controleer de maat zonder rapport in de **DAX query view**, onderaan het scherm. Typ een query en klik op **Run**:
+Controleer de measure zonder rapport in de **DAX query view**, onderaan het scherm. Typ een query en klik op **Run**:
 
 ```
 EVALUATE ROW("Omzet", [Omzet EUR])
@@ -89,9 +89,9 @@ Het resultaat verschijnt onder de query, hier met één rij en de som van `Sales
 
 ![De DAX query view met de query EVALUATE ROW en het resultaat, één rij met de som van de omzet.](afbeeldingen/semantisch-model/06-dax-query.png)
 
-## Een maat of relatie wijzigen
+## Een measure of relatie wijzigen
 
-Selecteer de maat of de relatie en pas hem aan in **Properties** of in de formulebalk. Controleer daarna opnieuw met een DAX-query.
+Selecteer de measure of de relatie en pas hem aan in **Properties** of in de formulebalk. Controleer daarna opnieuw met een DAX-query.
 
 De **TMDL view** (naast de DAX query view) toont het model als tekst en is bedoeld voor wijzigingen die niet in het diagram kunnen, zoals de expressie van het model. Een TMDL-script wordt weggegooid als je het model sluit, tenzij je het toepast.
 
@@ -100,7 +100,7 @@ De **TMDL view** (naast de DAX query view) toont het model als tekst en is bedoe
 | Verschijnsel | Oorzaak en oplossing |
 |---|---|
 | De nieuwe tabel staat niet in de lijst van **Edit tables** | De tabel bestaat niet in Gold, of hij is gebaseerd op een SQL-view (die kun je voor een model op OneLake niet kiezen). Controleer de lakehouse. |
-| Het venster *New relationship* toont geen voorbeeld van de data | Dat hoort bij Direct Lake. Kies de kolommen aan de namen. |
+| Het venster *New relationship* toont geen voorbeeld van de data | Dat hoort bij Direct Lake. Kies de kolommen op naam. |
 | **Edit tables** faalt met een foutmelding over het schema | Controleer de `sourceLineageTag` van de tabellen in het model. Zie [Een Direct Lake-model laten verwijzen naar het juiste lakehouse na promotie](direct-lake-parameter.md). |
-| Het model leest na een promotie uit Dev | De parameter rule of data source rule ontbreekt. Zie [Een Direct Lake-model laten verwijzen naar het juiste lakehouse na promotie](direct-lake-parameter.md). |
+| Het model leest na een promotie uit Dev | De parameterregel of datasourceregel ontbreekt. Zie [Een Direct Lake-model laten verwijzen naar het juiste lakehouse na promotie](direct-lake-parameter.md). |
 | De DAX-query is weg na het sluiten van het model | Een DAX-query en een TMDL-script worden weggegooid bij het sluiten. Kopieer ze vooraf als je ze wilt bewaren. |

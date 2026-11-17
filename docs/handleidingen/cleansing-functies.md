@@ -5,7 +5,7 @@ sidebar_position: 7
 
 # Cleansing-functies
 
-Een cleansing rule is een bewerking die Bronze of Silver bij het laden op een of meer kolommen uitvoert. Deze pagina beschrijft elke ingebouwde functie: wat ze doet, voor welke laag ze bedoeld is en welke parameters ze heeft. Hoe je een regel instelt in de editor, staat in [Een bestaande tabel wijzigen](tabel-wijzigen.md#een-cleansing-rule-wijzigen).
+Een cleansingregel is een bewerking die Bronze of Silver bij het laden op een of meer kolommen uitvoert. Deze pagina beschrijft elke ingebouwde functie: wat ze doet, voor welke laag ze bedoeld is en welke parameters ze heeft. Hoe je een regel instelt in de editor, staat in [Een bestaande tabel wijzigen](tabel-wijzigen.md#een-cleansingregel-wijzigen).
 
 ## Hoe een regel werkt
 
@@ -15,7 +15,7 @@ Een regel bestaat uit drie delen:
 |---|---|
 | **Functie** | De naam van de functie, bijvoorbeeld `normalize_text`. |
 | **Kolommen** | De kolommen waarop de functie werkt. In de editor kies je ze uit een lijst; in de configuratie staan ze gescheiden door een puntkomma (`KolomA;KolomB`). |
-| **Parameters** | De instellingen van de functie, een lijst van naam en waarde. Elke parameter is optioneel, tenzij de tabel hieronder anders zegt. |
+| **Parameters** | De instellingen van de functie, een lijst met namen en waarden. Elke parameter is optioneel, tenzij de tabel hieronder anders zegt. |
 
 Per laag is het een lijst van regels. De regels draaien na elkaar, in de volgorde van de lijst, elk op het resultaat van de vorige.
 
@@ -23,7 +23,7 @@ Per laag is het een lijst van regels. De regels draaien na elkaar, in de volgord
 
 - Bronze draait de regels op de gelezen data, vóór de merge naar Bronze.
 - Silver draait de regels op wat uit Bronze komt.
-- Een Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel zet je Silver opnieuw in de wachtrij met de actie *Silver opnieuw laten verwerken* op tab 5. Zie [Een cleansing rule wijzigen](tabel-wijzigen.md#een-cleansing-rule-wijzigen).
+- Een Silver-regel werkt alleen op rijen die daarna veranderen. Voor de hele tabel zet je Silver opnieuw in de wachtrij met de actie *Silver opnieuw laten verwerken* op tab 5. Zie [Een cleansingregel wijzigen](tabel-wijzigen.md#een-cleansingregel-wijzigen).
 
 ## Overzicht
 
@@ -116,16 +116,16 @@ Houdt één rij per primary key over als een bron dezelfde sleutel meer dan eens
 
 - **Kolommen:** bij deze functie zijn de gekozen kolommen de **ordeningskolommen**, niet de sleutel. Kies bijvoorbeeld een tijdstempel als `EVENT_TIMESTAMP`. De sleutel is de primary key van de tabel.
 - **Alleen als Bronze-regel.** Bronze voegt de hashkolom van de primary key al toe vóór de cleansing; de functie heeft die nodig en geeft anders een fout.
-- Hebben twee rijen dezelfde waarde in de ordeningskolom (bijvoorbeeld een volledige dump met één tijdstempel), dan kiest de functie op een hash van alle waarden. Een nieuwe load houdt daardoor dezelfde rij.
+- Hebben twee rijen dezelfde waarde in de ordeningskolom (bijvoorbeeld een volledige dump met één tijdstempel), dan kiest de functie op basis van een hash van alle waarden. Een nieuwe laadactie houdt daardoor dezelfde rij.
 - NULL in een ordeningskolom telt als de laagste waarde.
-- **Er is geen limiet.** Is de primary key te kort gekozen, dan vallen er rijen weg zonder fout. Alleen het aantal verwijderde rijen komt in het auditlog van de load. Controleer de aantallen na de eerste load.
+- **De functie stopt niet bij een te kleine sleutel.** Is de primary key te kort gekozen, dan vallen er rijen weg zonder fout. Alleen het aantal verwijderde rijen komt in het auditlog van het laden. Controleer de aantallen na het eerste laden.
 
 ## Een eigen functie
 
-Een functie die niet is ingebouwd, kun je zelf toevoegen. Registreer hem in het notebook `NB_FMD_CUSTOM_DQ_CLEANSING`. In de editor kies je daarna **(eigen functie)** en vul je de naam en de parameters als JSON in.
+Een functie die niet is ingebouwd, kun je zelf toevoegen. Voeg hem toe aan het notebook `NB_FMD_CUSTOM_DQ_CLEANSING`. In de editor kies je daarna **(eigen functie)** en vul je de naam en de parameters als JSON in.
 
-- De editor controleert een eigen functie niet. Hij geeft alleen een waarschuwing, omdat hij de functie niet kan zien. Een fout in de naam of in de parameters blijkt dus pas bij de load.
-- Een functie die niet bestaat, geeft bij de load een fout met de lijst van beschikbare functies.
+- De editor controleert een eigen functie niet. Hij geeft alleen een waarschuwing, omdat hij de functie niet kan zien. Een fout in de naam of in de parameters blijkt dus pas bij het laden.
+- Een functie die niet bestaat, geeft bij het laden een fout met de lijst van beschikbare functies.
 
 ## Controles in de editor
 
@@ -134,7 +134,7 @@ De editor controleert elke regel voor je registreert. Het resultaat staat in de 
 | Melding | Betekenis |
 |---|---|
 | Geen kolommen | Een regel zonder kolommen is een fout. |
-| Een kolom die de ontdekking niet kent | Een waarschuwing. Een kolom die niet bestaat, geeft pas bij de load een fout. |
+| Een kolom die de ontdekking niet kent | Een waarschuwing. Een kolom die niet bestaat, geeft pas bij het laden een fout. |
 | Een verplichte parameter ontbreekt | Een fout, bijvoorbeeld `values` bij `exclude_rows`. |
 | Een parameter heeft een onjuiste waarde | Een fout, bijvoorbeeld `case` met een andere waarde dan `lower`, `upper` of `title`. |
 | Een parameter die de functie niet kent | Een waarschuwing: de functie negeert hem. |

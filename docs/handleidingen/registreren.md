@@ -20,7 +20,7 @@ Registraties horen bij de DATA-workspace van één omgeving. Test en Productie h
   - de **primary key**. Zonder primary key kan Bronze niet laden. Een view of een tabel zonder PK-constraint heeft er geen in de bron; kies hem dan samen;
   - of de tabel **volledig of incrementeel** wordt geladen, en bij incrementeel de watermarkkolom: een datum of tijdstempel die bij elke wijziging oploopt;
   - of alle kolommen en rijen het platform in mogen.
-- Kies per bron een korte **namespace** in kleine letters, bijvoorbeeld `aw`. Die komt in de tabelnamen in Silver en Gold en verandert daarna niet meer.
+- Kies per bron een korte **naamruimte** (het veld **Namespace**) in kleine letters, bijvoorbeeld `aw`. Die komt in de tabelnamen in Silver en Gold en verandert daarna niet meer.
 - Je hebt in de CONFIG-workspace en in de CODE-workspace van de omgeving een rol nodig waarmee je notebooks en pipelines mag uitvoeren (Contributor of hoger).
 
 ## Stap 0: de connectie
@@ -60,7 +60,7 @@ Een bron heeft een connectie nodig. Dat is eenmalig per connectie en bestaat uit
 
 7. Kies **Create**. Geef daarna via **Manage users** de beheerdersgroep van het platform toegang, en iedereen die de laadpipelines start of plant. Wie de connectie niet mag gebruiken, kan hem ook niet registreren.
 
-Gebruik één connectie voor alle omgevingen als Dev, Test en Productie uit dezelfde bron lezen. Moet Dev een andere (test)bron lezen, maak dan een eigen connectie per omgeving en bind die per omgeving in de registratie. Voor de brontypen `ONELAKE` en `NOTEBOOK` sla je dit over: daarvoor registreert de setup zelf een connectie (`CON_FMD_ONELAKE` en `CON_FMD_NOTEBOOK`).
+Gebruik één connectie voor alle omgevingen als Dev, Test en Productie uit dezelfde bron lezen. Moet Dev een andere (test)bron lezen, maak dan een eigen connectie per omgeving en koppel die per omgeving in de registratie. Voor de brontypen `ONELAKE` en `NOTEBOOK` sla je dit over: daarvoor registreert de setup zelf een connectie (`CON_FMD_ONELAKE` en `CON_FMD_NOTEBOOK`).
 
 ### De connectie registreren
 
@@ -74,7 +74,7 @@ Gebruik één connectie voor alle omgevingen als Dev, Test en Productie uit deze
 
    ![De melding Registered CON_FMD_ASQL_AW as SQL gemarkeerd.](afbeeldingen/registreren/connectie-09-geregistreerd.png)
 
-5. Is de naam niet gevonden, dan meldt de cel *Expected one Fabric connection named … that you can access, found 0*. Controleer de naam letter voor letter. Klopt hij, dan heb je geen rechten op de connectie: de lijst kent alleen connecties waar jij bij mag. Vraag de eigenaar je toe te voegen. Er is dan niets geschreven.
+5. Is de naam niet gevonden, dan meldt de cel *Expected one Fabric connection named … that you can access, found 0*. Controleer de naam letter voor letter. Klopt hij, dan heb je geen rechten op de connectie: de lijst kent alleen connecties waar jij bij mag. Vraag de eigenaar om je toe te voegen. Er is dan niets geschreven.
 
    ![De foutmelding Expected one Fabric connection … found 0 gemarkeerd.](afbeeldingen/registreren/connectie-08-fout.png)
 
@@ -100,7 +100,7 @@ Op tab **1. Bronnen** kies je een bestaande bron of voeg je een nieuwe toe. De v
 | **Namespace** | Kort, in kleine letters. Hij moet in elke omgeving gelijk zijn. |
 | **Brontype** | De editor toont alleen de typen die bij de connectie passen. |
 | **LoadGroup** | De standaardgroep van de tabellen van deze bron. Leeg betekent: geen groep. |
-| **HistoryDays** | Alleen voor een nieuwe incrementele tabel zonder watermark: de eerste load haalt alleen de laatste N dagen op. |
+| **HistoryDays** | Alleen voor een nieuwe incrementele tabel zonder watermark: het eerste laden haalt alleen de laatste N dagen op. |
 
 **Bron bewaren (in geheugen)** zet de bron in de editor. Er wordt nog niets in de configuratiedatabase geschreven; dat gebeurt pas bij het registreren in stap 7.
 
@@ -108,14 +108,14 @@ Op tab **1. Bronnen** kies je een bestaande bron of voeg je een nieuwe toe. De v
 
 ## Stap 3: de bron ontdekken (tab 2)
 
-Bij een nieuwe bron laat je het framework eerst uitzoeken welke tabellen er zijn. Die ontdekking leest tabellen, views, kolommen en primary keys uit de bron en zet ze in de configuratiedatabase. Daarna kun je ze in de lijst kiezen en kan de editor je invoer ertegen controleren. De ontdekking registreert niets. Ze bestaat alleen voor de connectietypen `SQL` en `SNOWFLAKE`; bij andere typen sla je deze stap over.
+Bij een nieuwe bron laat je het framework eerst uitzoeken welke tabellen er zijn. Die ontdekking leest tabellen, views, kolommen en primary keys uit de bron en zet ze in de configuratiedatabase. Daarna kun je ze in de lijst kiezen en kan de editor je invoer ertegen controleren. De ontdekking registreert niets. Ontdekking is alleen beschikbaar voor de connectietypen `SQL` en `SNOWFLAKE`; bij andere typen sla je deze stap over.
 
 1. Ga naar tab **2. Tabellen** en kies bij **Bron** de bron. Vóór de ontdekking toont de lijst alleen de tabellen die al geregistreerd zijn.
 2. Vul eventueel een **Schemafilter** in, bijvoorbeeld `HumanResources`. Dan ontdekt de pipeline alleen dat schema; leeg betekent alle schema's. Een nieuwe ontdekking van dezelfde bron vervangt de vorige binnen het schemafilter: de ontdekte tabellen van andere schema's blijven staan.
 
    ![Tab 2 met de bron AW, het schemafilter HumanResources en de knop Ontdekking starten gemarkeerd.](afbeeldingen/registreren/ontdekking-01-filter.png)
 
-3. Klik op **Ontdekking starten (pipeline)**. De editor start de pipeline `PL_FMD_DISCOVER_SOURCE` in de CODE-workspace van de gekozen omgeving en wacht tot hij klaar is. Tijdens het wachten is de knop uitgeschakeld en meldt de editor in welke workspace de ontdekking draait, met welke connectie en voor welke database. Voor één schema duurde dit in een proef ongeveer twee minuten. Je hebt in de CODE-workspace minstens de rol Contributor nodig; anders meldt de editor dat.
+3. Klik op **Ontdekking starten (pipeline)**. De editor start de pipeline `PL_FMD_DISCOVER_SOURCE` in de CODE-workspace van de gekozen omgeving en wacht tot hij klaar is. Tijdens het wachten is de knop uitgeschakeld en meldt de editor in welke workspace de ontdekking draait, met welke connectie en voor welke database. Je hebt in de CODE-workspace minstens de rol Contributor nodig; anders meldt de editor dat.
 
    ![De melding dat de ontdekking is gestart en de uitgeschakelde knop Ontdekking starten gemarkeerd.](afbeeldingen/registreren/ontdekking-02-bezig.png)
 
@@ -123,7 +123,7 @@ Bij een nieuwe bron laat je het framework eerst uitzoeken welke tabellen er zijn
 
    ![De melding met het aantal ontdekte tabellen en de lijst met nieuwe tabellen van het schema HumanResources gemarkeerd.](afbeeldingen/registreren/ontdekking-03-uitkomst.png)
 
-5. Wil je de run zelf bekijken? Zoek in de **Monitor** het item `PL_FMD_DISCOVER_SOURCE` en open de run (zie [Een run beoordelen en een fout herstellen](run-beoordelen.md)). De pipeline kiest op het connectietype een tak, `SQL` of `SNOWFLAKE`, leest daar de metadata en schrijft de ontdekte tabellen weg. Bij een ander connectietype faalt hij met de melding dat dat type nog geen ontdekking kent. Rechts staan de status en de drie parameters (`ConnectionName`, `DataSourceName` en `SchemaFilter`); onderaan de activiteiten.
+5. Wil je de uitvoering zelf bekijken? Zoek in de **Monitor** het item `PL_FMD_DISCOVER_SOURCE` en open de uitvoering (zie [Een uitvoering beoordelen en een fout herstellen](run-beoordelen.md)). De pipeline kiest op het connectietype een tak, `SQL` of `SNOWFLAKE`, leest daar de metadata en schrijft de ontdekte tabellen weg. Bij een ander connectietype faalt hij met de melding dat dat type nog geen ontdekking kent. Rechts staan de status en de drie parameters (`ConnectionName`, `DataSourceName` en `SchemaFilter`); onderaan de activiteiten.
 
    ![De details van de run van PL_FMD_DISCOVER_SOURCE met de status Succeeded en de lijst met activiteiten gemarkeerd.](afbeeldingen/registreren/ontdekking-04-monitor.png)
 
@@ -137,7 +137,7 @@ Ga naar tab **2. Tabellen** en kies bij **Bron** de bron.
 2. Is de bron nieuw, of is de ontdekking verouderd? Doe dan eerst stap 3. Bij andere brontypen dan `SQL` en `SNOWFLAKE` voeg je de tabellen met de hand toe.
 3. Zoek een tabel met **Zoeken** (op schema, tabel of LoadGroup, eventueel ook in kolomnamen) of filter op **Status**.
 
-Elke regel in de lijst heeft een status: *nieuw* (nog niet geregistreerd), *geselecteerd* (voor registratie gekozen), *geregistreerd* of *gewijzigd*. Achter de naam staat `(B:0 S:0)`: het aantal cleansing rules in Bronze en in Silver.
+Elke regel in de lijst heeft een status: *nieuw* (nog niet geregistreerd), *geselecteerd* (voor registratie gekozen), *geregistreerd* of *gewijzigd*. Achter de naam staat `(B:0 S:0)`: het aantal cleansingregels in Bronze en in Silver.
 
 ![Tab 2 met de knop Ontdekte tabellen laden, het zoekveld en de lijst met tabellen gemarkeerd.](afbeeldingen/registreren/03-tab-tabellen.png)
 
@@ -149,12 +149,12 @@ Klik een tabel in de lijst aan. Rechts verschijnen de eigenschappen van die ene 
 
 | Eigenschap | Betekenis |
 |---|---|
-| **Doelschema**, **Doeltabel** | De naam in Bronze en Silver. Standaard gelijk aan schema en naam in de bron. |
-| **FileName**, **FileType** | De bestandsnaam in de landing zone en het formaat. Standaard `parquet`; bij Snowflake stelt de editor `delta` voor. Bij een bestandsbron moet het formaat het echte bestandsformaat zijn. |
+| **Doelschema**, **Doeltabel** | De naam in Bronze en Silver. De standaardwaarde is het schema en de naam in de bron. |
+| **FileName**, **FileType** | De bestandsnaam in de aanlevering zone en het formaat. De standaardwaarde is `parquet`; bij Snowflake stelt de editor `delta` voor. Bij een bestandsbron moet het formaat het echte bestandsformaat zijn. |
 | **LoadGroup** | De groep van deze tabel. Leeg betekent: de groep van de bron. |
 | **Actief** | Uit betekent: de tabel laadt in geen enkele laag meer. |
-| **Historie in Silver** | Aan bewaart in Silver de historie van wijzigingen. Standaard uit. |
-| **Incrementeel** | Laadt alleen wat sinds de vorige load is gewijzigd. Vraagt een watermarkkolom. |
+| **Historie in Silver** | Aan bewaart in Silver de historie van wijzigingen. De standaardwaarde is uit. |
+| **Incrementeel** | Laadt alleen wat sinds de vorige laadactie is gewijzigd. Vraagt een watermarkkolom. |
 
 ![De tabel HumanResources.Department gekozen, met de eigenschappen rechts gemarkeerd.](afbeeldingen/registreren/04-tabel-kiezen.png)
 
@@ -170,7 +170,7 @@ Klik een tabel in de lijst aan. Rechts verschijnen de eigenschappen van die ene 
 ![De tabel is geselecteerd voor registratie; de knop Selecteren voor registratie, het veld Watermarkkolom, het Bronfilter en de Primary key zijn gemarkeerd.](afbeeldingen/registreren/05-tabel-instellen.png)
 
 - Kolomkeuze en bronfilter bestaan alleen voor de brontypen `ASQL_01`, `ASQL_02`, `SNOWFLAKE_01` en `ODATA_01`.
-- Een bronfilter wijzigen verwijdert niets uit Bronze en Silver. Sluit een nieuw filter oudere rijen in die eerder buiten beeld waren, dan haalt een incrementele tabel die niet vanzelf alsnog op: de watermark staat er al voorbij.
+- Een bronfilter wijzigen verwijdert niets uit Bronze en Silver. Sluit een nieuw filter oudere rijen in die eerder buiten beeld waren, dan haalt een incrementele tabel die niet vanzelf alsnog op: het watermark staat er al voorbij.
 - Per laag kun je bij **Bronze-cleansing** en **Silver-cleansing** regels instellen: *ongewijzigd laten*, *vervangen* of *alles verwijderen*.
 
 ## Stap 7: controleren, proefdraaien en registreren (tab 3)
@@ -179,7 +179,7 @@ Ga naar tab **3. Controleren en registreren**.
 
 1. Het overzicht toont per tabel wat er wordt geregistreerd. Een veld dat afwijkt van de huidige registratie is oranje, met de oude waarde eronder.
 2. Klik op **Controleren**. Dit voert de controles van de editor uit.
-3. Klik op **Proefdraaien (dry_run=True)**. Dit voert de volledige registratie uit in de database en draait die daarna terug. De uitkomst staat onder de knoppen: per tabel *New*, *Changed* of *Unchanged*, bij een wijziging wat er verandert (`oud -> nieuw`), eventuele waarschuwingen en de tabellen die in deze workspace actief zijn maar niet in je lijst staan. Die laatste blijven ongemoeid: registreren schakelt ze niet uit.
+3. Klik op **Proefdraaien (dry_run=True)**. Dit voert de volledige registratie uit in de database en maakt die daarna ongedaan. De uitkomst staat onder de knoppen: per tabel *New*, *Changed* of *Unchanged*, bij een wijziging wat er verandert (`oud -> nieuw`), eventuele waarschuwingen en de tabellen die in deze workspace actief zijn maar niet in je lijst staan. Die laatste blijven ongemoeid: registreren schakelt ze niet uit.
 4. Lees de uitkomst. Staat er een fout, ga dan terug naar tab 1 of 2, los hem op en draai de proefdraai opnieuw. Alle fouten worden tegelijk getoond.
 5. Vink de bevestiging aan en klik op **Registreren**. De knop is geblokkeerd tot er een proefdraai is gedaan op precies deze wijzigingen. Wijzig je daarna nog iets, dan is de proefdraai ongeldig.
 6. Na het registreren toont de editor het resultaat als een tekst met `table("""...""")`. Bewaar die tekst in git of in je eigen beheerlogboek: zo is terug te vinden wat er wanneer is geregistreerd.
@@ -199,12 +199,12 @@ Ga naar tab **3. Controleren en registreren**.
 |---|---|
 | De editor is leeg | Je hebt niet op **Laden uit de configdb** geklikt. |
 | De knop **New** ontbreekt in *Manage connections and gateways* | Er is een connectie geselecteerd. Klik op een lege plek of ververs de pagina. |
-| *Expected one Fabric connection … found 0* | De naam klopt niet, of je hebt geen rechten op de connectie. Vraag de eigenaar je toe te voegen. |
+| *Expected one Fabric connection … found 0* | De naam klopt niet, of je hebt geen rechten op de connectie. Vraag de eigenaar om je toe te voegen. |
 | Het paneel *New connection* vraagt om een *Gateway cluster name* | Het staat op *On-premises*. Kies *Cloud*, of kies een gateway als de bron achter een firewall staat. |
-| De tabel is geregistreerd, maar er landt niets | Het brontype past niet bij het connectietype, of de tabel of een laag staat uit. Controleer het brontype en **Actief**. |
+| De tabel is geregistreerd, maar er wordt niets aangeleverd | Het brontype past niet bij het connectietype, of de tabel of een laag staat uit. Controleer het brontype en **Actief**. |
 | **Registreren** blijft geblokkeerd | Je hebt na de proefdraai nog iets gewijzigd, of de bevestiging niet aangevinkt. Draai de proefdraai opnieuw. |
-| Een fout in het bronfilter verschijnt pas bij de load | De proefdraai voert het filter niet uit. Test het filter in de bron. |
+| Een fout in het bronfilter verschijnt pas bij het laden | De proefdraai voert het filter niet uit. Test het filter in de bron. |
 | De Bronze-merge faalt nadat je kolommen hebt weggehaald bij een tabel die al in Bronze staat | Gebruik eerst op tab 5 de actie *Opruimen na een PK-wijziging (Bronze en Silver wissen)*, zie [Registratie overzetten en beheren](overzetten-en-beheren.md); die wist ook de Silver-historie. Kies de kolommen bij voorkeur vóór de eerste load. |
 | Een gewijzigde Silver-cleansingregel werkt alleen op rijen die daarna veranderen | Zet de tabel opnieuw in de wachtrij van Silver met de actie *Silver opnieuw laten verwerken* op tab 5, zie [Registratie overzetten en beheren](overzetten-en-beheren.md#silver-opnieuw-laten-verwerken). |
 | Je registreert een andere bron voor dezelfde tabel (bijvoorbeeld `ASQL_02` in plaats van `ASQL_01`) | Dit maakt een nieuwe registratie en laat de oude achter. Zet de oude tabel uit. |
-| Een andere namespace geeft andere tabelnamen | De namespace verandert na de eerste registratie niet meer. |
+| Een andere naamruimte geeft andere tabelnamen | De naamruimte verandert na de eerste registratie niet meer. |
