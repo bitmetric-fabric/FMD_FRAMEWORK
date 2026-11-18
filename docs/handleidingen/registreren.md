@@ -69,7 +69,7 @@ Gebruik één connectie voor alle omgevingen als Dev, Test en Productie uit deze
    ![Stap 1 van NB_REGISTRATIE met de uitgecommentarieerde cel register_connection gemarkeerd.](afbeeldingen/registreren/connectie-07-notebook-cel.png)
 
 2. Haal het commentaarteken (`# `) weg en vul de naam van de connectie en het FMD-type in, bijvoorbeeld `register_connection("CON_FMD_ERP", "SQL")`. Voer de cel uit met de knop links van de cel.
-3. Het type is het **FMD-type**, niet het type dat Fabric toont: `SQL` (Azure SQL Database), `AZURESQLMI`, `ORACLE`, `ADLS`, `ONELAKE`, `SFTP`, `FTP`, `ADF`, `NOTEBOOK`, `SNOWFLAKE` of `ODATA`. Azure SQL Database en SQL Managed Instance heten in Fabric allebei *SQL Server*; daarom kies je het type zelf.
+3. Het type is het **FMD-type**, niet het type dat Fabric toont: `SQL` (Azure SQL Database), `AZURESQLMI`, `ORACLE`, `ADLS`, `ONELAKE`, `SFTP`, `FTP`, `ADF`, `NOTEBOOK`, `SNOWFLAKE`, `ODATA` of `MYSQL`. Azure SQL Database en SQL Managed Instance heten in Fabric allebei *SQL Server*; daarom kies je het type zelf. Bij `MYSQL` kies je bij de bron het brontype `MYSQL_01` (Fabric-connector *MySQL*, via een gateway) of `AZUREMYSQL_01` (connector *Azure Database for MySQL*). MySQL kent geen schema's: vul bij de tabel als schema de naam van de MySQL-database in.
 4. Bij succes meldt de cel dat de connectie is geregistreerd, met het FMD-type en het type dat Fabric kent.
 
    ![De melding Registered CON_FMD_ASQL_AW as SQL gemarkeerd.](afbeeldingen/registreren/connectie-09-geregistreerd.png)
@@ -169,7 +169,7 @@ Klik een tabel in de lijst aan. Rechts verschijnen de eigenschappen van die ene 
 
 ![De tabel is geselecteerd voor registratie; de knop Selecteren voor registratie, het veld Watermarkkolom, het Bronfilter en de Primary key zijn gemarkeerd.](afbeeldingen/registreren/05-tabel-instellen.png)
 
-- Kolomkeuze en bronfilter bestaan alleen voor de brontypen `ASQL_01`, `ASQL_02`, `SNOWFLAKE_01` en `ODATA_01`.
+- Kolomkeuze en bronfilter bestaan alleen voor de brontypen `ASQL_01`, `ASQL_02`, `SNOWFLAKE_01`, `ODATA_01`, `MYSQL_01` en `AZUREMYSQL_01`.
 - Een bronfilter wijzigen verwijdert niets uit Bronze en Silver. Sluit een nieuw filter oudere rijen in die eerder buiten beeld waren, dan haalt een incrementele tabel die niet vanzelf alsnog op: de watermark staat er al voorbij.
 - Per laag kun je bij **Bronze-cleansing** en **Silver-cleansing** regels instellen: *ongewijzigd laten*, *vervangen* of *alles verwijderen*.
 
