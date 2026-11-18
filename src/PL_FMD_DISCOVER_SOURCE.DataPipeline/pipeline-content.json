@@ -394,6 +394,109 @@
                                     }
                                 }
                             ]
+                        },
+                        {
+                            "value": "MYSQL",
+                            "activities": [
+                                {
+                                    "name": "LKP_METADATA_MYSQL",
+                                    "description": "Reads information_schema from the source: one row with one JSON array, shaped for sp_UpsertDiscoveredEntities. SourceSchema is the MySQL database; SchemaFilter narrows it to one database. NIET GETEST in Fabric: de connector- en datasetvorm (MySqlSource/MySqlTable) en of de generieke MySQL-connector ook een Azure-connectie leest.",
+                                    "type": "Lookup",
+                                    "dependsOn": [],
+                                    "policy": {
+                                        "timeout": "0.01:00:00",
+                                        "retry": 1,
+                                        "retryIntervalInSeconds": 30,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "typeProperties": {
+                                        "source": {
+                                            "type": "MySqlSource",
+                                            "query": {
+                                                "value": "SELECT IFNULL(JSON_ARRAYAGG(JSON_OBJECT(\n    'SourceSchema', t.TABLE_SCHEMA,\n    'SourceName', t.TABLE_NAME,\n    'ObjectType', IF(t.TABLE_TYPE = 'BASE TABLE', 'U', 'V'),\n    'PrimaryKeys', (SELECT GROUP_CONCAT(k.COLUMN_NAME ORDER BY k.ORDINAL_POSITION SEPARATOR ',')\n                    FROM information_schema.KEY_COLUMN_USAGE k\n                    WHERE k.CONSTRAINT_NAME = 'PRIMARY' AND k.TABLE_SCHEMA = t.TABLE_SCHEMA AND k.TABLE_NAME = t.TABLE_NAME),\n    'Columns', (SELECT JSON_ARRAYAGG(JSON_OBJECT('Name', c.COLUMN_NAME, 'Type', c.DATA_TYPE))\n                FROM (SELECT COLUMN_NAME, DATA_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.COLUMNS ORDER BY ORDINAL_POSITION) c\n                WHERE c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME)\n)), JSON_ARRAY()) AS `Json`\nFROM information_schema.TABLES t\nWHERE t.TABLE_TYPE IN ('BASE TABLE', 'VIEW')\n  AND t.TABLE_SCHEMA NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')\n  AND ('@{pipeline().parameters.SchemaFilter}' = '' OR t.TABLE_SCHEMA = '@{pipeline().parameters.SchemaFilter}');",
+                                                "type": "Expression"
+                                            }
+                                        },
+                                        "firstRowOnly": true,
+                                        "datasetSettings": {
+                                            "annotations": [],
+                                            "type": "MySqlTable",
+                                            "schema": [],
+                                            "typeProperties": {},
+                                            "externalReferences": {
+                                                "connection": "@activity('LKP_CONNECTION').output.firstRow.ConnectionGuid"
+                                            }
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": "SP_UPSERT_DISCOVERED_MYSQL",
+                                    "type": "SqlServerStoredProcedure",
+                                    "dependsOn": [
+                                        {
+                                            "activity": "LKP_METADATA_MYSQL",
+                                            "dependencyConditions": [
+                                                "Succeeded"
+                                            ]
+                                        }
+                                    ],
+                                    "policy": {
+                                        "timeout": "0.01:00:00",
+                                        "retry": 0,
+                                        "retryIntervalInSeconds": 30,
+                                        "secureOutput": false,
+                                        "secureInput": false
+                                    },
+                                    "typeProperties": {
+                                        "storedProcedureName": "[integration].[sp_UpsertDiscoveredEntities]",
+                                        "storedProcedureParameters": {
+                                            "ConnectionName": {
+                                                "value": {
+                                                    "value": "@pipeline().parameters.ConnectionName",
+                                                    "type": "Expression"
+                                                },
+                                                "type": "String"
+                                            },
+                                            "DataSourceName": {
+                                                "value": {
+                                                    "value": "@pipeline().parameters.DataSourceName",
+                                                    "type": "Expression"
+                                                },
+                                                "type": "String"
+                                            },
+                                            "SchemaFilter": {
+                                                "value": {
+                                                    "value": "@if(equals(pipeline().parameters.SchemaFilter, ''), null, pipeline().parameters.SchemaFilter)",
+                                                    "type": "Expression"
+                                                },
+                                                "type": "String"
+                                            },
+                                            "Json": {
+                                                "value": {
+                                                    "value": "@activity('LKP_METADATA_MYSQL').output.firstRow.Json",
+                                                    "type": "Expression"
+                                                },
+                                                "type": "String"
+                                            }
+                                        }
+                                    },
+                                    "connectionSettings": {
+                                        "name": "SQL_FMD_FRAMEWORK",
+                                        "properties": {
+                                            "annotations": [],
+                                            "type": "FabricSqlDatabase",
+                                            "typeProperties": {
+                                                "workspaceId": "@pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_config_workspace_guid",
+                                                "artifactId": "@pipeline().libraryVariables.VAR_CONFIG_FMD_fmd_config_database_guid"
+                                            },
+                                            "externalReferences": {
+                                                "connection": "372237f9-709a-48f8-8fb2-ce06940c990e"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     ],
                     "defaultActivities": [
@@ -403,7 +506,7 @@
                             "dependsOn": [],
                             "typeProperties": {
                                 "message": {
-                                    "value": "@concat('PL_FMD_DISCOVER_SOURCE: connection not found by name, or its type (', string(activity('LKP_CONNECTION').output.firstRow.ConnectionType), ') has no discovery support yet. Supported: SQL, SNOWFLAKE.')",
+                                    "value": "@concat('PL_FMD_DISCOVER_SOURCE: connection not found by name, or its type (', string(activity('LKP_CONNECTION').output.firstRow.ConnectionType), ') has no discovery support yet. Supported: SQL, SNOWFLAKE, MYSQL.')",
                                     "type": "Expression"
                                 },
                                 "errorCode": "Unsupported connection type"

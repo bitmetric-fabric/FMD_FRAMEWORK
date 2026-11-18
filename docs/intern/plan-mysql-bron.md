@@ -1,6 +1,13 @@
 # Plan: MySQL als brontype in FMD
 
-**Status:** geparkeerd 2026-10-13 (Mitchell). Stap 0 is nog niet uitgevoerd, er is niets gebouwd of getest.
+**Status:** opgepakt 2026-11-17 en grotendeels gebouwd op branch `feature/mysql-bron` (nog geen PR). Dit plan is op die dag herzien; de beschrijving van de uitkomst staat in `output/03_technische_documentatie/10_operations.md`, sectie *Een MySQL-bron toevoegen*. Verschillen met de tekst hieronder:
+- Twee DataSourceTypes onder één connectietype: `MYSQL_01` (generieke connector) en `AZUREMYSQL_01` (Azure-connector), in één copy-pipeline met twee takken. De uitkomst van stap 0 bepaalt of de tweede nodig blijft.
+- Discovery (`PL_FMD_DISCOVER_SOURCE`) is wel meegenomen, en de registratienotebooks en tests zijn aangepast. `registreer_entiteiten.sql` bestaat niet meer: `sp_RegisterEntities` is de enige registratieroute (ADR-018).
+- Watermark: `CAST(MAX(col) AS CHAR)` in plaats van `DATE_FORMAT`, zodat ook een numerieke kolom werkt.
+- Lokaal getest (SQL Server 2022 en MySQL 8.4 in Docker) en in Fabric op een klantomgeving (D, één tabel van ongeveer 54.000 rijen, volledige load, via een gateway): landing, Bronze en Silver, de `MYSQL`-case in `PL_FMD_LOAD_LANDINGZONE` (ook in een regulier schedule) en de discovery. Stap 0 is daarmee beantwoord voor de generieke connector (`MySqlSource`/`MySqlTable`, `query`, zonder `connectionType`). Er is niet eerst in de trial getest, want daar is geen MySQL-bron.
+- **Nog niet getest:** `AZUREMYSQL_01`, een incrementele load, een nuldatum, `TINYINT(1)` en `BIGINT UNSIGNED`.
+
+**Eerdere status (2026-10-13):** geparkeerd (Mitchell). Er was niets gebouwd of getest.
 **Keuze Mitchell:** zowel on-prem/VM (via gateway) als Azure Database for MySQL ondersteunen. Testbron nog niet bepaald; een nieuwe Azure MySQL-server aanmaken kan alleen na akkoord.
 
 Alle paden hieronder zijn relatief aan `FMD/`.

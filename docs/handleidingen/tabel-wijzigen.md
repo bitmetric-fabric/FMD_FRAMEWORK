@@ -41,7 +41,7 @@ Het overzicht erboven kleurt elke cel die afwijkt van de configdb oranje, met de
 
 ## Kolommen of bronfilter wijzigen
 
-De velden **Kolommen om te laden** en **Bronfilter** staan op tab 2 onder de eigenschappen van de tabel. Ze bestaan alleen voor de brontypen SQL (`ASQL_01`, `ASQL_02`), Snowflake (`SNOWFLAKE_01`) en OData (`ODATA_01`).
+De velden **Kolommen om te laden** en **Bronfilter** staan op tab 2 onder de eigenschappen van de tabel. Ze bestaan alleen voor de brontypen SQL (`ASQL_01`, `ASQL_02`), Snowflake (`SNOWFLAKE_01`), OData (`ODATA_01`) en MySQL (`MYSQL_01`, `AZUREMYSQL_01`).
 
 - **Een filter wijzigen** verwijdert niets uit Bronze en Silver. Een ruimer filter haalt bij een incrementele tabel de oudere rijen niet alsnog op: reset dan het watermark (zie [Een tabel volledig opnieuw laden](#een-tabel-volledig-opnieuw-laden)).
 - **De proefdraai voert het filter niet uit.** Controleer het filter eerst met een query op de bron.

@@ -57,7 +57,7 @@ for path in sorted((REPO / "src").glob("PL_FMD_*.DataPipeline/pipeline-content.j
     queries = [s for s in walk(definition) if isinstance(s, str) and LOADGROUP_CLAUSE in s]
     check(all("fn_EntityInFilter" in q and all(ESCAPED[n] in q for n in NEW) for q in queries),
           f"{name}: all {len(queries)} queries call fn_EntityInFilter with escaped values")
-check(checked == 27, f"27 pipelines in the load chain checked (got {checked})")
+check(checked == 29, f"29 pipelines in the load chain checked (got {checked})")
 
 orchestration = (REPO / "src/PL_FMD_ORCHESTRATION.DataPipeline/pipeline-content.json").read_text(encoding="utf-8")
 orch = json.loads(orchestration)["properties"]
