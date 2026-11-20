@@ -38,3 +38,8 @@ Thumbs.db
 # setup-notebooks halen hem daar via raw.githubusercontent.com op. Haal deze
 # regel daar dus weg. manifest.example.yaml blijft altijd in git.
 manifest.yaml
+
+# Build-uitvoer van het SQL-project. Alleen de dacpac in src/SQL_FMD_FRAMEWORK.SQLDatabase/
+# wordt uitgerold (zie FMD/CLAUDE.md, "SQL en dacpac"); wat dotnet build in bin/ en obj/ zet niet.
+src/Config_Database/bin/
+src/Config_Database/obj/
